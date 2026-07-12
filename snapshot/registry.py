@@ -17,9 +17,18 @@ class KindSpec:
 
 
 KIND_REGISTRY: dict[str, KindSpec] = {
-    "table": KindSpec("sql", hash_excluded_stats=frozenset({"row_estimate"})),
+    # `indexes` + matview `row_estimate` registered by the task 1.2
+    # amendment (§4.5 registration record): hash-excluded — an index
+    # cannot break a dependent or contradict a documented meaning;
+    # semantic uniqueness belongs in a UNIQUE constraint (keys.unique,
+    # hash-included), not in a bare unique index.
+    "table": KindSpec("sql", hash_excluded_stats=frozenset({"row_estimate", "indexes"})),
     "view": KindSpec("sql", hash_included_stats=frozenset({"definition"})),
-    "materialized_view": KindSpec("sql", hash_included_stats=frozenset({"definition"})),
+    "materialized_view": KindSpec(
+        "sql",
+        hash_included_stats=frozenset({"definition"}),
+        hash_excluded_stats=frozenset({"row_estimate", "indexes"}),
+    ),
     "api_dimension": KindSpec("api", hash_included_stats=frozenset({"data_type"})),
     "api_metric": KindSpec(
         "api", hash_included_stats=frozenset({"data_type", "scope", "formula"})

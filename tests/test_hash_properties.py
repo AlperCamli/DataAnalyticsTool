@@ -29,6 +29,8 @@ _STAT_VALUES = {
     "formula": st.text(min_size=1, max_size=30),
     "is_key_event": st.booleans(),
     "row_estimate": st.integers(min_value=0, max_value=10**9),
+    # registered form is lexicographically sorted (§4.5, task 1.2 amendment)
+    "indexes": st.lists(st.text(min_size=1, max_size=60), max_size=3, unique=True).map(sorted),
 }
 
 
