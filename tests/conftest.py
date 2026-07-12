@@ -49,6 +49,49 @@ def mutate(snapshot: dict, name: str, fn, *, rehash: bool = True) -> dict:
     return out
 
 
+# --- generator helpers (test_generator_*.py) ---
+
+
+def tree_bytes(root: Path) -> dict[str, bytes]:
+    """{repo-relative posix path: bytes} for every file under root."""
+    return {
+        p.relative_to(root).as_posix(): p.read_bytes()
+        for p in sorted(root.rglob("*"))
+        if p.is_file()
+    }
+
+
+def changed_paths(before: dict[str, bytes], after: dict[str, bytes]) -> set[str]:
+    """Paths added, removed, or with different bytes."""
+    return {
+        rel
+        for rel in set(before) | set(after)
+        if before.get(rel) != after.get(rel)
+    }
+
+
+def human_object_doc(obj_fqn: str, schema_hash: str, status: str = "draft") -> str:
+    """A §4.2-conformant human-owned object doc."""
+    return (
+        "---\n"
+        "doc_class: human-object\n"
+        f"object: {obj_fqn}\n"
+        f'written_against_schema_hash: "{schema_hash}"\n'
+        f"status: {status}\n"
+        "last_verified: null\n"
+        "sources:\n"
+        '  - "customer doc: orders-service.md"\n'
+        "depends_on:\n"
+        "  - supabase.public.users\n"
+        "contamination: null\n"
+        "---\n"
+        "\n"
+        "## Purpose\n"
+        "\n"
+        "Human-authored semantics live here.\n"
+    )
+
+
 # --- connector SDK harness helpers (test_sdk_*.py) ---
 
 SDK_BASE_MANIFEST = {

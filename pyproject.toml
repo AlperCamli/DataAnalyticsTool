@@ -20,6 +20,8 @@ dependencies = [
     # (no generated Google clients)
     "google-auth>=2.29",
     "requests>=2.31",
+    # generator templates (task 1.5); DECISIONS.md D-37 stack amendment
+    "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -29,7 +31,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["snapshot", "connectors", "connectors.sdk", "connectors.static_demo", "connectors.postgres", "connectors.ga4", "connectors.gsc"]
+packages = ["snapshot", "connectors", "connectors.sdk", "connectors.static_demo", "connectors.postgres", "connectors.ga4", "connectors.gsc", "generator"]
 
 [tool.setuptools.package-data]
 snapshot = ["schema/*.json"]
@@ -38,6 +40,7 @@ snapshot = ["schema/*.json"]
 "connectors.postgres" = ["connector.yaml", "*.json"]
 "connectors.ga4" = ["connector.yaml", "*.json"]
 "connectors.gsc" = ["connector.yaml", "*.json"]
+generator = ["templates/*.j2"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,25 @@
+# {{ s.system }}
+
+System class: sql · {{ s.summary }}
+{% if s.has_notes %}
+
+Notes: [_notes.md](_notes.md)
+{% endif %}
+
+## Schemas
+
+| Schema | Objects | Human docs | Index |
+|---|---|---|---|
+{% for r in s.rows %}
+| `{{ r.schema }}` | {{ r.count }} | {{ r.human_count }} | [{{ r.href }}]({{ r.href }}) |
+{% endfor %}
+
+## Source properties
+
+{% if s.source_properties is not none %}
+```json
+{{ s.source_properties }}
+```
+{% else %}
+—
+{% endif %}
