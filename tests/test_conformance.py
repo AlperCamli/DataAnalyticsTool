@@ -24,8 +24,9 @@ def test_c1_fixtures_validate_against_schema(name):
 
 @pytest.mark.skip(
     reason="C-2 (S-3) requires two live introspection runs against an "
-    "unchanged source; connector-level, lands with tasks 1.2–1.4. The "
-    "canonicalization half is covered by the property tests."
+    "unchanged source; connector-level. Postgres: green in "
+    "test_postgres_connector.py (task 1.2); GA4/GSC land with 1.3/1.4. "
+    "The canonicalization half is covered by the property tests."
 )
 def test_c2_reruns_byte_identical():
     pass
@@ -34,8 +35,8 @@ def test_c2_reruns_byte_identical():
 @pytest.mark.skip(
     reason="C-3 (S-4) requires introspecting the same source state through "
     "every supported source_mode (ddl-file vs live); task 1.2 exit "
-    "criterion. The comparison machinery is exercised by "
-    "test_fixture_pair_canonical_body_identity."
+    "criterion — green for postgres in test_postgres_connector.py. "
+    "This placeholder stays for future multi-mode connectors."
 )
 def test_c3_mode_invariance():
     pass
@@ -89,9 +90,10 @@ def test_c6_structural_change_moves_exactly_affected_hashes():
 
 @pytest.mark.skip(
     reason="C-7 (S-6) requires the job transport and a connector that can "
-    "fail mid-introspection (no snapshot emitted, job dead-letters); "
-    "enforced at the connector/job layer, tasks 1.2+ with the job "
-    "protocol spec."
+    "fail mid-introspection (no snapshot emitted, job dead-letters). "
+    "Engine half: test_sdk_runner (demo injection); postgres failure "
+    "paths: test_postgres_config.py + the bad-DDL container test. The "
+    "dead-letter half lands with the job-protocol transport."
 )
 def test_c7_partial_introspection_fails_job():
     pass

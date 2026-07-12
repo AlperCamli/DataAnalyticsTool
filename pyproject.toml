@@ -13,6 +13,8 @@ dependencies = [
     "jsonschema[format-nongpl]>=4.21",
     # connector manifests are connector.yaml (capability spec §3)
     "PyYAML>=6.0",
+    # postgres connector (task 1.2); DECISIONS.md D-21 stack amendment
+    "psycopg[binary]>=3.2",
 ]
 
 [project.optional-dependencies]
@@ -22,12 +24,16 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["snapshot", "connectors", "connectors.sdk", "connectors.static_demo"]
+packages = ["snapshot", "connectors", "connectors.sdk", "connectors.static_demo", "connectors.postgres"]
 
 [tool.setuptools.package-data]
 snapshot = ["schema/*.json"]
 "connectors.sdk" = ["schema/*.json"]
 "connectors.static_demo" = ["connector.yaml", "*.json"]
+"connectors.postgres" = ["connector.yaml", "*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "postgres: needs Docker (spins ephemeral postgres containers); skipped when the daemon is unreachable",
+]

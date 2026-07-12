@@ -252,3 +252,101 @@ amends D-8's stack list). The static demo declares metadata mode
 `ddl-file` rather than inventing a `static` mode: `source_mode` is a
 closed §3 enum and the manifest schema enforces it — a new mode would
 be a snapshot-spec amendment, not a connector choice.
+
+---
+
+# DECISIONS — task 1.2 (Postgres connector, `connectors/postgres/`)
+
+Rulings confirmed on the column-by-column mapping review before
+implementation; recorded here because future engine connectors inherit
+several of them. Resolves the D-10 register-item candidate (indexes).
+
+## D-16 — `stats.indexes` + matview `row_estimate` registered, hash-excluded **[amendment applied]**
+
+Plan §3.1 requires indexes and the KB machine-doc template renders
+"Keys & indexes", but snapshot v1 had no slot — the D-10 open item.
+**Ruling:** register `indexes` (§4.5) for `table` and
+`materialized_view`: lexicographically sorted engine-canonical strings
+(`pg_get_indexdef` — the same zero-parsing principle §5 uses for view
+definitions), omitting indexes that back declared constraints (those
+facts ride `keys`). **Hash-excluded**, because an index cannot break a
+dependent or contradict a documented meaning (the S-2 test), and the
+hash-included alternative would make every routine `CREATE INDEX` a
+breaking change driving contamination scans (D-2's default for
+unlisted changes) — drift-pipeline noise that erodes trust, worse than
+the edge it protects. The unique-index-without-constraint edge is
+handled by convention, not polarity: semantic uniqueness belongs in a
+UNIQUE constraint (`keys.unique`, hash-included); the caveat is written
+into the §4.5 registration record. Folded into the same amendment:
+`row_estimate` extended to `materialized_view`, same polarity —
+symmetric and trivially additive. Process followed: spec diff first,
+then `snapshot/registry.py`, one PR.
+
+## D-17 — Partition children excluded from the snapshot
+
+Objects with `relispartition = true` are not emitted; the partitioned
+parent is a plain `table`. Beyond doc-flooding, the structural
+argument: partition children are frequently *runtime* artifacts
+(pg_cron/pg_partman creating monthly partitions), so they exist in a
+live database but not in the logical DDL — including them would
+structurally violate the DDL↔live invariance S-4/C-3 promise. The
+parent is the logical estate; children are physical state. The parent's
+`reltuples` is carried as-reported — never a synthesized sum across
+children (stats are carried facts, not computed ones, S-8). The
+partition key definition (`pg_partitioned_table`) joins the SS-7 drop
+list as the strongest future §4.5 candidate (it tells query-writing
+agents how to prune).
+
+## D-18 — Facts with no v1 slot: dropped loudly, register items filed
+
+Recorded as register items by value, not one undifferentiated note:
+**SS-5** CHECK constraints (high-value: they encode exactly the
+semantic facts human docs explain; sketched path: hash-included
+`stats.checks` from `pg_get_constraintdef`). **SS-6** enum type labels
+(high-value: literally SS-2's enum-decoding question, groundable as
+facts without sampling; sketched path: an `enum_type` kind with
+hash-included `stats.labels`). **SS-7** batched low-value gaps:
+identity/generated column markers (both emit `default: null`),
+schema-level and index-level comments, partition key definitions.
+Nothing implemented in 1.2; entered in the snapshot spec's §10 register
+first, then the master register, per process.
+
+## D-19 — Canonical introspection readings (all engine connectors inherit these)
+
+1. **`ordinal` = dense rank** among non-dropped columns, not raw
+   `attnum`: a live table that ever had a dropped column keeps catalog
+   gaps its logical DDL replay does not; S-4 promises invariance over
+   the *logical* state, and dense rank is still the source-reported
+   position (§4.3) — what `\d` and `pg_dump` show.
+2. **Session `search_path` pinned empty** (pg_dump's own guard) in both
+   modes: `pg_get_viewdef`/`pg_get_expr`/`pg_get_indexdef` qualify
+   names relative to the session search_path, so a customer database
+   with a customized default would otherwise deparse differently than
+   the ephemeral container — silent C-3 breakage.
+3. **`row_estimate` omitted while `reltuples = -1`** (never analyzed —
+   every fresh ddl-file container). Consequence, expected by design:
+   the eventual ddl→live switch adds estimates as a *metadata-only*
+   diff — fresh information, hash-excluded, never a spurious
+   structural change.
+
+## D-20 — ddl-file `image` is required and must match the live major
+
+No default image. `pg_get_viewdef` deparsing can differ across
+Postgres major versions and `stats.definition` is hash-included, so
+running ddl-file mode on a different major than the live target
+manufactures spurious *breaking* diffs at the ddl→live switch —
+precisely what S-4 promises never happens. The config schema refuses
+`mode: ddl-file` without an explicit `image`; the README states the
+rule. Customer 2 (Supabase 15.x): `postgres:15`.
+
+## D-21 — Stack amendment and CI
+
+`psycopg[binary]>=3.2` added (amends D-8/D-15). Ephemeral containers
+are plain `docker` subprocess calls in connector code — ddl-file mode
+needs them at *runtime*, so no test-oriented dependency
+(testcontainers) was taken. Repo-wide GitHub Actions workflow added at
+`.github/workflows/tests.yml` (full suite; `postgres`-marked tests run
+on ubuntu-latest where Docker is available, skip where it is not) —
+tasks 1.3/1.4 must reuse it, not create their own. Error messages
+never echo the DSN (JC-8): a malformed-DSN parse error is replaced
+wholesale, and libpq redacts passwords from connection errors.
