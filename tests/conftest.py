@@ -92,6 +92,68 @@ def human_object_doc(obj_fqn: str, schema_hash: str, status: str = "draft") -> s
     )
 
 
+# --- lineage helpers (test_lineage_*.py) ---
+
+
+def sql_object(
+    kind: str,
+    schema: str,
+    name: str,
+    columns: list[str],
+    *,
+    definition: str | None = None,
+    keys: dict | None = None,
+) -> dict:
+    """A schema-valid SQL object; every column is text, ordinals follow
+    the listed order (star expansion binds to it, D-42.3)."""
+    obj = {
+        "kind": kind,
+        "schema": schema,
+        "name": name,
+        "description": None,
+        "schema_hash": "sha256:" + "0" * 64,
+        "columns": [
+            {"name": c, "type": "text", "nullable": True, "default": None,
+             "ordinal": i + 1, "description": None}
+            for i, c in enumerate(columns)
+        ],
+        "keys": keys or {},
+        "stats": {"definition": definition} if definition is not None else {},
+    }
+    obj["schema_hash"] = schema_hash(obj)
+    return obj
+
+
+def sql_snapshot(
+    *objects: dict,
+    system: str = "demo",
+    captured_at: str = "2026-07-13T00:00:00Z",
+) -> dict:
+    return {
+        "snapshot_version": "1",
+        "system": system,
+        "system_class": "sql",
+        "source_mode": "ddl-file",
+        "captured_at": captured_at,
+        "connector": {"name": "test", "version": "0.0.0"},
+        "source_properties": {},
+        "objects": list(objects),
+    }
+
+
+def graph_edge(graph: dict, source: str, target: str) -> dict:
+    """The single edge between two nodes (fails if absent/ambiguous)."""
+    matches = [
+        e for e in graph["edges"] if e["source"] == source and e["target"] == target
+    ]
+    assert len(matches) == 1, f"expected one edge {source} -> {target}, got {matches}"
+    return matches[0]
+
+
+def graph_node(graph: dict, fqn: str) -> dict:
+    return next(n for n in graph["nodes"] if n["id"] == fqn)
+
+
 # --- connector SDK harness helpers (test_sdk_*.py) ---
 
 SDK_BASE_MANIFEST = {

@@ -22,6 +22,10 @@ dependencies = [
     "requests>=2.31",
     # generator templates (task 1.5); DECISIONS.md D-37 stack amendment
     "jinja2>=3.1",
+    # lineage parser (task 1.9); DECISIONS.md D-38 stack amendment —
+    # floor here, exact pin in constraints.txt (used by CI); trusted only
+    # for engine-deparsed canonical SELECTs (D-19.2 input class)
+    "sqlglot>=25",
 ]
 
 [project.optional-dependencies]
@@ -31,7 +35,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["snapshot", "connectors", "connectors.sdk", "connectors.static_demo", "connectors.postgres", "connectors.ga4", "connectors.gsc", "generator"]
+packages = ["snapshot", "connectors", "connectors.sdk", "connectors.static_demo", "connectors.postgres", "connectors.ga4", "connectors.gsc", "generator", "lineage"]
 
 [tool.setuptools.package-data]
 snapshot = ["schema/*.json"]

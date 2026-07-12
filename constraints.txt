@@ -1,0 +1,6 @@
+# Exact pins required by DECISIONS.md stack-amendment conditions.
+# CI installs with `-c constraints.txt`; pyproject carries the floors.
+# D-38(a): sqlglot pinned exactly — parse output feeds byte-contracted
+# lineage/graph.json, so the parser version is part of the determinism
+# surface.
+sqlglot==30.12.0
