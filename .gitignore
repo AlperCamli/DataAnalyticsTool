@@ -1,4 +1,6 @@
 .venv/
+# live-connection credentials for the real example estate — see CLAUDE.md
+.secrets/
 __pycache__/
 *.pyc
 .pytest_cache/

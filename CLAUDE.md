@@ -40,6 +40,15 @@ trust signals. First deployment: Supabase + GA4 + GSC → Looker Studio.
 - `generator/` — templates + renderer (task 1.5)
 - `fixtures/` — snapshot fixtures per system
 
+## Live example case (this machine only)
+An example estate is wired up for live testing: **example-estate.com**
+(supabase + gsc pulls verified end-to-end; ga4 pending a property id).
+Credentials, ready-to-run configs, and the runbook are in
+`.secrets/connections.md` — git-ignored, local only; never commit or
+echo its contents (JC-8). Convention: the rendered KB the user reviews
+lives at `~/Desktop/kb` (snapshots at `~/Desktop/kb-snapshots/`);
+re-render it after changes that affect generator or connector output.
+
 ## Stack
 Python 3.12 + jsonschema (Draft 2020-12) + PyYAML + pytest + hypothesis.
 Venv at `.venv/`; run tests with `.venv/bin/python -m pytest`.
