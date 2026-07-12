@@ -1,0 +1,26 @@
+name: gsc
+version: 0.1.0
+protocol_version: 1
+snapshot_version: "1"
+capabilities:
+  metadata: { modes: [api] }
+config_schema: ./config.schema.json
+credentials:
+  - key: service_account
+    required_for: [api]
+    description: >-
+      Read-access service-account JSON key (the account must be added as
+      a user of the Search Console property), as a vault reference once
+      the job transport resolves credentials (J-4). Local/CLI runs supply
+      config.credentials_file or config.credentials_env instead
+      (DECISIONS.md D-28) - references only, never key material in config.
+# One GET per snapshot job (sites.get), so no client-side pacing
+# (strategy none); 429/5xx responses still honor the backoff schedule
+# below via the SDK quota primitives, and persistent throttling defers
+# per J-5 with retry_after_s from the Retry-After header, falling back
+# to default_retry_after_s (D-32).
+rate_limit:
+  strategy: none
+  max_retries: 4
+  default_retry_after_s: 3600
+health_probe: builtin

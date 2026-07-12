@@ -554,3 +554,129 @@ file carries `credentials_file` (path to the SA JSON key) or
 `credentials_env` (env var holding the key JSON) — references only,
 never key material; the vault-reference path stays with the job
 transport (D-14).
+
+---
+
+# DECISIONS — task 1.4 (GSC connector, `connectors/gsc/`)
+
+The spec reading confirmed before implementation, per the D-16/D-22
+pattern. Sources: plan §3.3/§4, snapshot spec §4.2/§4.5/§5
+(S-1/S-2/S-8), capability spec MP-1/MP-2/CC-2, the 1.1
+`fixtures/gsc.json` (which pins the identities, the data_type
+vocabulary, and — via hash reproduction — the whole structural
+projection), and the GA4 rulings D-22..D-28. **No §4.5 amendment was
+needed:** the only stats field emitted is `data_type`, already
+registered hash-included for `api_dimension`/`api_metric`; nothing to
+flag against the registry.
+
+## D-29 — Client dependency **[stack amendment]**: the D-22 footprint, zero new dependencies
+
+GSC rides `google-auth` + `requests` exactly as GA4 does; the surface
+is one plain read-only GET (`sites.get`), so a generated client
+(`google-api-python-client` and its discovery layer) would be pure
+overhead. The D-22 rationale carries over wholesale; pyproject gains
+no new entry (the dependency comment now names both connectors).
+Scope: `webmasters.readonly`. The HTTP layer (transport protocol +
+status→taxonomy mapping) deliberately mirrors `connectors/ga4/client.py`
+rather than importing it — connectors stay standalone, and promoting
+the shared shape into the SDK is a rule-of-three refactor for when a
+third API connector appears.
+
+## D-30 — The fixed schema is a provenance-pinned constant table
+
+- **S-1 identity:** `(system, api_dimension|api_metric, "standard",
+  name)`. GSC has no custom definitions, so the `standard` logical
+  group is total. Names are wire vocabulary verbatim — the
+  `searchanalytics.query` dimension request values (`query`, `page`,
+  `country`, `device`, `date`, `searchAppearance` — camelCase as sent
+  on the wire) and metric response fields (`clicks`, `impressions`,
+  `ctr`, `position`). Provenance pinned in the connector source and
+  README (Search Analytics API reference).
+- **Hash polarity:** the structural projection (identity + empty
+  `columns`/`keys` + hash-included `stats.data_type` per §4.5) is a
+  compile-time constant, so every `schema_hash` is hash-included *and
+  effectively immutable* — byte-identical across runs and properties,
+  moving only on a deliberate connector change that mirrors Google
+  changing the documented surface, which the diff then correctly
+  classifies as structural/breaking. The test suite pins the emitted
+  hashes to `fixtures/gsc.json`'s exactly.
+- **`data_type` vocabulary:** the declared connector convention
+  `{string, integer, double}` (an SS-1-style per-connector type
+  system, like GA4's D-24): dimensions are strings; `clicks`/
+  `impressions` are counts (integer); `ctr`/`position` are a ratio and
+  an average (double). The wire JSON types all four metrics as
+  `number` — the semantic reading is the declared convention, and the
+  1.1 fixture pins it (deviating would move every metric hash off the
+  fixture's).
+- **Descriptions are `null` (S-8).** The line drawn: a connector
+  constant is emittable iff it is *wire vocabulary* (names, `dataState`
+  values, response-field type domains); free text that never crosses
+  any wire — Google's reference prose — is not a snapshot fact. This
+  is D-25's "never Google's marketing docs copied in" applied to a
+  connector whose entire schema is doc-defined. The description
+  strings in `fixtures/gsc.json` are hand-authored 1.1 artifacts
+  (D-7); a real pull cannot produce them, and since descriptions are
+  hash-excluded (S-2) the fixture's hashes still reproduce. The
+  human-facing definitions belong to the generator's GSC template
+  (task 1.5), where prose is allowed and versioned.
+
+## D-31 — Envelope: one system = one property; documented keys; SS-3 evidence
+
+- **`sites.get`, not `sites.list`:** the snapshot documents one
+  system. Emitting every site the service account can see would make
+  snapshot content depend on grants unrelated to this system (envelope
+  churn) and leak other properties into a customer-visible KB. A
+  customer with several GSC properties configures several systems —
+  the same shape as GA4's D-27.
+- **Documented `source_properties` keys (MP-2, additive only):**
+  `properties` — a list (exactly one entry in v1: the configured
+  property; list-shaped per the 1.1 fixture so multi-property
+  configuration stays additive) of `site_url` (verbatim `siteUrl`),
+  `permission_level` (verbatim `permissionLevel`), and `verified`
+  (derived: `permissionLevel != "siteUnverifiedUser"` — a typed fact
+  mapping like D-25's namespace derivation, and always `true` in an
+  emitted snapshot since unverified fails the job). `data_freshness` —
+  `{data_states: ["all", "final"]}`, the Search Analytics `dataState`
+  request vocabulary: the structured fact behind plan §3.3's "data
+  freshness notes" (an agent must know fresh-but-provisional rows are
+  requestable); the prose *semantics* of freshness are generator-
+  template material, not snapshot facts (S-8). Additive over the 1.1
+  fixture's three per-property keys.
+- **SS-3 evidence (recorded for the register closure at this task's
+  exit, jointly with D-27):** envelope-level property data sufficed.
+  Nothing about GSC properties needed per-property document identity,
+  hashing, or diff classification — a verification-state or
+  permission-level change is covered by the D-6(e) informational
+  `source_properties_changed` bit. With both phase-1 API connectors
+  landed on the default and no evidence for the revisit trigger,
+  SS-3 closes on: envelope `source_properties`, no `api_property`
+  kind.
+
+## D-32 — Error taxonomy at the GSC boundary; dropped facts
+
+- **Unverified property** (200 with `permissionLevel:
+  siteUnverifiedUser`) → `SourceUnavailable` (*retryable*:
+  verification is source-side state a retry can find fixed) — the
+  task ruling; job fails, nothing written (S-6).
+- **401/403** → `AuthError` (non-retryable, re-auth/re-grant). The
+  task bullet grouped auth failure under "SourceUnavailable"; kept
+  `auth_error` deliberately and non-silently — D-21/D-28 route
+  credential failures there so the re-auth flow can trigger, and both
+  readings agree on the observable contract (job fails, no file
+  written).
+- **400/404** → `ConfigError` (wrong/malformed `site_url`);
+  **429 or 403+`RESOURCE_EXHAUSTED`** → jittered backoff
+  (`max_retries`), then `QuotaExceeded` with `retry_after_s` from
+  `Retry-After` (else the manifest default) — a J-5 deferral, never a
+  failure; **5xx/network** → same backoff schedule, then
+  `SourceUnavailable`; **malformed/shape-broken 200** →
+  `SourceUnavailable`. Messages carry endpoint path, HTTP status, and
+  API `status` string only (JC-8). The manifest declares `strategy:
+  none` — one GET per job needs no client-side pacing — while the
+  backoff fields still drive the retry schedule.
+- **Dropped at the boundary** (D-18 pattern, README-recorded; no
+  register items proposed — none passes the S-2 test yet): the
+  `sites.list` estate beyond the configured property (per D-31), and
+  the hourly surface (`dataState: HOURLY_ALL` + `HOUR` dimension, a
+  2025 API addition) — outside plan §3.3's fixed set; adopting it
+  later is a purely additive constant-table change.
