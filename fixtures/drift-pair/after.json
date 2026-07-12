@@ -1,0 +1,270 @@
+{
+  "captured_at": "2026-07-11T02:00:00Z",
+  "connector": {
+    "name": "postgres",
+    "version": "0.1.0"
+  },
+  "objects": [
+    {
+      "columns": [
+        {
+          "default": "gen_random_uuid()",
+          "description": null,
+          "name": "id",
+          "nullable": false,
+          "ordinal": 1,
+          "type": "uuid"
+        },
+        {
+          "default": null,
+          "description": "Lowercased at the application layer; citext migration pending.",
+          "name": "email",
+          "nullable": false,
+          "ordinal": 2,
+          "type": "text"
+        },
+        {
+          "default": "now()",
+          "description": null,
+          "name": "created_at",
+          "nullable": false,
+          "ordinal": 3,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "description": "Registered accounts. Rows are soft-deleted via deleted_at.",
+      "keys": {
+        "primary": [
+          "id"
+        ],
+        "unique": [
+          [
+            "email"
+          ]
+        ]
+      },
+      "kind": "table",
+      "name": "users",
+      "schema": "public",
+      "schema_hash": "sha256:77f86953b745db91ab6732a3c1c659266a96f7c53d98445adfd5633b69929e34",
+      "stats": {
+        "row_estimate": 5120
+      }
+    },
+    {
+      "columns": [
+        {
+          "default": "nextval('orders_id_seq'::regclass)",
+          "description": null,
+          "name": "id",
+          "nullable": false,
+          "ordinal": 1,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "user_id",
+          "nullable": false,
+          "ordinal": 2,
+          "type": "uuid"
+        },
+        {
+          "default": "'created'::text",
+          "description": "pending | paid | cancelled | refunded",
+          "name": "status",
+          "nullable": false,
+          "ordinal": 3,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "description": "Grand total in cents, tax included.",
+          "name": "amount_cents",
+          "nullable": false,
+          "ordinal": 4,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "notes",
+          "nullable": true,
+          "ordinal": 5,
+          "type": "text"
+        },
+        {
+          "default": "now()",
+          "description": null,
+          "name": "created_at",
+          "nullable": false,
+          "ordinal": 6,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "description": "Applied coupon, if any.",
+          "name": "coupon_code",
+          "nullable": true,
+          "ordinal": 7,
+          "type": "text"
+        }
+      ],
+      "description": "One row per checkout; immutable after payment settles.",
+      "keys": {
+        "foreign": [
+          {
+            "columns": [
+              "user_id"
+            ],
+            "ref": "public.users",
+            "ref_columns": [
+              "id"
+            ]
+          }
+        ],
+        "primary": [
+          "id"
+        ]
+      },
+      "kind": "table",
+      "name": "orders",
+      "schema": "public",
+      "schema_hash": "sha256:78cecb771770e6495377bcd758c13bc8d3e146dc88d77bcb34d44c324830b3e8",
+      "stats": {
+        "row_estimate": 1291
+      }
+    },
+    {
+      "columns": [
+        {
+          "default": "nextval('products_id_seq'::regclass)",
+          "description": null,
+          "name": "id",
+          "nullable": false,
+          "ordinal": 1,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "sku",
+          "nullable": false,
+          "ordinal": 2,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "description": "Price in cents, VAT included.",
+          "name": "price_cents",
+          "nullable": false,
+          "ordinal": 3,
+          "type": "integer"
+        }
+      ],
+      "description": null,
+      "keys": {
+        "primary": [
+          "id"
+        ],
+        "unique": [
+          [
+            "sku"
+          ]
+        ]
+      },
+      "kind": "table",
+      "name": "products",
+      "schema": "public",
+      "schema_hash": "sha256:8eaf8d28a53508b60bb586251d58dd9e918165390f712e406e626b9155136f70",
+      "stats": {
+        "row_estimate": 355
+      }
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "description": null,
+          "name": "code",
+          "nullable": false,
+          "ordinal": 1,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "description": "Whole-number percentage, 1–100.",
+          "name": "discount_pct",
+          "nullable": false,
+          "ordinal": 2,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "expires_at",
+          "nullable": true,
+          "ordinal": 3,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "description": "Marketing discount codes.",
+      "keys": {
+        "primary": [
+          "code"
+        ]
+      },
+      "kind": "table",
+      "name": "coupons",
+      "schema": "public",
+      "schema_hash": "sha256:e81cf9d4336582b134ec9fb1d7541b37921af99200a44ebe87f6ab6e8eb6c18a",
+      "stats": {
+        "row_estimate": 12
+      }
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "description": null,
+          "name": "day",
+          "nullable": true,
+          "ordinal": 1,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "revenue_cents",
+          "nullable": true,
+          "ordinal": 2,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "order_count",
+          "nullable": true,
+          "ordinal": 3,
+          "type": "bigint"
+        }
+      ],
+      "description": "Paid revenue per calendar day. Used by the Looker Studio P&L page.",
+      "keys": {},
+      "kind": "view",
+      "name": "v_daily_revenue",
+      "schema": "public",
+      "schema_hash": "sha256:3d2888814c286f422dbf5bd8f0aac334327350c3b4f115bd51c0a2010046c985",
+      "stats": {
+        "definition": " SELECT date_trunc('day'::text, o.created_at) AS day,\n    sum(o.amount_cents) AS revenue_cents,\n    count(*) AS order_count\n   FROM orders o\n  WHERE o.status = 'paid'::text\n  GROUP BY (date_trunc('day'::text, o.created_at));"
+      }
+    }
+  ],
+  "snapshot_version": "1",
+  "source_mode": "live",
+  "source_properties": {
+    "server_version": "15.8"
+  },
+  "system": "supabase",
+  "system_class": "sql"
+}

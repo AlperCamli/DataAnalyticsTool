@@ -1,0 +1,381 @@
+{
+  "captured_at": "2026-07-11T02:05:11Z",
+  "connector": {
+    "name": "postgres",
+    "version": "0.1.0"
+  },
+  "objects": [
+    {
+      "columns": [
+        {
+          "default": "gen_random_uuid()",
+          "description": null,
+          "name": "id",
+          "nullable": false,
+          "ordinal": 1,
+          "type": "uuid"
+        },
+        {
+          "default": null,
+          "description": "Lowercased at the application layer; citext migration pending.",
+          "name": "email",
+          "nullable": false,
+          "ordinal": 2,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "full_name",
+          "nullable": true,
+          "ordinal": 3,
+          "type": "text"
+        },
+        {
+          "default": "now()",
+          "description": null,
+          "name": "created_at",
+          "nullable": false,
+          "ordinal": 4,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "description": "Soft-delete marker; NULL means active.",
+          "name": "deleted_at",
+          "nullable": true,
+          "ordinal": 5,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "description": "Registered accounts. Rows are soft-deleted via deleted_at.",
+      "keys": {
+        "primary": [
+          "id"
+        ],
+        "unique": [
+          [
+            "email"
+          ]
+        ]
+      },
+      "kind": "table",
+      "name": "users",
+      "schema": "public",
+      "schema_hash": "sha256:6fa6f398726cb2d0a8d7c510c23e15068a567fab80a6bf144da2290c09ad3f54",
+      "stats": {
+        "row_estimate": 5120
+      }
+    },
+    {
+      "columns": [
+        {
+          "default": "nextval('orders_id_seq'::regclass)",
+          "description": null,
+          "name": "id",
+          "nullable": false,
+          "ordinal": 1,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "user_id",
+          "nullable": false,
+          "ordinal": 2,
+          "type": "uuid"
+        },
+        {
+          "default": "'pending'::text",
+          "description": "pending | paid | cancelled | refunded",
+          "name": "status",
+          "nullable": false,
+          "ordinal": 3,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "description": "Grand total in cents, tax included.",
+          "name": "total_cents",
+          "nullable": false,
+          "ordinal": 4,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "notes",
+          "nullable": true,
+          "ordinal": 5,
+          "type": "text"
+        },
+        {
+          "default": "now()",
+          "description": null,
+          "name": "created_at",
+          "nullable": false,
+          "ordinal": 6,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "description": "One row per checkout; immutable after payment settles.",
+      "keys": {
+        "foreign": [
+          {
+            "columns": [
+              "user_id"
+            ],
+            "ref": "public.users",
+            "ref_columns": [
+              "id"
+            ]
+          }
+        ],
+        "primary": [
+          "id"
+        ]
+      },
+      "kind": "table",
+      "name": "orders",
+      "schema": "public",
+      "schema_hash": "sha256:6335fe5052d178367ba3f8647035f827791721a7d080efe2816c8a4605027e69",
+      "stats": {
+        "row_estimate": 1250
+      }
+    },
+    {
+      "columns": [
+        {
+          "default": "nextval('order_items_id_seq'::regclass)",
+          "description": null,
+          "name": "id",
+          "nullable": false,
+          "ordinal": 1,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "order_id",
+          "nullable": false,
+          "ordinal": 2,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "product_id",
+          "nullable": false,
+          "ordinal": 3,
+          "type": "bigint"
+        },
+        {
+          "default": "1",
+          "description": null,
+          "name": "quantity",
+          "nullable": false,
+          "ordinal": 4,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "description": "Price at time of purchase; the product price may change later.",
+          "name": "unit_price_cents",
+          "nullable": false,
+          "ordinal": 5,
+          "type": "integer"
+        }
+      ],
+      "description": null,
+      "keys": {
+        "foreign": [
+          {
+            "columns": [
+              "order_id"
+            ],
+            "ref": "public.orders",
+            "ref_columns": [
+              "id"
+            ]
+          },
+          {
+            "columns": [
+              "product_id"
+            ],
+            "ref": "public.products",
+            "ref_columns": [
+              "id"
+            ]
+          }
+        ],
+        "primary": [
+          "id"
+        ],
+        "unique": [
+          [
+            "order_id",
+            "product_id"
+          ]
+        ]
+      },
+      "kind": "table",
+      "name": "order_items",
+      "schema": "public",
+      "schema_hash": "sha256:4bcf12644d7a6d42343d414f593118930d3f31c5adeb1e5039142d7230d8d988",
+      "stats": {
+        "row_estimate": 8240
+      }
+    },
+    {
+      "columns": [
+        {
+          "default": "nextval('products_id_seq'::regclass)",
+          "description": null,
+          "name": "id",
+          "nullable": false,
+          "ordinal": 1,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "sku",
+          "nullable": false,
+          "ordinal": 2,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "name",
+          "nullable": false,
+          "ordinal": 3,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "description": "Current list price in cents.",
+          "name": "price_cents",
+          "nullable": false,
+          "ordinal": 4,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "discontinued_at",
+          "nullable": true,
+          "ordinal": 5,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "description": null,
+      "keys": {
+        "primary": [
+          "id"
+        ],
+        "unique": [
+          [
+            "sku"
+          ]
+        ]
+      },
+      "kind": "table",
+      "name": "products",
+      "schema": "public",
+      "schema_hash": "sha256:24998437263dcece62b6e2d32773cf27f08589be15297ccf232471c1a6b6a32f",
+      "stats": {
+        "row_estimate": 342
+      }
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "description": null,
+          "name": "day",
+          "nullable": true,
+          "ordinal": 1,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "revenue_cents",
+          "nullable": true,
+          "ordinal": 2,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "order_count",
+          "nullable": true,
+          "ordinal": 3,
+          "type": "bigint"
+        }
+      ],
+      "description": "Paid revenue per calendar day. Used by the Looker Studio P&L page.",
+      "keys": {},
+      "kind": "view",
+      "name": "v_daily_revenue",
+      "schema": "public",
+      "schema_hash": "sha256:9799300d96ba151b4d2418deed7eb9ce23483a3e88a3a82a469dc70c714956f3",
+      "stats": {
+        "definition": " SELECT date_trunc('day'::text, o.created_at) AS day,\n    sum(o.total_cents) AS revenue_cents,\n    count(*) AS order_count\n   FROM orders o\n  WHERE o.status = 'paid'::text\n  GROUP BY (date_trunc('day'::text, o.created_at));"
+      }
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "description": null,
+          "name": "user_id",
+          "nullable": true,
+          "ordinal": 1,
+          "type": "uuid"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "ltv_cents",
+          "nullable": true,
+          "ordinal": 2,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "first_order_at",
+          "nullable": true,
+          "ordinal": 3,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "description": null,
+          "name": "last_order_at",
+          "nullable": true,
+          "ordinal": 4,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "description": "Lifetime value per user; refreshed nightly by pg_cron.",
+      "keys": {},
+      "kind": "materialized_view",
+      "name": "mv_user_ltv",
+      "schema": "public",
+      "schema_hash": "sha256:51f42f2bd4cfdf410cb428545114b33f017bed8ba3564286b6de1175d31dec42",
+      "stats": {
+        "definition": " SELECT o.user_id,\n    sum(o.total_cents) AS ltv_cents,\n    min(o.created_at) AS first_order_at,\n    max(o.created_at) AS last_order_at\n   FROM orders o\n  WHERE o.status = 'paid'::text\n  GROUP BY o.user_id;"
+      }
+    }
+  ],
+  "snapshot_version": "1",
+  "source_mode": "live",
+  "source_properties": {
+    "server_version": "15.8"
+  },
+  "system": "supabase",
+  "system_class": "sql"
+}
