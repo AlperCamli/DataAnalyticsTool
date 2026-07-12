@@ -1,0 +1,13 @@
+{
+  "name": "properties/313459823",
+  "propertyType": "PROPERTY_TYPE_ORDINARY",
+  "createTime": "2023-02-14T09:31:07.096Z",
+  "updateTime": "2026-05-30T11:02:44.518Z",
+  "parent": "accounts/54516992",
+  "displayName": "Acme Store — Web",
+  "industryCategory": "SHOPPING",
+  "timeZone": "Europe/Istanbul",
+  "currencyCode": "TRY",
+  "serviceLevel": "GOOGLE_ANALYTICS_STANDARD",
+  "account": "accounts/54516992"
+}

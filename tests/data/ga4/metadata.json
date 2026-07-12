@@ -1,0 +1,83 @@
+{
+  "name": "properties/313459823/metadata",
+  "dimensions": [
+    {
+      "apiName": "country",
+      "uiName": "Country",
+      "description": "The country from which the user activity originated.",
+      "category": "Geography"
+    },
+    {
+      "apiName": "deviceCategory",
+      "uiName": "Device category",
+      "description": "The type of device: Desktop, Tablet, or Mobile.",
+      "category": "Platform / Device"
+    },
+    {
+      "apiName": "date",
+      "uiName": "Date",
+      "description": "The date of the event, formatted as YYYYMMDD.",
+      "category": "Time"
+    },
+    {
+      "apiName": "unifiedScreenName",
+      "uiName": "Page title and screen name",
+      "deprecatedApiNames": ["pageTitle"],
+      "category": "Page / Screen"
+    },
+    {
+      "apiName": "customEvent:plan_tier",
+      "uiName": "Plan tier",
+      "description": "Subscription tier attached to checkout events.",
+      "customDefinition": true,
+      "category": "Custom"
+    },
+    {
+      "apiName": "customUser:crm_id",
+      "uiName": "CRM ID",
+      "description": "CRM identifier synced from the sales pipeline.",
+      "customDefinition": true,
+      "category": "Custom"
+    }
+  ],
+  "metrics": [
+    {
+      "apiName": "activeUsers",
+      "uiName": "Active users",
+      "description": "The number of distinct users who visited your site or app.",
+      "type": "TYPE_INTEGER",
+      "category": "User"
+    },
+    {
+      "apiName": "sessions",
+      "uiName": "Sessions",
+      "description": "The number of sessions that began on your site or app.",
+      "type": "TYPE_INTEGER",
+      "category": "Session"
+    },
+    {
+      "apiName": "totalRevenue",
+      "uiName": "Total revenue",
+      "description": "The sum of revenue from purchases, subscriptions, and advertising.",
+      "type": "TYPE_CURRENCY",
+      "category": "Revenue"
+    },
+    {
+      "apiName": "customEvent:support_tickets",
+      "uiName": "Support tickets",
+      "description": "Count of support tickets opened from the in-app widget.",
+      "type": "TYPE_INTEGER",
+      "customDefinition": true,
+      "category": "Custom"
+    },
+    {
+      "apiName": "calcMetric:revenue_per_user",
+      "uiName": "Revenue per user",
+      "description": "Calculated metric: total revenue divided by active users.",
+      "type": "TYPE_CURRENCY",
+      "customDefinition": true,
+      "category": "Custom"
+    }
+  ],
+  "comparisons": []
+}

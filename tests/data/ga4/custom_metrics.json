@@ -1,0 +1,12 @@
+{
+  "customMetrics": [
+    {
+      "name": "properties/313459823/customMetrics/7311",
+      "parameterName": "support_tickets",
+      "displayName": "Support tickets",
+      "description": "Count of support tickets opened from the in-app widget.",
+      "measurementUnit": "STANDARD",
+      "scope": "EVENT"
+    }
+  ]
+}

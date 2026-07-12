@@ -1,0 +1,12 @@
+{
+  "customDimensions": [
+    {
+      "name": "properties/313459823/customDimensions/4118",
+      "parameterName": "plan_tier",
+      "displayName": "Plan tier",
+      "description": "Subscription tier attached to checkout events.",
+      "scope": "EVENT"
+    }
+  ],
+  "nextPageToken": "page-2"
+}

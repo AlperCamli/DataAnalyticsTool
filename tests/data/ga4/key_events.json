@@ -1,0 +1,20 @@
+{
+  "keyEvents": [
+    {
+      "name": "properties/313459823/keyEvents/9114",
+      "eventName": "purchase",
+      "createTime": "2023-02-14T10:05:12.001Z",
+      "deletable": true,
+      "custom": false,
+      "countingMethod": "ONCE_PER_EVENT"
+    },
+    {
+      "name": "properties/313459823/keyEvents/9377",
+      "eventName": "sign_up_completed",
+      "createTime": "2024-09-02T15:44:03.412Z",
+      "deletable": true,
+      "custom": true,
+      "countingMethod": "ONCE_PER_SESSION"
+    }
+  ]
+}

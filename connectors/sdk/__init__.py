@@ -35,6 +35,7 @@ from connectors.sdk.manifest import (
     load_manifest,
 )
 from connectors.sdk.providers import IntrospectionResult, MetadataProvider
+from connectors.sdk.quota import QuotaPolicy, TokenBucket, backoff_delays
 from connectors.sdk.runner import Job, JobError, JobOutcome, run_job
 
 __all__ = [
@@ -54,10 +55,13 @@ __all__ = [
     "ManifestError",
     "MetadataProvider",
     "QuotaExceeded",
+    "QuotaPolicy",
     "RegistrationError",
     "SourceUnavailable",
     "SUPPORTED_PROTOCOL_VERSION",
     "SUPPORTED_SNAPSHOT_VERSION",
+    "TokenBucket",
+    "backoff_delays",
     "emit_snapshot",
     "load_manifest",
     "run_job",

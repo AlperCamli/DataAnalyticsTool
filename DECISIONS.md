@@ -350,3 +350,207 @@ on ubuntu-latest where Docker is available, skip where it is not) —
 tasks 1.3/1.4 must reuse it, not create their own. Error messages
 never echo the DSN (JC-8): a malformed-DSN parse error is replaced
 wholesale, and libpq redacts passwords from connection errors.
+
+---
+
+# DECISIONS — task 1.3 (GA4 connector, `connectors/ga4/`)
+
+The spec reading confirmed before implementation, recorded per the
+D-16 pattern. Sources: plan §3.2/§4, snapshot spec §4–§6 (S-1/S-2/S-8),
+capability spec MP-1/MP-2/CC-2, job spec J-5, the §4.5 registry as
+implemented in `snapshot/registry.py`, and the 1.1 `fixtures/ga4.json`
+(which pins several readings). Nothing here required amending the §4.5
+registry; the register-item candidates in D-26 are proposals only —
+no spec file was edited by this task.
+
+## D-22 — Client dependency: plain REST via google-auth, not the official client libraries **[stack amendment]**
+
+`google-auth>=2.29` (service-account OAuth2, `AuthorizedSession`) +
+`requests>=2.31` added; the generated clients
+(`google-analytics-data`, `google-analytics-admin`) deliberately not
+taken. Rationale: (a) all five surfaces are plain `GET`s — list/get
+endpoints with JSON bodies; (b) S-8/verbatim: the wire format carries
+the exact strings the snapshot must emit (`TYPE_INTEGER`, `EVENT`);
+the proto clients decode them into Python enums that would need
+re-stringification — a translation layer exactly where the contract
+wants none; (c) recorded-response testing is trivial against JSON
+transports and painful against gRPC stubs; (d) calculated metrics live
+in Admin **v1alpha** (not yet v1beta), and plain REST reaches any
+version without a second generated client; (e) no protobuf/grpcio
+dependency tree. google-auth itself is the one piece not worth
+hand-rolling (SA JWT flow, token refresh, clock skew).
+
+## D-23 — One object per definition: Data API metadata enumerates, Admin API decorates
+
+The Data API metadata endpoint already returns every custom definition
+(`customDefinition: true`, apiName like `customEvent:plan_tier`) that
+the Admin API lists — two views of one definition, so **one snapshot
+object**, never two. Emitting both would create duplicate-identity
+collisions (same kind/schema/name) or, worse, near-duplicate objects
+under different names for the same fact. Division of labor:
+
+- **Data API metadata** is the *enumerating* surface — it defines the
+  queryable estate (that is what an agent may put in a `runReport`),
+  and owns existence, `name` (= `apiName`, verbatim, prefix included),
+  `description`, and metric `data_type` (= `type`, verbatim
+  `TYPE_*` string).
+- **Admin API** decorates with the registered definition facts the
+  metadata endpoint lacks: `scope` for custom metrics
+  (`customMetrics`), `formula` for calculated metrics
+  (`calculatedMetrics`, matched via the `calcMetric:{id}` apiName).
+- The join is validated **both directions** for custom entries; a
+  mismatch (a custom definition on one surface but not the other) is a
+  torn read across non-atomic API calls — the snapshot must describe
+  one moment (S-6 spirit), so the job fails `source_unavailable`
+  (retryable) rather than emitting a half-described definition.
+
+**Custom-dimension scope is not emitted.** Plan §3.2 says custom
+definitions come "with scope", but §4.5 registers `scope` only for
+`api_metric` — and no registration is needed for dimensions: GA4's own
+naming rule encodes dimension scope bijectively in the apiName prefix
+(`customEvent:` ↔ EVENT, `customUser:` ↔ USER, `customItem:` ↔ ITEM),
+so the fact already rides identity (`name`), hash-covered, and a
+`stats.scope` copy would be redundant. The 1.1 fixture agrees
+(`customUser:crm_id` carries no scope). The Admin scope is still
+*used* — it derives the prefix for the join in both directions — just
+not emitted. If review wants it as an explicit stats field anyway,
+that is a §4.5 amendment (registration on `api_dimension`), not a
+connector choice.
+
+## D-24 — `stats.data_type` for dimensions is the constant `"string"`
+
+`DimensionMetadata` carries no type field because the Data API types
+every dimension value as a string — that is the API's own type system,
+a carried fact about the surface, not synthesized prose (S-8 governs
+free text; this is a typed fact slot). §4.2 requires api_dimension
+"typing via `stats.data_type`", the field is hash-included in the
+registry, and the 1.1 fixture emits `"string"` for every dimension.
+Metrics keep the verbatim wire enum (`TYPE_INTEGER`, `TYPE_CURRENCY`,
+…) — the two vocabularies are per-kind connector conventions, exactly
+like SS-1 treats engine-native SQL types.
+
+## D-25 — Events surface = key events only; namespace from `KeyEvent.custom`; the `key` namespace stays unused
+
+GA4 exposes **no metadata API that enumerates events**: the UI's event
+list is report data, and enumerating `eventName` via `runReport` is a
+data pull — out of scope by the task fence. So v1 `api_event` objects
+come solely from the Admin `keyEvents` list, and consequences follow:
+
+- `schema` is the event's **origin namespace** per D-5, decided by the
+  key event's own `custom` flag: `false` → `standard`, `true` →
+  `custom`. D-5's reserved `key` namespace stays unused — it exists
+  for key events whose origin is *undeterminable*, and `custom` always
+  determines it; using `key` would also change object identity if a
+  fuller events surface ever lands (the removed+added pair D-5 exists
+  to prevent).
+- `stats.is_key_event` is `true` for every emitted event in v1 —
+  vacuously, since only key events are visible. The flag is still
+  emitted (hash-included, registered): it is the fact that makes the
+  object meaningful, and it keeps identity/hash stable for the day a
+  fuller events surface makes `false` emittable.
+- **Demotion** (key event deleted in GA4) therefore surfaces as
+  `removed` (breaking) — the object vanishes from the only surface
+  that showed it — rather than as D-5's is_key_event flag flip.
+  Substantively right (conversion reports depending on it do break),
+  but it is a *reduced rendering* of D-5's intent, forced by the API,
+  recorded here so the diff behavior doesn't surprise.
+- Event **parameters** are not introspectable from any metadata
+  surface → `columns: []` always (§4.2 allows parameters "when the
+  API exposes them" — it doesn't). The 1.1 fixture's `purchase`
+  columns and its non-key events (`page_view`, `session_start`) are
+  hand-authored 1.1 artifacts exercising the schema; a real GA4 pull
+  cannot produce them, which the fixture-vs-connector distinction in
+  D-7 already anticipates.
+- Key events carry no description field → `description: null` (S-8:
+  verbatim or null, never Google's marketing docs copied in).
+
+## D-26 — Archived/deprecated definitions; facts dropped at the boundary
+
+**Archived custom dimensions/metrics** disappear from both surfaces
+(the Admin list returns only active definitions, and the metadata
+endpoint drops them); there is no "list archived" parameter. So an
+archive lands in the next snapshot as `removed` → **breaking** — the
+correct severity: any report or human doc referencing the definition
+is broken by archiving, and resurrecting the fact is impossible
+anyway (the connector cannot see it). No tombstones, no synthesized
+"archived" marker (S-8; and it would need an unregistered stats slot).
+
+**`deprecatedApiNames`** on standard dimensions/metrics (rename
+migration windows): the current `apiName` is identity; the deprecated
+aliases have no registered slot and are dropped at the boundary.
+Register-item candidate (low value: the alias resolves at the API for
+the migration window only, and the KB documents the current surface).
+
+**Dropped with registry-candidate value, per the D-18 pattern —
+proposed, not entered into any spec file by this task:**
+`KeyEvent.countingMethod` (`ONCE_PER_EVENT` vs `ONCE_PER_SESSION`) is
+the strongest candidate: it changes what the key-event count *means*,
+so it passes the S-2 test ("could contradict human docs") and would
+belong hash-**included** on `api_event` — flagged for a register item
+rather than silently dropped. Lower-value drops, recorded in the
+connector README: `uiName`, `category` (UI taxonomy), custom-metric
+`measurementUnit` (already reflected in the Data API `type`),
+`restrictedMetricType`, `blockedReasons`,
+`disallowAdsPersonalization`, key-event `defaultValue`/`createTime`/
+`deletable`, property `industryCategory`/`serviceLevel`/`createTime`.
+
+## D-27 — Envelope: `system_class: "api"`, mode `api`; four documented source_properties keys
+
+The manifest declares metadata mode `[api]` only; `source_mode: "api"`
+is stamped by the harness (MP-1 by construction). Documented
+`source_properties` keys (MP-2, additive only), all verbatim from the
+Admin `properties/{id}` get:
+
+| Key | Source field | Why it is a fact worth carrying |
+|---|---|---|
+| `property_id` | `name` (resource name, `properties/313459823`) | The stable identifier every cross-reference needs; config carries the numeric id, the emitted value is the API's own resource name |
+| `display_name` | `displayName` | The human anchor for KB docs and the Connections UI |
+| `time_zone` | `timeZone` | Defines the semantics of every date/hour dimension (GA4 reports are property-timezone-local); required to align GA4 dates with GSC dates and Postgres timestamps in blends/entity docs |
+| `currency_code` | `currencyCode` | The unit of every `TYPE_CURRENCY` metric; a revenue figure documented in the wrong currency is precisely S-2's "contradict human docs" risk |
+
+Matches the 1.1 fixture's four keys exactly.
+
+**SS-3 evidence (recorded for the register closure at the 1.4 exit):**
+nothing about GA4 properties required per-property document identity
+or hashing. One configured system = one property; the property facts
+are system-level envelope facts, consumed as provenance, not as
+diffable objects — the D-6(e) informational `source_properties_changed`
+bit sufficed even for a timezone/currency change. A customer with
+several GA4 properties configures several systems (e.g. `ga4-web`,
+`ga4-app`), each with its own snapshot and KB subtree, which S-1
+handles with no `api_property` kind. Envelope-level
+`source_properties` sufficed; no evidence for the SS-3 revisit
+trigger.
+
+## D-28 — Quota policy and error taxonomy at the GA4 boundary
+
+The manifest declares `rate_limit: {strategy: token-bucket, …}` and
+the SDK now ships the primitives D-12 deferred to this task
+(`connectors/sdk/quota.py`): a monotonic-clock token bucket paced from
+the manifest values, and a jittered exponential backoff schedule.
+Behavior at the boundary, honoring J-5 and the task ruling ("any
+other API failure → SourceUnavailable, no fallback"):
+
+- **429 / `RESOURCE_EXHAUSTED`** → in-job backoff retries (manifest
+  `max_retries`); still throttled → `QuotaExceeded` with
+  `retry_after_s` from the `Retry-After` header when present, else the
+  manifest's `default_retry_after_s` — the runner maps it to a J-5
+  deferral, never a failure, never a dead-letter.
+- **401 / 403 (non-quota)** → `AuthError` (non-retryable, re-auth
+  flow) — the postgres precedent (D-21) for credential failures.
+- **400 / 404** → `ConfigError` (malformed/unknown property —
+  retrying a wrong id forever is noise, and GA returns 403, not 404,
+  for unauthorized-but-existing).
+- **5xx / network faults** → one backoff pass, then
+  `SourceUnavailable` (retryable). Torn reads (D-23) are also
+  `SourceUnavailable`.
+- Nothing is ever written on failure (S-6; the CLI write stays
+  atomic), and no error message carries credential material (JC-8) —
+  messages name the endpoint path, HTTP status, and API `status`
+  string only.
+
+Config indirection mirrors the postgres `dsn_env` pattern: the config
+file carries `credentials_file` (path to the SA JSON key) or
+`credentials_env` (env var holding the key JSON) — references only,
+never key material; the vault-reference path stays with the job
+transport (D-14).

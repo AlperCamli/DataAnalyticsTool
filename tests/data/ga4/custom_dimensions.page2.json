@@ -1,0 +1,12 @@
+{
+  "customDimensions": [
+    {
+      "name": "properties/313459823/customDimensions/5203",
+      "parameterName": "crm_id",
+      "displayName": "CRM ID",
+      "description": "CRM identifier synced from the sales pipeline.",
+      "scope": "USER",
+      "disallowAdsPersonalization": true
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["system", "mode", "property_id"],
+  "additionalProperties": false,
+  "properties": {
+    "system": { "type": "string", "minLength": 1 },
+    "mode": { "enum": ["api"] },
+    "property_id": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "Numeric GA4 property ID (the Admin UI's 'Property ID', e.g. 313459823). The snapshot's source_properties.property_id carries the API's resource name form (properties/313459823)."
+    },
+    "credentials_file": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to a service-account JSON key file with read access to the property. A reference only - key material never lives in config files."
+    },
+    "credentials_env": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of an environment variable holding the service-account key JSON (the content, not a path). Same indirection pattern as the postgres connector's dsn_env."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "mode": { "const": "api" } }, "required": ["mode"] },
+      "then": {
+        "anyOf": [
+          { "required": ["credentials_file"] },
+          { "required": ["credentials_env"] }
+        ]
+      }
+    }
+  ]
+}

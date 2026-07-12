@@ -15,6 +15,10 @@ dependencies = [
     "PyYAML>=6.0",
     # postgres connector (task 1.2); DECISIONS.md D-21 stack amendment
     "psycopg[binary]>=3.2",
+    # ga4 connector (task 1.3): plain REST + service-account auth;
+    # DECISIONS.md D-22 stack amendment (no generated Google clients)
+    "google-auth>=2.29",
+    "requests>=2.31",
 ]
 
 [project.optional-dependencies]
@@ -24,16 +28,18 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["snapshot", "connectors", "connectors.sdk", "connectors.static_demo", "connectors.postgres"]
+packages = ["snapshot", "connectors", "connectors.sdk", "connectors.static_demo", "connectors.postgres", "connectors.ga4"]
 
 [tool.setuptools.package-data]
 snapshot = ["schema/*.json"]
 "connectors.sdk" = ["schema/*.json"]
 "connectors.static_demo" = ["connector.yaml", "*.json"]
 "connectors.postgres" = ["connector.yaml", "*.json"]
+"connectors.ga4" = ["connector.yaml", "*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
     "postgres: needs Docker (spins ephemeral postgres containers); skipped when the daemon is unreachable",
+    "ga4_live: live GA4 pull against the customer property; skipped unless CTXLAYER_GA4_LIVE is set (needs CTXLAYER_GA4_PROPERTY_ID + GOOGLE_APPLICATION_CREDENTIALS)",
 ]

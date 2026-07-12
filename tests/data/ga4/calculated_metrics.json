@@ -1,0 +1,12 @@
+{
+  "calculatedMetrics": [
+    {
+      "name": "properties/313459823/calculatedMetrics/revenue_per_user",
+      "description": "Calculated metric: total revenue divided by active users.",
+      "displayName": "Revenue per user",
+      "calculatedMetricId": "revenue_per_user",
+      "metricUnit": "CURRENCY",
+      "formula": "totalRevenue/activeUsers"
+    }
+  ]
+}
