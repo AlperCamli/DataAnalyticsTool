@@ -34,11 +34,13 @@ trust signals. First deployment: Supabase + GA4 + GSC → Looker Studio.
 ## Layout
 - `specs/` — spec set · `plans/` — dev plan
 - `snapshot/` — schema, canonicalization, hashing, diff (task 1.1)
-- `connectors/` — postgres/, ga4/, gsc/ (tasks 1.2–1.4)
+- `connectors/` — sdk/ (shared harness: manifest, providers, emission,
+  local CLI), static_demo/ (reference connector), postgres/, ga4/, gsc/
+  (tasks 1.2–1.4)
 - `generator/` — templates + renderer (task 1.5)
 - `fixtures/` — snapshot fixtures per system
 
 ## Stack
-Python 3.12 + jsonschema (Draft 2020-12) + pytest + hypothesis.
+Python 3.12 + jsonschema (Draft 2020-12) + PyYAML + pytest + hypothesis.
 Venv at `.venv/`; run tests with `.venv/bin/python -m pytest`.
-(Choice recorded in DECISIONS.md D-8.)
+(Choice recorded in DECISIONS.md D-8, amended D-15.)

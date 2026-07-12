@@ -177,3 +177,78 @@ non-constraint indexes (`keys` holds primary/foreign/unique only; no §4.5
 stats registration). Either they are deliberately dropped at the boundary
 or a `stats` registration is needed when 1.2 is built — not a 1.1 concern,
 recorded so 1.2 doesn't guess silently.
+
+---
+
+# DECISIONS — connector SDK harness (`connectors/sdk/`, shared by 1.2–1.4)
+
+Ambiguities encountered implementing the connector-side halves of
+`specs/job-protocol-spec.md`, `specs/capability-interfaces-spec.md`
+(manifest + MetadataProvider), and snapshot delivery validation (J-6).
+
+## D-11 — Harness owns the envelope; `introspect` returns facts only
+
+Neither spec states who assembles the snapshot envelope. **Chosen
+reading:** the connector's `introspect(config)` returns an
+`IntrospectionResult` (`system_class`, `objects` without `schema_hash`,
+optional `source_properties`); the harness stamps `snapshot_version`,
+`system` (from config), `source_mode` (from `config.mode`),
+`captured_at`, and `connector` (from the manifest), and computes every
+`schema_hash` via the 1.1 library. Consequences: MP-1
+(`source_mode == config.mode`) and C-4 (hashes recompute) hold by
+construction for every connector on the harness; a connector-supplied
+`schema_hash` is verified against the recomputation and a mismatch
+fails emission — supplied hashes are never trusted.
+
+## D-12 — Manifest stays spec-pure; code binding is SDK-local
+
+`connector.yaml` carries exactly the §3 contract shape — no Python
+entry-point field was added. Binding a manifest to code is the
+SDK-local `Connector` object (manifest + handlers keyed by capability
+name), addressed on the CLI as `MODULE:ATTR`. CC-1 splits accordingly:
+`load_manifest` proves the file (structure, §4.2 capability→job-type
+registry membership, protocol/snapshot version pins per CI-E, valid
+Draft 2020-12 `config_schema`); `Connector` assembly proves the code
+(declared capabilities ↔ registered handlers, both directions — an
+undeclared handler is a release mistake since claim matching reads
+only the manifest). `rate_limit.strategy` is an enum of what the SDK
+ships (`none`, `token-bucket`); backoff/quota *primitives* land with
+the GA4 task.
+
+## D-13 — Emission gate: consumer leniencies are producer errors
+
+J-6 dead-letters invalid deliveries server-side; the harness mirrors
+the whole gate connector-side as `EmissionError` (code
+`validation_error`, non-retryable) so a bad snapshot fails loudly at
+the producer. Producer-side strictness deliberately exceeds the
+consumer-side validator: unknown `kind` is an error (S-7 producers may
+emit only registered kinds; S-5 skip-with-warning is for consumers),
+unregistered `stats` fields are an error (C-8 at emission time, for
+every connector), and any validator *warning* is treated as an error.
+All-or-nothing (S-6) sits in the runner: introspection is one call,
+any exception fails the whole job, and nothing is written on failure
+(the CLI write is atomic temp+rename, so no partial file can exist).
+
+## D-14 — Transport seam = `run_job → JobOutcome`; local CLI first
+
+The pluggable-transport requirement is met by keeping the engine pure:
+`run_job(connector, job) -> JobOutcome`, where the outcome's three
+states mirror the three terminal wire calls (`succeeded`→`complete`,
+`failed`→`fail`, `deferred`→`defer` with `retry_after_s`, J-5). A
+transport is whatever builds a `Job` and disposes of the outcome; the
+local CLI (`python -m connectors.sdk.local`, exit codes 0/1/2/3 =
+ok/failed/usage/deferred) is the first, and the job-protocol runner
+later maps the same outcome onto HTTP without touching connector code.
+Claims, leases, and heartbeats are deliberately absent (task scope
+fence); `Job.credentials` carries vault references but resolution is
+unimplemented until 1.2 live mode needs it — `introspect(config)`
+keeps the task-stated signature, and credential threading is a 1.2
+decision, not silently pre-empted here.
+
+## D-15 — Stack and demo-mode notes
+
+PyYAML added as a dependency (manifests are `connector.yaml` per §3;
+amends D-8's stack list). The static demo declares metadata mode
+`ddl-file` rather than inventing a `static` mode: `source_mode` is a
+closed §3 enum and the manifest schema enforces it — a new mode would
+be a snapshot-spec amendment, not a connector choice.

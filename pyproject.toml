@@ -5,12 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "contextlayer-snapshot"
 version = "0.1.0"
-description = "Normalized metadata snapshot layer: schema, canonicalization, hashing, diff (task 1.1)"
+description = "Snapshot layer (task 1.1) + shared connector SDK harness (tasks 1.2-1.4)"
 requires-python = ">=3.12"
 dependencies = [
     # format-nongpl pulls rfc3339-validator: without it jsonschema treats
     # `format: date-time` as annotation-only and captured_at goes unchecked
     "jsonschema[format-nongpl]>=4.21",
+    # connector manifests are connector.yaml (capability spec §3)
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -20,10 +22,12 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["snapshot"]
+packages = ["snapshot", "connectors", "connectors.sdk", "connectors.static_demo"]
 
 [tool.setuptools.package-data]
 snapshot = ["schema/*.json"]
+"connectors.sdk" = ["schema/*.json"]
+"connectors.static_demo" = ["connector.yaml", "*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
