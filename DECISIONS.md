@@ -142,10 +142,38 @@ jsonschema (Draft 2020-12) + pytest + hypothesis** (first suggested option;
 jsonschema is needed for §8.1 verbatim, hypothesis for the required
 property tests). CLAUDE.md placeholder filled accordingly.
 
-## D-9 — Repo-path discrepancies (no code impact)
+## D-9 — Repo-path discrepancies **[resolved 2026-07-12]**
 
-Specs live at `spec/`, but CLAUDE.md, the spec index (§"Change process"),
-and the dev plan all say `specs/`. `phase1-supabase-ga4-gsc-plan.md`,
-referenced by the snapshot spec header and the task brief, is absent from
-the repo; the snapshot spec states it formalizes that plan's §4, so it was
-treated as the authority. Both worth fixing at the next consolidation pass.
+Originally: specs lived at `spec/` while every document said `specs/`, and
+`phase1-supabase-ga4-gsc-plan.md` was absent, so the snapshot spec (which
+states it formalizes that plan's §4) was treated as the authority. Both
+resolved after task 1.1 landed: the directory was renamed to `specs/` and
+the phase-1 plan added. Post-hoc reconciliation confirmed the reading —
+see D-10.
+
+## D-10 — Phase-1 plan §4 is the superseded draft of the snapshot schema
+
+`specs/phase1-supabase-ga4-gsc-plan.md` §4 labels itself "draft schema",
+and the snapshot spec's header says it *formalizes* that section, so where
+they differ the snapshot spec governs. The differences, for the record —
+draft-form snapshots are **intentionally rejected** by the §8.1 schema:
+
+- draft columns lack `ordinal`; formal spec requires it (drives §6 order)
+- draft FK is three-part `"ref": "public.users.id"` with no `ref_columns`;
+  formal spec splits into two-part `ref` + `ref_columns` (the fk `ref`
+  pattern `^[^.]+\.[^.]+$` rejects the draft form)
+- draft kind list omits `materialized_view`; formal §4.2 registers it
+- draft envelope lacks `connector` and `source_properties`; formal spec
+  requires `connector`
+
+Everything the plan pins concretely matches the implementation: GSC's
+fixed dimension/metric set (§3.3) is byte-for-byte the `gsc.json` fixture;
+GA4 custom definitions carry `data_type`/`scope`/`formula` in `stats`
+(§3.2/§4); mode-identical snapshots (§1) is S-4/C-3.
+
+One new observation, register-item candidate for task 1.2: plan §3.1 says
+live introspection covers **indexes**, but snapshot v1 has no slot for
+non-constraint indexes (`keys` holds primary/foreign/unique only; no §4.5
+stats registration). Either they are deliberately dropped at the boundary
+or a `stats` registration is needed when 1.2 is built — not a 1.1 concern,
+recorded so 1.2 doesn't guess silently.
