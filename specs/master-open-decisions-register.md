@@ -36,7 +36,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | JP-4 | Webhook ingestion endpoint | Open | `/v1/hooks/{system}` + per-hook shared secret; normatively owned by the sync-orchestrator spec (not yet written — see index doc) | Sync-orchestrator spec authoring |
 | JP-5 | Runner autoscaling under K8s | Open | Manual replica count in v1 | Enterprise deployment sizing |
 
-## KB repository (KB-A..E)
+## KB repository (KB-A..F)
 
 | ID | Item | Status | Default | Revisit trigger |
 |---|---|---|---|---|
@@ -45,6 +45,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | KB-C | Regeneration scope per drift run | Open | Changed objects only; KB-8 guards correctness | Template changes needing estate-wide re-render |
 | KB-D | Human-doc localization | Open | Out of scope v1 | First non-English deployment |
 | KB-E | Grouped API doc splitting threshold | Open | Split at 200 objects per kind-group | First estate hitting it |
+| KB-F | Trust semantics of repo-level human docs (`index.md`, `conventions.md`, `_notes.md`) | Open | No front-matter, KB-1-exempt (KB spec §4.6); MCP serves them without a trust block | CP-4/M1 MCP server session (trust-block consumer exists) |
 
 ## Capability interfaces (CI-A..E)
 

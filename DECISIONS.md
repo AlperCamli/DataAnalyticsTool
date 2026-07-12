@@ -680,3 +680,131 @@ third API connector appears.
   the hourly surface (`dataState: HOURLY_ALL` + `HOUR` dimension, a
   2025 API addition) — outside plan §3.3's fixed set; adopting it
   later is a purely additive constant-table change.
+
+---
+
+# DECISIONS — task 1.5 (generator + templates, `generator/`)
+
+The spec reading confirmed before implementation, per the D-16/D-22/D-30
+pattern. Sources: KB repository spec (K-1..K-8, §3/§4/§7/§10), snapshot
+spec §4–§6 (S-2/S-3/S-5/S-8), phase-1 plan §5 (superseded draft of KB §3,
+same relationship D-10 established for §4), the four real snapshots, and
+DECISIONS D-1..D-32. Two spec amendments were applied under explicit
+rulings (the D-16 additive-registration precedent): the §4.1 `generated_at`
+clarification and the §4.6 `machine-index` registration — spec diff first,
+same PR. The KB-F register item entered KB §12 and the master register.
+
+## D-33 — `generated_at` = capture date of the snapshot whose render last changed the file **[amendment applied]**
+
+KB-8 demands byte-level no-op regeneration, but §4.1's `generated_at` had
+no defined clock. **Ruling:** the value is the date part of `captured_at`
+of the snapshot whose render last *changed the file's content*; never the
+generator's wall clock. Mechanically: if a candidate render equals the
+existing file modulo the `generated_at` line, the existing bytes stand and
+nothing is written; otherwise the file is written with the current
+snapshot's capture date. The decisive argument: this makes a full render
+byte-identical to what CP-3's KB-C changed-objects-only path will produce,
+so the two regeneration routes can never disagree — worth more than any
+semantic quibble. Semantics are honest provenance: "the source state this
+doc last changed to reflect" (job wall clocks belong to job logs).
+**Corollary (single timestamp locus):** machine-doc bodies never embed a
+timestamp; the §7 "Row estimate & freshness" section points at the
+front-matter field rather than inlining a date. **Recorded interaction,
+pinned in the mode-pair test:** a ddl-file → live switch changes the
+`source_mode` front-matter line on every machine file of that system —
+a content change, so every file restamps. That is expected provenance
+("this doc now reflects live introspection"), arriving alongside
+D-19.3's metadata-only row-estimate appearance, not churn. Rejected
+alternative (restamp `date(captured_at)` unconditionally): re-rendering
+from a newer-but-body-identical snapshot would churn every file, full and
+incremental paths would diverge, and the S-2 flow-through tests would fail
+across `drift-pair/`'s deliberately differing capture dates.
+
+Input model this fixes: render is a deterministic function of
+(snapshot set, existing output tree), where the tree contributes only
+(a) prior `generated_at` values and (b) existence + front-matter of
+human-owned siblings (hot/stub, status roll-ups, `_notes.md` links).
+On an empty output dir it is a pure function of the snapshots — what the
+golden-tree tests pin.
+
+## D-34 — `machine-index` class registered; root-bootstrap artifacts KB-1-exempt **[amendment applied]**
+
+Per-system and per-schema `index.md` are machine-owned (K-7) but §4
+defined no class for them while KB-1 validates every file and K-5 makes
+front-matter the trust payload. Registered `doc_class: machine-index`
+(`system`, `scope: system|schema`, `schema` iff schema-scoped, plus the
+standard provenance fields) as KB spec §4.6. The K-7 bootstrap artifacts
+(`kb/index.md`, `kb/conventions.md`, `_notes.md` siblings) are human-owned
+docs with no object identity: they carry no front-matter and KB-1 exempts
+them by path; the generator writes the two root files only when absent
+(existence is the bootstrap latch) and never writes `_notes.md`. The
+deliberately-undesigned remainder — whether repo-level human docs need
+trust statuses for MCP trust blocks — is register item KB-F, deferred to
+the CP-4/M1 session where the consumer exists.
+
+## D-35 — D-30's GSC-template-prose sentence superseded
+
+D-30 (task 1.4) contained: "The human-facing definitions belong to the
+generator's GSC template (task 1.5), where prose is allowed and
+versioned." That sentence is **superseded** — it was a session-local
+decision that overstepped S-8 ("the generator adds structure, never prose
+about the data"): a template carrying Google-reference definitions would
+put synthesized prose about the data into machine-owned docs. The
+generator renders `description: null` as `—`, full stop; the fixture's
+hand-authored descriptions (D-7/D-30 artifacts) still render because the
+rule is verbatim-or-absent. Consequence recorded for task 1.7: the GSC
+group human docs (`systems/gsc/dimensions.md`, `metrics.md`) become the
+natural first enrich batch — Google's documented definitions carried with
+`sources:` citations — doubling as clean SS-2 evidence (doc-only grounding
+for a fixed-schema source).
+
+## D-36 — Canonical readings (confirmed, recorded; no spec change)
+
+1. **Object-level description renders in the Identity section** — §7's
+   machine template names no other slot, and the §7-diff metadata-only
+   class requires description edits to land somewhere in the machine doc.
+2. **Referenced-by is a reverse-FK snapshot fact, not lineage**: computed
+   within the snapshot from `keys.foreign[].ref`, sorted canonically. The
+   task-1.9 boundary stays exactly as drawn — the generator never reads,
+   writes, or links `lineage/graph.json`; §7 requires no lineage section.
+3. **Pruning semantics**: the machine-owned file set is exactly what the
+   input snapshots define — a machine file whose object vanished is
+   deleted (emptied schema dirs removed); human-owned files are never
+   written or deleted; systems absent from the input are left untouched
+   (system removal is administrative, §7/S-6). Asserted by the
+   pruning-safety test, not left as convention.
+4. **Layout mapping**: API kinds group as `api_dimension` →
+   `dimensions.schema.md`, `api_metric` → `metrics.schema.md`,
+   `api_event` → `events.schema.md`; custom definitions fold into their
+   kind group (namespace = the `schema` field; phase-1 plan §5's
+   `custom-definitions.md` is the superseded draft). A group file exists
+   iff the kind has ≥ 1 object — no empty group docs (K-8's spirit).
+5. **Verbatim-or-absent rendering**: absent facts render as `—` in tables
+   and as nothing elsewhere — never placeholder prose. Table cells escape
+   `\` → `\\`, `|` → `\|`, newline → `<br>` (deterministic rendering
+   convention, not content change).
+6. **Ordering**: stored file order is never trusted — objects re-sorted
+   (kind, schema, name) via `snapshot/canonical.py`, columns by ordinal,
+   keys per §6 rule 5, `stats.indexes` verbatim (registered pre-sorted),
+   `source_properties` keys lexicographic.
+7. **Anchors**: group docs carry generator-emitted deterministic anchor
+   ids `mangle(schema)--mangle(name)` (the §8 hook); `mangle` is the §3
+   path rule (lowercase, `[^a-z0-9_-]` → `-`).
+8. **`system_class` ↔ template family**: `sql` → per-object docs +
+   per-schema indexes; `api` → grouped docs at system level (K-4).
+   Unknown kinds are skipped with a logged warning (S-5), invisible in
+   docs and indexes.
+
+## D-37 — Stack amendment: Jinja2
+
+`jinja2>=3.1` added (amends the D-8/D-15/D-21/D-22/D-29 stack chain),
+configured deterministically: `StrictUndefined` (a missing fact fails the
+render loudly instead of silently emitting a blank), autoescape off
+(markdown output), `keep_trailing_newline`. Templates ship as package
+data `generator/templates/*.j2`. Front-matter is deliberately *not*
+templated — a strict code-side emitter with fixed per-class key order and
+fixed quoting rules, because `yaml.dump` style defaults are not a byte
+contract. Rejected alternative: stdlib f-string builders (zero deps) —
+viable, but templates are a first-class deliverable that 1.6/1.7 and the
+KB-C partial-render evolution will iterate on. The validation library
+uses `jsonschema` (already in the stack); no other dependency added.

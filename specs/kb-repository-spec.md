@@ -81,6 +81,8 @@ status: machine
 ---
 ```
 
+**`generated_at` (clarifying amendment, task 1.5, applied):** the value is the capture date (the date part of `captured_at`) of the snapshot whose render last *changed this file's content* — never the generator's wall clock. A regeneration whose output differs only in this field leaves the file byte-untouched, which makes KB-8 a fixed point and makes a full render byte-identical to the KB-C changed-objects-only path — the two regeneration routes can never disagree. Corollary (single timestamp locus): machine-doc bodies never embed a timestamp; the §7 "freshness" reference points at this field. A `source_mode` switch (ddl-file → live) is a content change and restamps the field — honest provenance ("this doc now reflects live introspection"), not churn. Rationale: DECISIONS.md D-33.
+
 Grouped API docs use `doc_class: machine-group` and replace `object`/`kind` with:
 
 ```yaml
@@ -128,6 +130,25 @@ As §4.2 with `doc_class: metric`, plus `owner:` (person/team) and `implementati
 ### 4.5 Lineage annotation doc
 
 `doc_class: lineage-note`, `edges:` list of edge IDs from `lineage/graph.json` the note explains, ordinary `status`/`depends_on` semantics. May additionally carry a fenced `declared_edges:` YAML block — the human-tier edge source ingested by the graph merger (formats spec §3.3); KB CI validates the block against the edge model.
+
+### 4.6 Machine-owned index doc (`index.md`, generated) — registration record (task 1.5 amendment, applied)
+
+Per-system and per-schema `index.md` files are machine-owned (K-7), but §4 defined no front-matter class for them while KB-1 validates every file and K-5 makes front-matter the trust payload. This registers the class:
+
+```yaml
+---
+doc_class: machine-index
+system: supabase
+scope: schema                            # system | schema
+schema: public                           # present iff scope: schema
+generated_at: 2026-07-11
+source_mode: ddl-file
+snapshot_version: "1"
+status: machine
+---
+```
+
+**Root-bootstrap exemption:** the K-7 bootstrap artifacts — `kb/index.md`, `kb/conventions.md`, and optional `_notes.md` siblings — are human-owned navigation/narrative docs with no object identity; they carry **no front-matter** and are exempt from KB-1, latched by path (the two root files are written by the generator only when absent; `_notes.md` is never generator-written). Whether repo-level human docs need trust statuses for the MCP trust blocks is deliberately not designed here — register item KB-F. Rationale: DECISIONS.md D-34.
 
 ## 5. Status lifecycle (K-3)
 
@@ -201,7 +222,7 @@ Generated machine docs and skill-authored human docs follow fixed section orders
 
 | # | Check | Failure mode |
 |---|---|---|
-| KB-1 | Front-matter parses and validates against its `doc_class` schema (§4) | Block |
+| KB-1 | Front-matter parses and validates against its `doc_class` schema (§4); K-7 root-bootstrap artifacts exempt (§4.6) | Block |
 | KB-2 | Every `depends_on`/`maps` FQN resolves against the latest snapshot (or is explicitly marked `external:`) | Block |
 | KB-3 | Machine-owned file modified by a non-sync author | **Warn** (K-6): "will be overwritten; semantics belong in `<object>.md`" |
 | KB-4 | Sync-authored commit touches human-doc body text (below front-matter) | Block (violates §6 exception boundary) |
@@ -224,3 +245,4 @@ The hierarchical path (index → entity → 3–8 object docs) targets ~5–10K 
 | KB-C | Machine-doc regeneration scope per drift run: changed objects only vs full re-render | Changed objects only (cheap PRs); KB-8 guards correctness | If template changes require estate-wide re-renders, add a `regen-all` manual job |
 | KB-D | Localization of human docs (customer-language KBs) | Out of scope v1; docs in the customer's working language, templates language-neutral | First non-English deployment |
 | KB-E | Grouped API docs splitting threshold (huge custom-dimension estates) | Split a kind-group when its roster exceeds 200 objects | First estate hitting it |
+| KB-F | Trust semantics of repo-level human docs (`index.md`, `conventions.md`, `_notes.md`): do they need `status` front-matter for the MCP trust blocks? | No front-matter, KB-1-exempt (§4.6); the MCP server serves them without a trust block | CP-4/M1 MCP server session, when the trust-block consumer exists |
