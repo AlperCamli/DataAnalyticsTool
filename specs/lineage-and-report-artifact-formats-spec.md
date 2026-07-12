@@ -38,13 +38,15 @@ Status: v1 draft for implementation. Two versioned artifact formats in one docum
 
 `inputs` records exactly which evidence sets were merged — the graph's own provenance. The file is machine-owned (KB §3); regeneration follows generator idempotency (same inputs → byte-identical file; nodes and edges sorted by id).
 
+**`generated_at` (clarifying amendment, task 1.9, applied):** the value is the latest `captured_at` among the input snapshots whose build last *changed this file's content* — never the builder's wall clock (the KB §4.1 rule, ported; rationale DECISIONS.md D-33/D-39). A regeneration whose output differs only in this member leaves the file byte-untouched. `sql-parse` inputs pin `snapshot_ref` as the sha256 of the snapshot's canonical body — `captured_at`-independent by snapshot S-3 — so an unchanged source state pins an unchanged `inputs` entry and the no-op is decidable from the envelope alone.
+
 ### 3.2 Node model
 
 ```json
 { "id": "supabase.reporting.v_net_sales",
   "node_kind": "view",
   "resolved": true,
-  "doc": "systems/supabase/reporting/v_net_sales.md" }
+  "doc": "systems/supabase/reporting/v_net_sales.schema.md" }
 ```
 
 - `id` is the snapshot FQN for estate objects; for BI-side nodes (F-4): `"<target-system>.report.<publisher-id>"` / `"<target-system>.datasource.<publisher-id>"` using the stable ids from PB-2 results.
@@ -72,6 +74,8 @@ Status: v1 draft for implementation. Two versioned artifact formats in one docum
 - `evidence` per F-2; `trust` = strongest present tier, ordered `pipeline-tool > sql-parse > human` (HLR §8 P3; F-3 folds gateway into the strongest).
 - `annotations` back-links human lineage-note docs whose `edges:` front-matter lists this id — the generator maintains the back-links at merge time so `get_lineage` can serve the *why* alongside the *what*.
 
+**Edge id computation (clarifying amendment, task 1.9, applied):** F-1's `sha256(source ‖ target ‖ operation)` is normatively the SHA-256 of the UTF-8 encoding of `source + "\n" + target + "\n" + operation` (newline-delimited; `\n` cannot occur in an FQN or an operation name), rendered `"sha256:" + lowercase hex`. This encoding is frozen: annotation docs (KB §4.5) reference edge ids forever, so it must never change within `graph_version: "1"`. Rationale: DECISIONS.md D-40.
+
 Human-declared edges (tier `human`) enter the graph from `lineage/<pipeline>.md` docs carrying a fenced `declared_edges:` YAML block (additive amendment to KB §4.5, recorded in §7 below) — the only path by which human knowledge becomes graph structure, and it is PR-reviewed like everything else.
 
 ### 3.4 Walk semantics (normative for `get_lineage` and the contamination scan)
@@ -81,6 +85,15 @@ Edges point in the direction of data flow. *Downstream* = follow edge direction 
 ### 3.5 Scale rule
 
 One file until it hurts: `graph.json` stays single-file below 25k edges; beyond that the generator shards by system (`lineage/graph/<system>.json` + a manifest) with identical semantics. Recorded as the shard trigger rather than an open decision — the format supports both from day one so sharding is not a migration.
+
+### 3.6 Producer failure semantics — sql-parse (normative note, task 1.9 amendment, applied)
+
+Two failure classes, deliberately asymmetric:
+
+- **Unresolved reference** (parse succeeded; a referenced FQN is absent from the latest snapshots): the ruled marker path — dangling node with `resolved: false` (§3.2, capability LP-3, FG-3), edge kept, never a hard failure, never a silent drop. A legitimate estate condition with a format slot.
+- **Parse failure** (a `stats.definition` the core parser cannot parse): **hard failure of the whole graph build — no graph is written** (atomic write; no partial file can exist). The error is loud and attributable: it names the object FQN and the `view-def sha256:` of the definition that failed, so the fix path is immediate. A parse failure is a platform defect; encoding it as graph content would launder it into downstream false negatives — the polarity snapshot D-2 rules out ("scan unnecessarily, never skip a scan").
+
+Consumers inherit the guarantee: the contamination scan (KB §6 step 3) runs against a graph that is complete or absent, never quietly partial; an absent graph fails the drift run visibly. Rationale: DECISIONS.md D-41.
 
 ## 4. Intermediate report artifact format
 
@@ -178,3 +191,4 @@ At `publish_report`, the server: (1) validates the artifact (schema, MT-10 ref r
 | FM-3 | Artifact retention in ops Postgres | Keep all revisions of published artifacts (they are audit evidence); prune drafts never persisted | Storage telemetry |
 | FM-4 | Parameterized artifacts (runtime-bound filters beyond defaults) | Defaults only in v1; parameterization pairs with skill-spec SP-4 (saved re-runs) | Recurring-report demand in pilot |
 | FM-5 | Cross-system lineage edges from blend usage (gsc.page ↔ ga4.pagePath as graph edges vs entity-doc-only knowledge) | Entity-doc-only in v1 (cross-system relations are human knowledge, snapshot §4.4 rationale); blend publishes create edges to the report node from *each* side, which captures the dependency without asserting source-to-source flow | If reconciliation questions need source-to-source cross-system edges |
+| FM-6 | Column-mapping expressiveness gaps (one question: what can v1 `columns[]` not say?): (a) per-column derivation kind — passthrough vs derived vs cast is carried only by the edge-level single-valued `operation`; sketched additive path: optional `columns[].via`; (b) filter/join/group-key dependencies — a source column feeding no output column (e.g. a `WHERE`-only column) is not representable, since `to` is mandatory | Not expressible in v1; the edge-level `operation` and the relation-level edge carry the facts, and walks stay node-level (FM-1) so nothing is lost to consumers yet | FM-1's revisit (column-narrowed contamination) — both gaps gate it and must be decided together |

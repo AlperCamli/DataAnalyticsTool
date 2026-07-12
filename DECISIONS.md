@@ -808,3 +808,214 @@ contract. Rejected alternative: stdlib f-string builders (zero deps) —
 viable, but templates are a first-class deliverable that 1.6/1.7 and the
 KB-C partial-render evolution will iterate on. The validation library
 uses `jsonschema` (already in the stack); no other dependency added.
+
+---
+
+# DECISIONS — task 1.9 (SQL lineage parser + graph, `lineage/`)
+
+The spec reading confirmed before implementation, per the D-16/D-22/D-30/
+D-33 pattern. Sources: lineage-and-report-artifact-formats spec §3 +
+F-1..F-8/FG-1..FG-5, capability spec LP-1..LP-3 (§10) and CC-10, snapshot
+spec §4.2/§4.5/§5 (view `stats.definition`, MC-5 authority default), MCP
+spec §6.5, the connector rulings D-19/D-20, and the generator boundary
+D-36.2 (confirmed from this side: the generator never touches
+`lineage/graph.json`; this task owns it exclusively and writes nothing
+else into the KB tree). One consolidated formats-spec clarifying
+amendment was applied under explicit ruling (D-16 precedent, spec diff
+first): F-1 edge-id byte encoding made normative (§3.3), the §3.1
+`generated_at` clock rule (D-33 ported), the §3.2 example path corrected
+to `.schema.md`, the §3.6 producer failure-semantics note, and register
+item FM-6 (entered in formats §7 first, then the master register).
+
+## D-38 — Stack amendment: sqlglot **[amendment applied, two recorded conditions]**
+
+`sqlglot` (pure Python, MIT) added for parse + scope resolution of
+Postgres view definitions; floor `sqlglot>=25` in pyproject, **exact pin
+in `constraints.txt` and CI** (condition a). Division of labor,
+deliberately narrow: the library supplies parsing, alias/CTE/subquery
+scope resolution, and star expansion against an externally supplied
+schema mapping; **edge extraction, snapshot-inventory resolution, and all
+failure semantics are platform code** — the output must be the §3.3 edge
+model and the failure behavior the §3.6 ruled one, neither delegated.
+Dialect hard-scoped: `dialect="postgres"`, no dialect flag on any
+surface; a second dialect is a future task's amendment. Rejected:
+`pglast` (libpg_query C extension, version-locked to a PG grammar —
+exact-grammar fidelity buys nothing for engine-deparsed SELECTs at the
+cost of a native dependency), `sqlparse` (tokenizer, not a parser).
+**Condition (b), recorded trust boundary:** sqlglot's Postgres fidelity
+is trusted only for the input class D-19.2 guarantees — engine-deparsed
+canonical SELECTs from `pg_get_viewdef` under an empty search_path —
+never for arbitrary user SQL. **Named revisit path:** on the first parse
+failure against a example estate, the decision is libpg_query bindings
+(pglast); pre-argued here so it is executed, not re-litigated.
+
+## D-39 — Graph envelope and serialization
+
+- `inputs` for this producer: one `{"kind": "sql-parse", "snapshot_ref":
+  {system: hash}}` entry, all systems in the one map, keys sorted;
+  the hash is `"sha256:" + hex(sha256(canonical_body_bytes(snapshot)))` —
+  the same canonical-body hash the capability spec's `validated_against`
+  pins, `captured_at`-independent by S-3.
+- `generated_at` = latest `captured_at` among the input snapshots whose
+  build last changed the file's content (the D-33 mechanism, now spec
+  text in formats §3.1): if a candidate build equals the existing file
+  modulo the `generated_at` member, the existing bytes stand and nothing
+  is written. Full ISO timestamp per the §3.1 example (KB docs use the
+  date part; the graph keeps the envelope's precision).
+- Serialization: nodes and edges sorted by `id` (§3.1 verbatim), object
+  keys sorted lexicographically at every level (§6 discipline), JSON
+  `indent=2` + trailing newline — pretty, because graph diffs must be
+  PR-reviewable — written atomically (temp + rename, D-13 precedent).
+  Single file; the §3.5 25k-edge shard trigger is recorded, not built.
+- Empty-valued optional members are omitted (`columns` when not
+  derivable, `annotations` when no lineage-note back-links, `doc` on
+  unresolved nodes) — closed schema, additive evolution (F-8).
+
+## D-40 — Edge identity byte encoding **[amendment applied]**
+
+F-1's `‖` concatenation was byte-underspecified (`"a"+"bc"` vs
+`"ab"+"c"`). Normative now (formats §3.3): SHA-256 over the UTF-8 of
+`source + "\n" + target + "\n" + operation`, rendered
+`"sha256:" + lowercase hex`. Newline is safe as delimiter (cannot occur
+in an FQN or operation name). Frozen within `graph_version: "1"`:
+annotation docs reference edge ids forever — F-1's own rationale.
+
+## D-41 — Failure semantics: dangling markers vs hard parse failure **[ruling]**
+
+Two classes, deliberately asymmetric (now formats §3.6):
+
+- **Unresolved reference** (parse succeeded; referenced FQN absent from
+  the snapshot inventory) — the spec-ruled marker path (§3.2 `resolved:
+  false`, LP-3 "flag, don't reject", FG-3): dangling node emitted, edge
+  kept, never a hard failure, never a silent drop. Real trigger: a view
+  referencing a schema excluded from introspection scope. The dangling
+  node carries `node_kind: "external"` — recorded nuance: this means
+  **"unclassifiable from current snapshots"**, distinct from any future
+  legitimately-declared external reference (KB-B's escape hatch);
+  `resolved` is the load-bearing flag, `node_kind` is honest ignorance,
+  never a guess. Column mappings on a dangling edge are emitted only
+  where the definition text itself attests them (explicit `d.col`
+  references); a star over a dangling relation has no inventory to bind
+  → `columns` omitted (never fabricated).
+- **Parse failure** (a `stats.definition` the parser cannot parse) —
+  **hard failure of the whole graph build; no graph written** (atomic
+  write). Loud and attributable: the error names the object FQN and the
+  `view-def sha256:` of the failing definition, so the fix path is
+  immediate. Argument: a warning-plus-partial-graph silently omits an
+  edge set, which makes the KB §6 contamination scan *skip* downstream
+  docs — precisely the polarity D-2 rules out; a dangling FQN is a
+  legitimate estate condition with a format slot, a parse failure is our
+  defect, and encoding our defect as graph content would launder it into
+  downstream false negatives. **What CP-3 inherits, in plain terms: the
+  contamination scan runs against a graph that is complete or absent,
+  never quietly partial; an absent graph fails the drift run visibly.**
+
+## D-42 — Parser canonical readings (recorded; no spec change)
+
+1. **One edge per (source relation → view)**; `operation` is the
+   strongest transformation the defining query applies, by documented
+   precedence `aggregate > dedupe > join > derive > cast > rename >
+   filter` (`ingest`/`business-rule` never emitted by sql-parse). The
+   §3.3 example is the warrant: a GROUP-BY view rendered as one edge,
+   `operation: "aggregate"`, mixed mappings attached. Per-column
+   derivation kind is not expressible in v1 — register item FM-6.
+   **Floor:** a pure passthrough view (bare columns, no predicate, no
+   alias) exhibits nothing on the list and emits `rename` — the view's
+   one transformation is re-exposing the relation's columns under a new
+   relation name; the least-wrong taxonomy member, chosen over inventing
+   an unregistered operation (LP-1 rejects unknowns at delivery).
+2. **Column mappings**: `from` lists only the edge's source-node columns
+   feeding `to`; a target column drawing on several relations appears on
+   each contributing edge under the same `to`. Passthrough is a plain
+   `{from: ["a"], to: "a"}` entry. **Column-free derivations emit
+   `from: []`** (`count(*)` → `order_count`): the mapping is derivable —
+   from zero columns — and omitting it would hide the target column from
+   FM-1's future column walk. WHERE/JOIN/GROUP-BY-only columns produce
+   no mapping (`to` is mandatory; the relation-level edge carries the
+   dependency) — FM-6's second gap.
+3. **Star expansion binds to the snapshot's recorded `columns` of the
+   referenced object, in ordinal order, at the referencing view's parse
+   time** — snapshot is authority (MC-5), S-6 guarantees consistency.
+   Engine-canonical definitions cannot contain a select-star
+   (`pg_get_viewdef` deparses the rewritten query; Postgres expands `*`
+   at CREATE VIEW) — the defensive path exists for hand-authored
+   fixture SQL.
+4. **No transitive collapse**: edges are direct-upstream only;
+   transitivity is the walk's job (§3.4). **Because binding reads the
+   snapshot inventory (point 3), definitions parse independently — no
+   topological ordering, no recursion to get wrong.** Worth stating:
+   this is a direct consequence of MC-5, and it is why views-on-views
+   need no resolution order.
+5. **CTEs and subqueries are scopes, never nodes**; provenance traces
+   through them to base relations; a CTE shadowing a real table name
+   follows Postgres scoping (the CTE wins inside the query). Edges
+   collapse the internal plumbing.
+6. **Aliases resolve away everywhere**; a self-join's two aliases of one
+   relation collapse to one node and one edge (F-1 identity), `from`
+   lists unioned per `to`, de-aliased, deduplicated, sorted.
+7. **Unqualified relation names** (hand-authored 1.1 fixtures only; the
+   connector's primary path is fully-qualified per D-19.2): resolve iff
+   exactly one relation-kind object with that name exists across the
+   snapshot's schemas; **ambiguity is never guessed** — it takes the
+   D-41 unresolved path. Unqualified column references bind by inventory
+   membership; if no in-scope relation carries the column, the mapping
+   is omitted with a logged warning (never fabricated).
+8. **No isolated nodes**: the node set is exactly the edge endpoints.
+   An object with no lineage is absent from the graph; `get_lineage`
+   answers for it per D-43.
+9. **`doc` paths** are computed from the snapshot + the KB naming rules
+   (single-sourced from `generator.naming`; `systems/<system>/
+   <mangle(schema)>/<mangle(name)>.schema.md`) — never by reading the KB
+   tree. The generator guarantees a machine doc for every SQL object in
+   the snapshot, so "when one exists" (§3.2) is decidable snapshot-side.
+   The boundary holds in both directions: the generator never touches
+   `lineage/graph.json`; lineage never reads or writes KB docs.
+10. **Merge entry point shaped for future producers** (provider edge
+    sets per LP-1..3, human `declared_edges` blocks) **but only
+    sql-parse is wired** — `declared_edges` ingestion is merge-time work
+    for a KB tree that does not exist yet (1.6/1.7); the scope fence
+    holds.
+
+## D-43 — `get_lineage` walk semantics **[ruling addition folded in]**
+
+Library function (`lineage.get_lineage`), not the MCP tool — CP-4 wraps
+it. Edges point in data-flow direction; downstream follows, upstream
+reverses, `both` = union of the two walks. **Node-level traversal (FM-1
+default) with column-level payload served verbatim**: visitation ignores
+`columns`, but every returned edge carries `operation`, full `columns`,
+`evidence`/`trust`, `annotations` untouched — the walk API never papers
+over the column data (FM-1's own default says mappings are served as
+context; D-3's deferred downgrade check needs them). Depth = edge-hops
+from the start node, default 3 (MCP §6.5 signature); `depth=None` =
+unbounded, supported library-side because the KB §6 contamination scan
+is unbounded by design (§3.4) and reuses this walk; **the 10-cap is the
+interactive tool's policy and lives in CP-4's wrapper.** Cycles: each
+node visited once per walk; a cycle is reported in the result, never
+re-traversed (FG-4). Dangling nodes ride the result flagged
+(`resolved: false`, FG-3). **Ruled addition: a walk from an FQN absent
+from the graph returns an empty result with the root echoed — not an
+error.** "No lineage recorded" is a legitimate answer (a base table no
+view reads), and CP-4's tool needs the distinction cheap. Doc *trust* is
+KB front-matter, which this code never reads — the library returns `doc`
+paths; CP-4 joins trust.
+
+## D-44 — Exit evidence: connector-produced customer snapshot **[ruling]**
+
+The task exit criterion's referent is the customer's DDL views, so the
+primary e2e evidence runs against a **connector-produced** snapshot —
+qualified names, the D-19.2 primary path — not the hand-authored 1.1
+fixtures (those stay in the suite as the fallback-path tests, D-42.7).
+No live-validated customer snapshot was checked in by 1.2 and the
+customer DDL files are not in the repo, so the DDL was **reconstructed
+from `fixtures/supabase-ddl.json`'s structural facts** (the §8.2 record
+of the customer estate: columns/types/defaults/keys/descriptions/view
+definitions, carried verbatim) into `fixtures/supabase-customer.sql`,
+and the snapshot regenerated from it via the postgres connector in
+ddl-file mode — no credentials needed — with `image: postgres:15` per
+D-20 (customer 2 is Supabase 15.x). Checked in as
+`fixtures/supabase-customer.json`; envelope provenance (connector
+name/version, `source_mode: ddl-file`) rides the file, and the exact
+regeneration command is recorded in the fixture-generating test's
+docstring. Exit demo: every customer DDL view resolves to its upstream
+tables with column mappings on that snapshot, and `get_lineage` walks
+both directions.
