@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "Normalized metadata snapshot layer: schema, canonicalization, hashing, diff (task 1.1)"
 requires-python = ">=3.12"
 dependencies = [
-    "jsonschema>=4.21",
+    # format-nongpl pulls rfc3339-validator: without it jsonschema treats
+    # `format: date-time` as annotation-only and captured_at goes unchecked
+    "jsonschema[format-nongpl]>=4.21",
 ]
 
 [project.optional-dependencies]
