@@ -123,13 +123,16 @@ Registry extensions (functions, procedures, DW models, external tables…) are a
 
 | Kind | Field | Type | Source |
 |---|---|---|---|
-| `table` | `row_estimate` | integer | `pg_class.reltuples` or equivalent; excluded from hash |
+| `table`, `materialized_view` | `row_estimate` | integer | `pg_class.reltuples` or equivalent; excluded from hash |
+| `table`, `materialized_view` | `indexes` | array of strings | Engine-canonical index definitions (Postgres: `pg_get_indexdef`), lexicographically sorted; indexes backing declared constraints are omitted (those facts ride `keys`); **excluded from hash** |
 | `view`, `materialized_view` | `definition` | string | Normalized SQL (`pg_get_viewdef`); **included in hash** |
 | `api_dimension` / `api_metric` | `data_type` | string | API metadata; **included in hash** |
 | `api_metric` | `scope`, `formula` | string | Admin API custom definitions; **included in hash** |
 | `api_event` | `is_key_event` | boolean | GA4 key events list; **included in hash** |
 
 Connectors may add documented `stats` fields additively; each new field declares whether it is hash-included (structural) or hash-excluded (volatile) at the time it is registered. Undeclared fields are forbidden in emitted snapshots (S-7).
+
+**Registration record (task 1.2 amendment, applied):** `indexes` (for `table` and `materialized_view`) and `row_estimate` extended to `materialized_view` were registered by the Postgres connector task, both hash-excluded. `indexes` is hash-excluded by ruling: an index cannot break a dependent or contradict a documented meaning (the S-2 test), and a hash-included polarity would make every routine `CREATE INDEX` a breaking change driving contamination scans (per the D-2 default for unlisted structural changes) — drift-pipeline noise worse than the edge it protects. *Caveat, by convention rather than polarity:* semantic uniqueness must be declared as a `UNIQUE` constraint, which lands in `keys.unique` (hash-included, structural); a unique index without a constraint rides `indexes` and is deliberately hash-excluded — it is a physical artifact until promoted to a declared constraint.
 
 ## 5. Hashing
 
@@ -142,7 +145,7 @@ Connectors may add documented `stats` fields additively; each new field declares
 - `keys` (complete)
 - hash-included `stats` fields per the §4.5 registry (`definition`, `data_type`, `scope`, `formula`, `is_key_event`)
 
-Excluded: object `description`, column `description`s, all hash-excluded stats (`row_estimate`), and everything in the envelope.
+Excluded: object `description`, column `description`s, all hash-excluded stats (`row_estimate`, `indexes`), and everything in the envelope.
 
 **Algorithm:** `schema_hash = "sha256:" + hex(sha256(utf8(canonical_json(projection))))`.
 
@@ -308,3 +311,6 @@ The SDK ships C-1–C-8 as a reusable test harness; a connector without a green 
 | SS-2 | Sample values in snapshots | Not in the snapshot at all in v1; opt-in masked sampling would be a separate `stats` registration | If enrich quality on Level-1 sources proves insufficient |
 | SS-3 | `api_property` as an object kind vs. `source_properties` envelope data | Envelope (`source_properties`) — properties are system facts, not queryable objects | If per-property docs need machine ownership/hashing |
 | SS-4 | Row-estimate change as a *usage* drift signal | Ignored by diff in v1 (hash-excluded, metadata-only) | When usage-driven enrichment suggestions (spec §7 of product doc) are built |
+| SS-5 | CHECK constraints in the snapshot | Dropped at the boundary in v1 (no object-model slot). High-value: they encode semantic facts (value domains, invariants) the KB's human docs exist to explain. Sketched additive path: register `stats.checks` for `table` — engine-canonical expression strings (Postgres: `pg_get_constraintdef`), lexicographically sorted, **hash-included** (a tightened CHECK can contradict documented meanings) | First enrich run that needs value-domain facts the connector already saw |
+| SS-6 | Enum type labels in the snapshot | Dropped at the boundary in v1 (enum-typed columns carry only the type name, e.g. `public.order_status`). High-value: labels are exactly the enum decodings SS-2 leaves open, and carrying them as facts would ground that question without sampling. Sketched additive path: new kind `enum_type` (`schema` = type's schema, `columns` empty, labels as hash-included `stats.labels` in declared order) — additive per S-5 | First customer schema using native enums for report-relevant states |
+| SS-7 | Known no-slot gaps: identity/generated column markers (emitted as `default: null`), schema-level and index-level comments, partition key definitions (`pg_partitioned_table`) | Dropped at the boundary in v1, recorded per connector docs. Partition key is the strongest future §4.5 candidate — it tells query-writing agents how to prune | An agent journey measurably fails for lack of one of these facts |
