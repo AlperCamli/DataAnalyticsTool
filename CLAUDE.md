@@ -39,5 +39,6 @@ trust signals. First deployment: Supabase + GA4 + GSC → Looker Studio.
 - `fixtures/` — snapshot fixtures per system
 
 ## Stack
-<set this: e.g. Python 3.12 + pydantic + pytest,
- or TypeScript + zod + vitest>
+Python 3.12 + jsonschema (Draft 2020-12) + pytest + hypothesis.
+Venv at `.venv/`; run tests with `.venv/bin/python -m pytest`.
+(Choice recorded in DECISIONS.md D-8.)

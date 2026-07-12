@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "contextlayer-snapshot"
+version = "0.1.0"
+description = "Normalized metadata snapshot layer: schema, canonicalization, hashing, diff (task 1.1)"
+requires-python = ">=3.12"
+dependencies = [
+    "jsonschema>=4.21",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "hypothesis>=6.100",
+]
+
+[tool.setuptools]
+packages = ["snapshot"]
+
+[tool.setuptools.package-data]
+snapshot = ["schema/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
