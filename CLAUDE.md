@@ -48,6 +48,13 @@ Credentials, ready-to-run configs, and the runbook are in
 echo its contents (JC-8). Convention: the rendered KB the user reviews
 lives at `~/Desktop/kb` (snapshots at `~/Desktop/kb-snapshots/`);
 re-render it after changes that affect generator or connector output.
+Since task 1.6, `~/Desktop/kb` is the clone of the customer KB repo
+`github.com/AlperCamli/DataAnalyticsTool` (public by ruling D-47;
+main protected: KB CI + code-owner review required; changes go via
+PR, steward merges). KB CI runs the validation library from a wheel
+vendored at `.github/vendor/` there — after any validation-library
+change, rebuild the wheel and PR it with its manifest (D-46; a stale
+wheel silently validates against old rules).
 
 ## Stack
 Python 3.12 + jsonschema (Draft 2020-12) + PyYAML + pytest + hypothesis.
