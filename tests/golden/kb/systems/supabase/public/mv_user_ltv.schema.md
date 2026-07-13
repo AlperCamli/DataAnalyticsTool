@@ -23,12 +23,12 @@ Lifetime value per user; refreshed nightly by pg_cron.
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `user_id` | `uuid` | true | — | — |
-| 2 | `ltv_cents` | `bigint` | true | — | — |
-| 3 | `first_order_at` | `timestamp with time zone` | true | — | — |
-| 4 | `last_order_at` | `timestamp with time zone` | true | — | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `user_id` | `uuid` | true | — | — | — |
+| 2 | `ltv_cents` | `bigint` | true | — | — | — |
+| 3 | `first_order_at` | `timestamp with time zone` | true | — | — | — |
+| 4 | `last_order_at` | `timestamp with time zone` | true | — | — | — |
 
 ## Keys & indexes
 

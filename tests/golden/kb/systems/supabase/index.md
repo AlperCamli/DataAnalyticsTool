@@ -14,9 +14,9 @@ System class: sql · 6 objects across 1 schema.
 
 ## Schemas
 
-| Schema | Objects | Human docs | Index |
-|---|---|---|---|
-| `public` | 6 | 0 | [public/index.md](public/index.md) |
+| Schema | Objects | Human docs | Index | Purpose |
+|---|---|---|---|---|
+| `public` | 6 | 0 | [public/index.md](public/index.md) | — |
 
 ## Source properties
 

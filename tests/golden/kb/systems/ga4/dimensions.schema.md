@@ -25,6 +25,7 @@ status: machine
 | Namespace | custom |
 | Data type | string |
 | Schema hash | `sha256:98215b98b375fed80a438f7126ff46a401700bc62311e4f7bb7bd65e3faf807f` |
+| Purpose | — |
 
 Subscription tier attached to checkout events.
 
@@ -37,6 +38,7 @@ Subscription tier attached to checkout events.
 | Namespace | custom |
 | Data type | string |
 | Schema hash | `sha256:990a864b3ccfde13a7b4e3003f7237a7779335c4a2efcee77c855f98a4b5a5bb` |
+| Purpose | — |
 
 CRM identifier synced from the sales pipeline.
 
@@ -49,6 +51,7 @@ CRM identifier synced from the sales pipeline.
 | Namespace | standard |
 | Data type | string |
 | Schema hash | `sha256:55919ee17ec1d72c8388b42800e3c3de2ab9dbfe67873401c50667e9211f0038` |
+| Purpose | — |
 
 The country from which the user activity originated.
 
@@ -61,6 +64,7 @@ The country from which the user activity originated.
 | Namespace | standard |
 | Data type | string |
 | Schema hash | `sha256:f6fe2ccc543ab7ff53f94e6016e5aa7b95b8011268779f5fc6685c66d0ad2404` |
+| Purpose | — |
 
 The date of the event, formatted as YYYYMMDD.
 
@@ -73,5 +77,6 @@ The date of the event, formatted as YYYYMMDD.
 | Namespace | standard |
 | Data type | string |
 | Schema hash | `sha256:cc41193261a64d991063c42ca746ba88c73fb847e30d74a1ca65c3d1d717a3e8` |
+| Purpose | — |
 
 The type of device: Desktop, Tablet, or Mobile.

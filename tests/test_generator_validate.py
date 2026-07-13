@@ -44,6 +44,13 @@ def test_valid_human_docs_pass_and_notes_are_exempt(kb):
         human_object_doc("supabase.public.orders", orders_hash), encoding="utf-8"
     )
     (kb_dir / "systems/supabase/_notes.md").write_text("free narrative\n")
+
+    # the new human docs flip hot/stub cells: KB-8 (D-49) demands the
+    # implied index re-renders land in the same PR
+    findings = validate_tree(kb_dir, snaps)
+    assert findings and {f.check for f in findings} == {"KB-8"}
+
+    render_tree(snaps, kb_dir)
     assert validate_tree(kb_dir, snaps) == []
 
 

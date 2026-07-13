@@ -21,13 +21,13 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `bigint` | false | `nextval('order_items_id_seq'::regclass)` | — |
-| 2 | `order_id` | `bigint` | false | — | — |
-| 3 | `product_id` | `bigint` | false | — | — |
-| 4 | `quantity` | `integer` | false | `1` | — |
-| 5 | `unit_price_cents` | `integer` | false | — | Price at time of purchase; the product price may change later. |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `bigint` | false | `nextval('order_items_id_seq'::regclass)` | — | — |
+| 2 | `order_id` | `bigint` | false | — | — | — |
+| 3 | `product_id` | `bigint` | false | — | — | — |
+| 4 | `quantity` | `integer` | false | `1` | — | — |
+| 5 | `unit_price_cents` | `integer` | false | — | Price at time of purchase; the product price may change later. | — |
 
 ## Keys & indexes
 

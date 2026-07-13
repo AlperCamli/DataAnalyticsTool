@@ -23,14 +23,14 @@ One row per checkout; immutable after payment settles.
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `bigint` | false | `nextval('orders_id_seq'::regclass)` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `status` | `text` | false | `'pending'::text` | pending \| paid \| cancelled \| refunded |
-| 4 | `total_cents` | `integer` | false | — | Grand total in cents, tax included. |
-| 5 | `notes` | `text` | true | — | — |
-| 6 | `created_at` | `timestamp with time zone` | false | `now()` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `bigint` | false | `nextval('orders_id_seq'::regclass)` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `status` | `text` | false | `'pending'::text` | pending \| paid \| cancelled \| refunded | — |
+| 4 | `total_cents` | `integer` | false | — | Grand total in cents, tax included. | — |
+| 5 | `notes` | `text` | true | — | — | — |
+| 6 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
 
 ## Keys & indexes
 

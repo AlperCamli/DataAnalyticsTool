@@ -25,6 +25,7 @@ status: machine
 | Namespace | custom |
 | Key event | false |
 | Schema hash | `sha256:b1587465edc46aacf62cb11097e2cb5cb0cb4a0938b5ea15d16c4b8377f7342b` |
+| Purpose | — |
 
 ## <a id="custom--sign_up_completed"></a>`sign_up_completed`
 
@@ -35,6 +36,7 @@ status: machine
 | Namespace | custom |
 | Key event | true |
 | Schema hash | `sha256:6f2466add0fde754c25d3dcd8121c19b90134594433c9eed357cb9681384363f` |
+| Purpose | — |
 
 Sent when onboarding finishes.
 
@@ -47,6 +49,7 @@ Sent when onboarding finishes.
 | Namespace | standard |
 | Key event | false |
 | Schema hash | `sha256:26af3d54759dd2a2b763d20ea1b71cd7df5853f06847cb5c5997197e64ebba0a` |
+| Purpose | — |
 
 Fires on every page load or history state change.
 
@@ -59,6 +62,7 @@ Fires on every page load or history state change.
 | Namespace | standard |
 | Key event | true |
 | Schema hash | `sha256:27aeac1f752ea342f1f85b5482c606402e8b0c1128e291abd68e41919bb363d7` |
+| Purpose | — |
 
 A purchase was completed.
 
@@ -79,3 +83,4 @@ Parameters:
 | Namespace | standard |
 | Key event | false |
 | Schema hash | `sha256:5ef598a7a92de92e86a5f6987dbb4ea850ae3c079af1ef67746d21f585ba6942` |
+| Purpose | — |

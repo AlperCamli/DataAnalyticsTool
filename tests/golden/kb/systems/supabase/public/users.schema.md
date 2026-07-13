@@ -23,13 +23,13 @@ Registered accounts. Rows are soft-deleted via deleted_at.
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `email` | `text` | false | — | Lowercased at the application layer; citext migration pending. |
-| 3 | `full_name` | `text` | true | — | — |
-| 4 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 5 | `deleted_at` | `timestamp with time zone` | true | — | Soft-delete marker; NULL means active. |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `email` | `text` | false | — | Lowercased at the application layer; citext migration pending. | — |
+| 3 | `full_name` | `text` | true | — | — | — |
+| 4 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 5 | `deleted_at` | `timestamp with time zone` | true | — | Soft-delete marker; NULL means active. | — |
 
 ## Keys & indexes
 

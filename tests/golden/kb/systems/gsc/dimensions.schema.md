@@ -26,6 +26,7 @@ status: machine
 | Namespace | standard |
 | Data type | string |
 | Schema hash | `sha256:55919ee17ec1d72c8388b42800e3c3de2ab9dbfe67873401c50667e9211f0038` |
+| Purpose | — |
 
 The country from which the search was made, in ISO 3166-1 alpha-3 format.
 
@@ -38,6 +39,7 @@ The country from which the search was made, in ISO 3166-1 alpha-3 format.
 | Namespace | standard |
 | Data type | string |
 | Schema hash | `sha256:f6fe2ccc543ab7ff53f94e6016e5aa7b95b8011268779f5fc6685c66d0ad2404` |
+| Purpose | — |
 
 The date of the request, in YYYY-MM-DD format, in Pacific time.
 
@@ -50,6 +52,7 @@ The date of the request, in YYYY-MM-DD format, in Pacific time.
 | Namespace | standard |
 | Data type | string |
 | Schema hash | `sha256:1e65881d73133a6d7870072a2a639a1c6e58e6e41c174f2af63337cdbd0d11a6` |
+| Purpose | — |
 
 The type of device on which the user searched: DESKTOP, MOBILE, or TABLET.
 
@@ -62,6 +65,7 @@ The type of device on which the user searched: DESKTOP, MOBILE, or TABLET.
 | Namespace | standard |
 | Data type | string |
 | Schema hash | `sha256:320342b0d14b7085fad016177e485be80d2b5fc70818a91a86d0b49973df425f` |
+| Purpose | — |
 
 The final URL linked by the search result, after any skip redirects.
 
@@ -74,6 +78,7 @@ The final URL linked by the search result, after any skip redirects.
 | Namespace | standard |
 | Data type | string |
 | Schema hash | `sha256:2a51080b1f57df5ea6248d489b8c0a2838d34485b631d38bf25bc693740a82f5` |
+| Purpose | — |
 
 The search query string the user entered on Google.
 
@@ -86,5 +91,6 @@ The search query string the user entered on Google.
 | Namespace | standard |
 | Data type | string |
 | Schema hash | `sha256:5016f7987a62ff099ff08939f4d340adbe60895f195bc635d9e4167265ce5f01` |
+| Purpose | — |
 
 Search result feature type, such as AMP_BLUE_LINK or RICHCARD.

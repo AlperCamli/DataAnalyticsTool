@@ -21,13 +21,13 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `bigint` | false | `nextval('products_id_seq'::regclass)` | — |
-| 2 | `sku` | `text` | false | — | — |
-| 3 | `name` | `text` | false | — | — |
-| 4 | `price_cents` | `integer` | false | — | Current list price in cents. |
-| 5 | `discontinued_at` | `timestamp with time zone` | true | — | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `bigint` | false | `nextval('products_id_seq'::regclass)` | — | — |
+| 2 | `sku` | `text` | false | — | — | — |
+| 3 | `name` | `text` | false | — | — | — |
+| 4 | `price_cents` | `integer` | false | — | Current list price in cents. | — |
+| 5 | `discontinued_at` | `timestamp with time zone` | true | — | — | — |
 
 ## Keys & indexes
 

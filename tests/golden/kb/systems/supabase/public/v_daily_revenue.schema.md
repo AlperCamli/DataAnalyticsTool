@@ -23,11 +23,11 @@ Paid revenue per calendar day. Used by the Looker Studio P&L page.
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `day` | `timestamp with time zone` | true | — | — |
-| 2 | `revenue_cents` | `bigint` | true | — | — |
-| 3 | `order_count` | `bigint` | true | — | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `day` | `timestamp with time zone` | true | — | — | — |
+| 2 | `revenue_cents` | `bigint` | true | — | — | — |
+| 3 | `order_count` | `bigint` | true | — | — | — |
 
 ## Keys & indexes
 
