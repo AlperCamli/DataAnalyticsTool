@@ -181,7 +181,10 @@ def test_kb5_same_file_anchor_and_backticked_headings(kb):
 def test_kb5_external_and_fenced_links_ignored(kb):
     kb_dir, _ = kb
     (kb_dir / "systems/supabase/_notes.md").write_text(
-        "[docs](https://example.com/x) [mail](mailto:a@b.c)\n\n"
+        "[docs](https://example.com/x) [mail](mailto:a@b.c)\n"
+        # protocol-relative external URL — appears verbatim in GA4
+        # metadata descriptions (S-8), must not read as an intra-KB path
+        "[aip](//google.aip.dev/122)\n\n"
         "```sql\n-- [not a link](nowhere.md)\n```\n",
         encoding="utf-8",
     )

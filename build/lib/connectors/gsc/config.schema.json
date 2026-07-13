@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["system", "mode", "site_url"],
+  "additionalProperties": false,
+  "properties": {
+    "system": { "type": "string", "minLength": 1 },
+    "mode": { "enum": ["api"] },
+    "site_url": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The verified property exactly as registered in Search Console: 'sc-domain:example.com' for a domain property, or the full URL-prefix including scheme and trailing slash (e.g. 'https://www.example.com/'). The snapshot's source_properties carries the API's own siteUrl form verbatim."
+    },
+    "credentials_file": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to a service-account JSON key file; the account must be added as a user of the property. A reference only - key material never lives in config files."
+    },
+    "credentials_env": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of an environment variable holding the service-account key JSON (the content, not a path). Same indirection pattern as the postgres connector's dsn_env."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "mode": { "const": "api" } }, "required": ["mode"] },
+      "then": {
+        "anyOf": [
+          { "required": ["credentials_file"] },
+          { "required": ["credentials_env"] }
+        ]
+      }
+    }
+  ]
+}

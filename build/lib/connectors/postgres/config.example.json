@@ -1,0 +1,7 @@
+{
+  "system": "supabase",
+  "mode": "ddl-file",
+  "ddl_files": ["./migrations/schema.sql"],
+  "image": "postgres:15",
+  "schemas": ["public", "reporting"]
+}

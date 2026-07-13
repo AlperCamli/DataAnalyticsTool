@@ -192,8 +192,8 @@ def _check_links(kb_dir: Path) -> list[Finding]:
         for line in _body_lines_outside_fences(text):
             for m in _LINK.finditer(line):
                 target = m.group(1)
-                if _SCHEME.match(target) or target.startswith("//"):
-                    continue  # external (incl. protocol-relative) — out of KB-5 scope
+                if _SCHEME.match(target):
+                    continue  # external URL / mailto — out of KB-5 scope
                 if not target:
                     findings.append(Finding(rel, "KB-5", "empty link target"))
                     continue

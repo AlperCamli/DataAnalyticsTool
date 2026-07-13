@@ -1,0 +1,25 @@
+# {{ s.system }}
+
+System class: api · {{ s.summary }}
+{% if s.has_notes %}
+
+Notes: [_notes.md](_notes.md)
+{% endif %}
+
+## Groups
+
+| Group | Kind | Objects | Machine doc | Human doc | Status |
+|---|---|---|---|---|---|
+{% for r in s.rows %}
+| {{ r.group }} | {{ r.kind }} | {{ r.count }} | [{{ r.machine }}]({{ r.machine }}) | {{ r.human }} | {{ r.status }} |
+{% endfor %}
+
+## Source properties
+
+{% if s.source_properties is not none %}
+```json
+{{ s.source_properties }}
+```
+{% else %}
+—
+{% endif %}

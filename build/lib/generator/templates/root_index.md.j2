@@ -1,0 +1,18 @@
+# Knowledge base
+
+Entry point for this estate's knowledge base. Bootstrapped once by the
+generator (KB ruling K-7) and human-owned from then on: edit freely — the
+generator never rewrites this file.
+
+## Systems
+
+{% for sys in systems %}
+- [{{ sys.name }}]({{ sys.href }})
+{% endfor %}
+
+## Reference
+
+- [Conventions](conventions.md)
+- Entities (cross-system business concepts): `entities/`
+- Certified metrics: `metrics/`
+- Lineage: `lineage/`
