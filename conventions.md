@@ -8,7 +8,7 @@ never rewrites this file.
 
 | System | Class | Dialect / query surface |
 |---|---|---|
-| `supabase` | SQL | PostgreSQL **15** (Supabase-hosted). Queried via `execute_sql:supabase`, `SELECT` only. |
+| `supabase` | SQL | PostgreSQL **17** (Supabase-hosted; `server_version: 17.6` in the snapshot envelope). Queried via `execute_sql:supabase`, `SELECT` only. |
 | `ga4` | API | GA4 Data API `runReport` — dimensions/metrics as documented in `systems/ga4/`. No SQL surface. |
 | `gsc` | API | Search Console Search Analytics API `searchanalytics.query` — fixed dimension/metric set, see `systems/gsc/`. No SQL surface. |
 
@@ -97,7 +97,7 @@ in snapshots):
 # validate_sql per-system checks (MCP §6.6); populated at bootstrap.
 supabase:
   dialect: postgres
-  engine_version: 15
+  engine_version: 17
   statement_class: select-only
   timeout_s: 60
   row_cap: 50000
