@@ -23,18 +23,18 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
-| 2 | `user_id` | `uuid` | false | — | — | — |
-| 3 | `provider` | `text` | false | — | — | — |
-| 4 | `provider_customer_id` | `text` | true | — | — | — |
-| 5 | `provider_subscription_id` | `text` | true | — | — | — |
-| 6 | `plan_code` | `text` | false | — | — | — |
-| 7 | `status` | `text` | false | — | — | — |
-| 8 | `current_period_start` | `timestamp with time zone` | true | — | — | — |
-| 9 | `current_period_end` | `timestamp with time zone` | true | — | — | — |
-| 10 | `cancel_at_period_end` | `boolean` | false | `false` | — | — |
-| 11 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
-| 12 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal subscription id. |
+| 2 | `user_id` | `uuid` | false | — | — | Owning user (FK to users.id). |
+| 3 | `provider` | `text` | false | — | — | External billing provider name (e.g. Stripe). |
+| 4 | `provider_customer_id` | `text` | true | — | — | Customer id on the provider side. |
+| 5 | `provider_subscription_id` | `text` | true | — | — | Subscription id on the provider side. |
+| 6 | `plan_code` | `text` | false | — | — | Internal product plan code purchased. |
+| 7 | `status` | `text` | false | — | — | Current lifecycle status; see body for grounding limits. |
+| 8 | `current_period_start` | `timestamp with time zone` | true | — | — | Start of the current billing period. |
+| 9 | `current_period_end` | `timestamp with time zone` | true | — | — | End of the current billing period. |
+| 10 | `cancel_at_period_end` | `boolean` | false | `false` | — | Whether the subscription will cancel at period end. |
+| 11 | `created_at` | `timestamp with time zone` | false | `now()` | — | When the subscription record was created. |
+| 12 | `updated_at` | `timestamp with time zone` | false | `now()` | — | When the subscription record was last updated. |
 
 ## Keys & indexes
 
