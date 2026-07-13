@@ -1,0 +1,56 @@
+# Role map — OIDC role → doc-visibility (KB spec §3; granularity is
+# per-directory in v1 per ruling KB-A). Role definitions follow the
+# onboarding playbook / HLR §3 (R1–R4 product personas, R5 vendor).
+#
+# Pilot note (platform DECISIONS D-47): every identity below is
+# AlperCamli — solo pilot on the operator's own estate. Real
+# names/handles and OIDC group ids swap in when the KB moves to a
+# customer git server; the role keys and visibility scopes are the
+# durable part.
+#
+# Visibility semantics: directory globs relative to the KB root; the
+# MCP server filters every content-tool response through the caller's
+# role scope (enforced server-side, M-3/M-4). Enforcement arms at CP-4
+# (MCP surface); until then this file is the declared intent.
+
+roles:
+  R1:
+    title: Business user (non-analyst)
+    profile: reporter
+    identity: AlperCamli
+    oidc_group: null            # wired at CP-4 (OIDC → MCP OAuth)
+    visibility:
+      - index.md
+      - conventions.md
+      - systems/**
+      - entities/**
+      - metrics/**
+      - lineage/**
+
+  R2:
+    title: Data team lead — context steward (adoption decider)
+    profile: steward
+    identity: AlperCamli
+    oidc_group: null
+    visibility: ["**"]
+
+  R3:
+    title: Platform admin / ops owner
+    profile: steward
+    identity: AlperCamli
+    oidc_group: null
+    visibility: ["**"]
+
+  R4:
+    title: Security / compliance reviewer
+    profile: null               # read/audit surface only; no agent profile
+    identity: AlperCamli
+    oidc_group: null
+    visibility: ["**"]
+
+  R5:
+    title: Vendor deployment engineer (internal)
+    profile: steward
+    identity: AlperCamli
+    oidc_group: null
+    visibility: ["**"]

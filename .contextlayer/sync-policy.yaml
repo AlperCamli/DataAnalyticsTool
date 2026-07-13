@@ -1,0 +1,35 @@
+# Sync policy — trigger modes and freshness thresholds per system
+# (HLR §8 P1; location fixed by KB spec §3).
+#
+# Freshness thresholds are the OD-3 closure ruled at this onboarding
+# (platform DECISIONS D-47): snapshot age beyond the threshold raises a
+# freshness warning in trust blocks and the dashboard. API sources get
+# tight thresholds (their data moves daily); the OLTP schema is stable,
+# so the register's 30d default stands for supabase.
+#
+# TRIGGERS ARE PLACEHOLDERS — ARMED AT CP-3. No webhook receiver or
+# scheduler exists yet; nothing reads the `triggers` blocks today.
+# Until CP-3, re-snapshot is manual (the onboarding runbook), and every
+# KB change lands as a session-authored PR.
+
+systems:
+  supabase:
+    freshness_threshold: 30d
+    triggers:                       # armed-at-CP-3 placeholders
+      webhook: null                 # CI hook on the migrations repo (/v1/hooks/supabase, JP-4)
+      schedule: null                # nightly poll once live mode is on
+      manual: true
+
+  ga4:
+    freshness_threshold: 3d
+    triggers:                       # armed-at-CP-3 placeholders
+      webhook: null                 # n/a — no push surface on the Data API
+      schedule: null                # nightly metadata pull (custom definitions change rarely)
+      manual: true
+
+  gsc:
+    freshness_threshold: 3d
+    triggers:                       # armed-at-CP-3 placeholders
+      webhook: null                 # n/a
+      schedule: null                # nightly property/freshness pull
+      manual: true
