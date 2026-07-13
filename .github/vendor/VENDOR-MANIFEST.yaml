@@ -1,0 +1,25 @@
+# Provenance for the vendored validation library (platform DECISIONS
+# D-46, condition 1 — never an anonymous binary).
+#
+# Fence interpretation on record (D-46 condition 3): .github/vendor/ is
+# CI tooling, not KB content. The "no platform code in the KB repo"
+# rule means no platform logic in the KB tree; this wheel is the one
+# sanctioned exception.
+#
+# Update path (D-46 condition 2): a validation-library change in the
+# platform repo → rebuild the wheel → PR to this repo updating the
+# wheel and this manifest together. Manual for now; CP-3 sync PRs may
+# carry wheel bumps later. The failure mode this manifest exists to
+# make visible: a stale wheel silently validating against old rules —
+# check platform_commit against the platform repo before trusting a
+# validation pass that "should" have caught something.
+
+package: contextlayer-snapshot
+version: 0.2.0
+wheel: contextlayer_snapshot-0.2.0-py3-none-any.whl
+sha256: 66e9ca0d529746f9238c0846e4fa815002a65c6dd6ac13cc35fdb13dc3eccb1f
+platform_commit: 674eeebcb8f1911fc42ba9d240e4fc7d8e03a1ae
+built: 2026-07-13
+built_by: task 1.6 bootstrap session
+source: platform repo (local, no public remote) — DataProject
+runtime_deps_pinned_in: ../workflows/kb-ci.yml

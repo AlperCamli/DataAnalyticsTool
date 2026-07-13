@@ -1,0 +1,4 @@
+# Every path routes to the R2 steward (playbook step 2; task 1.6).
+# Machine-owned paths too: regeneration is authoritative, but a human
+# still signs every merge until CP-3's sync identity exists.
+* @AlperCamli

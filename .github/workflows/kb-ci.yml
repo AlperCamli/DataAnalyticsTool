@@ -1,0 +1,37 @@
+# KB CI — the ONE host-specific file in this repository (platform
+# DECISIONS D-46). Moving to another git host (GitLab, ...) means
+# porting this file and nothing else: everything it does is check out
+# the repo and invoke the host-agnostic entry point below. The
+# validation library arrives as the vendored wheel in .github/vendor/
+# (provenance in VENDOR-MANIFEST.yaml) — no secrets, no network access
+# beyond public PyPI for three pinned runtime deps.
+#
+# Entry point:  python -m generator.validate <kb-root>
+# Covers: KB-1 front-matter schemas, KB §3 layout conformance,
+# KB-5 relative link/anchor resolution, faults/ absence.
+
+name: KB CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    name: KB CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install validation library (vendored wheel + pinned deps)
+        run: |
+          python -m pip install --no-deps .github/vendor/contextlayer_snapshot-0.2.0-py3-none-any.whl
+          python -m pip install "jsonschema[format-nongpl]==4.26.0" "PyYAML==6.0.3" "jinja2==3.1.6"
+
+      - name: Validate KB
+        run: python -m generator.validate .
