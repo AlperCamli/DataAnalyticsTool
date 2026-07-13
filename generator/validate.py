@@ -4,31 +4,37 @@ Importable (task 1.6 wires it into KB CI as the KB-1 front-matter check
 and the layout half of the §3 rules); ``python -m generator.validate``
 is a thin CLI over it.
 
-Scope (deliverable 4 + task 1.6): front-matter schema validation for the
-§4 classes present in a generated tree, layout conformance under
-``systems/``, the ``faults/`` prohibition, relative link/anchor
-resolution (KB-5, §8 — external URLs are out of scope), and — when
-snapshots are supplied — machine-doc set and provenance cross-checks
-(missing/orphan machine docs, front-matter hash/provenance drift).
-`depends_on` resolution (KB-2) needs the latest snapshot server-side and
-stays with the sync engine (CP-3); entity/metric/lineage-note schemas
-land with tasks 1.7/1.8.
+Scope (deliverable 4 + task 1.6, extended per D-49): front-matter schema
+validation for the §4 classes present in a generated tree, layout
+conformance under ``systems/``, the ``faults/`` prohibition, relative
+link/anchor resolution (KB-5, §8 — external URLs are out of scope), and —
+when snapshots are supplied — machine-doc set and provenance cross-checks
+(missing/orphan machine docs, front-matter hash/provenance drift), the
+KB-8 render-consistency check (machine files at HEAD byte-equal the
+render of (latest accepted snapshot, HEAD enrichment)), and the KB-10
+dangling-purpose-key warn. The CLI auto-discovers snapshots at
+``<kb-dir>/.contextlayer/snapshots/*.json`` (§3), so KB CI runs the full
+surface on every PR. `depends_on` resolution (KB-2) needs the latest
+snapshot server-side and stays with the sync engine (CP-3);
+entity/metric/lineage-note schemas land with tasks 1.7/1.8.
 """
 
 import argparse
 import json
 import posixpath
 import re
+import shutil
 import sys
-from dataclasses import dataclass
+import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import unquote
 
 from jsonschema import Draft202012Validator
 
 from generator import frontmatter
-from generator.naming import KIND_GROUPS, mangle
-from generator.render import expected_docs
+from generator.naming import KIND_GROUPS, fqn, mangle
+from generator.render import GeneratorError, expected_docs, render_tree
 from generator.schemas import DOC_CLASS_SCHEMAS
 from snapshot.validate import validate_snapshot
 
@@ -40,8 +46,9 @@ _GROUP_STEMS = frozenset(KIND_GROUPS.values())
 @dataclass(frozen=True)
 class Finding:
     path: str  # repo-relative posix path
-    check: str  # "KB-1" | "KB-5" | "layout" | "provenance"
+    check: str  # "KB-1" | "KB-5" | "KB-8" | "KB-10" | "layout" | "provenance"
     message: str
+    level: str = "error"  # "error" blocks; "warn" reports (KB-10, §10)
 
 
 def _validate_front_matter(rel: str, fm: dict | None) -> list[Finding]:
@@ -244,13 +251,26 @@ def validate_tree(
     machine_on_disk: dict[str, dict] = {}
     for path in sorted(kb_dir.rglob("*.md")):
         rel = path.relative_to(kb_dir).as_posix()
-        if rel in _ROOT_EXEMPT or path.name == "_notes.md":
-            continue  # §4.6 root-bootstrap / K-7 exemption
+        if rel in _ROOT_EXEMPT:
+            continue  # §4.6 root-bootstrap exemption
         parts = tuple(rel.split("/"))
         if parts[0] != "systems":
             continue  # entities/metrics/lineage: classes land with 1.7-1.9
         if len(parts) < 3 or len(parts) > 4:
             findings.append(Finding(rel, "layout", "unexpected nesting under systems/"))
+            continue
+        if path.name == "_notes.md":
+            # §4.6/§4.7 (D-49): front-matter optional; human-notes when present
+            fm, _ = frontmatter.split(
+                path.read_text(encoding="utf-8", errors="replace")
+            )
+            if fm is None:
+                continue
+            findings.extend(_validate_front_matter(rel, fm))
+            if fm.get("doc_class") != "human-notes":
+                findings.append(
+                    Finding(rel, "layout", "_notes.md front-matter must be doc_class human-notes (§4.7)")
+                )
             continue
 
         fm, _ = frontmatter.split(path.read_text(encoding="utf-8", errors="replace"))
@@ -276,7 +296,18 @@ def validate_tree(
 
     findings.extend(_check_links(kb_dir))
     if snapshots is not None:
-        findings.extend(_cross_check(kb_dir, snapshots, machine_on_disk))
+        valid = []
+        for snap in snapshots:
+            errors, _ = validate_snapshot(snap)
+            if errors:
+                findings.append(
+                    Finding("<snapshot>", "provenance", f"invalid snapshot for {snap.get('system', '?')!r}: {errors[0]}")
+                )
+            else:
+                valid.append(snap)
+        findings.extend(_cross_check(kb_dir, valid, machine_on_disk))
+        findings.extend(_check_render(kb_dir, valid))
+        findings.extend(_check_purpose_keys(kb_dir, valid))
     return sorted(findings, key=lambda f: (f.path, f.check, f.message))
 
 
@@ -287,12 +318,6 @@ def _cross_check(
     expected: dict[str, dict] = {}
     envelopes: dict[str, dict] = {}
     for snap in snapshots:
-        errors, _ = validate_snapshot(snap)
-        if errors:
-            findings.append(
-                Finding("<snapshot>", "provenance", f"invalid snapshot for {snap.get('system', '?')!r}: {errors[0]}")
-            )
-            continue
         for rel, entry in expected_docs(snap).items():
             expected[rel] = entry
             envelopes[rel] = snap
@@ -322,6 +347,104 @@ def _cross_check(
     return findings
 
 
+# --------------------------------------------------------------------------
+# KB-8 — render consistency (§10, amended by D-49)
+
+
+def _check_render(kb_dir: Path, snapshots: list[dict]) -> list[Finding]:
+    """Machine files at HEAD must byte-equal the render of (latest accepted
+    snapshot, HEAD enrichment) — regeneration is a no-op. Regenerates into
+    a scratch copy of the tree (human siblings feed the render; existing
+    stamps feed Rule B) and byte-compares machine docs present on both
+    sides; missing and orphan docs are the provenance checks' findings."""
+    if not snapshots:
+        return []
+    with tempfile.TemporaryDirectory() as td:
+        scratch = Path(td) / "kb"
+        shutil.copytree(kb_dir, scratch, ignore=shutil.ignore_patterns(".*"))
+        try:
+            render_tree(snapshots, scratch)
+        except GeneratorError as exc:
+            return [Finding("<render>", "KB-8", f"regeneration failed: {exc}")]
+        findings = []
+        for snap in snapshots:
+            for rel in expected_docs(snap):
+                ours, theirs = kb_dir / rel, scratch / rel
+                if (
+                    ours.is_file()
+                    and theirs.is_file()
+                    and ours.read_bytes() != theirs.read_bytes()
+                ):
+                    findings.append(
+                        Finding(rel, "KB-8", "not the render of (latest accepted snapshot, HEAD enrichment) — regenerate")
+                    )
+        return findings
+
+
+# --------------------------------------------------------------------------
+# KB-10 — dangling purpose keys (§10, D-49; warn, never block)
+
+
+def _check_purpose_keys(kb_dir: Path, snapshots: list[dict]) -> list[Finding]:
+    """`column_purposes`/`object_purposes` keys must resolve against the
+    current snapshot; each miss warns, naming doc and key. Docs of systems
+    without a supplied snapshot are skipped — nothing current to resolve
+    against. Repair pressure stays with the contamination flow."""
+    columns_by_fqn: dict[str, frozenset[str]] = {}
+    rosters: dict[str, frozenset[str]] = {}  # human group doc rel -> member FQNs
+    systems: set[str] = set()
+    for snap in snapshots:
+        system = snap["system"]
+        systems.add(system)
+        for o in snap["objects"]:
+            columns_by_fqn[fqn(system, o["schema"], o["name"])] = frozenset(
+                c["name"] for c in o["columns"]
+            )
+        for rel, entry in expected_docs(snap).items():
+            if entry["doc_class"] == "machine-group":
+                rosters[rel.removesuffix(".schema.md") + ".md"] = frozenset(
+                    e["object"] for e in entry["roster"]
+                )
+
+    findings: list[Finding] = []
+    sys_dirs = {mangle(s) for s in systems}
+    for path in sorted(kb_dir.rglob("*.md")):
+        rel = path.relative_to(kb_dir).as_posix()
+        parts = rel.split("/")
+        if parts[0] != "systems" or any(p.startswith(".") for p in parts):
+            continue
+        name = parts[-1]
+        if name in ("index.md", "_notes.md") or name.endswith(".schema.md"):
+            continue
+        fm, _ = frontmatter.split(path.read_text(encoding="utf-8", errors="replace"))
+        if not isinstance(fm, dict):
+            continue
+        if fm.get("doc_class") == "human-object":
+            purposes = fm.get("column_purposes")
+            obj = fm.get("object")
+            if not isinstance(purposes, dict) or not isinstance(obj, str):
+                continue
+            if obj.split(".", 1)[0] not in systems:
+                continue
+            known = columns_by_fqn.get(obj, frozenset())
+            for key in sorted(purposes):
+                if key not in known:
+                    findings.append(
+                        Finding(rel, "KB-10", f"column_purposes key {key!r} does not resolve against the current snapshot for {obj!r}", "warn")
+                    )
+        elif fm.get("doc_class") == "human-group":
+            purposes = fm.get("object_purposes")
+            if not isinstance(purposes, dict) or len(parts) < 2 or parts[1] not in sys_dirs:
+                continue
+            roster = rosters.get(rel, frozenset())
+            for key in sorted(purposes):
+                if key not in roster:
+                    findings.append(
+                        Finding(rel, "KB-10", f"object_purposes key {key!r} does not resolve against the current snapshot's group roster", "warn")
+                    )
+    return findings
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m generator.validate",
@@ -333,22 +456,33 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         default=[],
         metavar="FILE",
-        help="cross-check machine docs against this snapshot (repeatable)",
+        help="cross-check machine docs against this snapshot (repeatable); "
+        "defaults to <KB_DIR>/.contextlayer/snapshots/*.json when present (§3)",
     )
     args = parser.parse_args(argv)
 
+    kb_dir = Path(args.kb_dir)
+    snapshot_paths = [Path(p) for p in args.snapshot] or sorted(
+        (kb_dir / ".contextlayer" / "snapshots").glob("*.json")
+    )
     snapshots = None
-    if args.snapshot:
+    if snapshot_paths:
         snapshots = []
-        for path in args.snapshot:
+        for path in snapshot_paths:
             with open(path, encoding="utf-8") as fh:
                 snapshots.append(json.load(fh))
 
-    findings = validate_tree(Path(args.kb_dir), snapshots)
+    findings = validate_tree(kb_dir, snapshots)
+    errors = sum(1 for f in findings if f.level == "error")
     for f in findings:
-        print(f"{f.path}: [{f.check}] {f.message}")
-    print(f"{len(findings)} finding{'s' if len(findings) != 1 else ''}")
-    return 1 if findings else 0
+        tag = f.check if f.level == "error" else f"{f.check} {f.level}"
+        print(f"{f.path}: [{tag}] {f.message}")
+    warns = len(findings) - errors
+    print(
+        f"{errors} error{'s' if errors != 1 else ''}, "
+        f"{warns} warning{'s' if warns != 1 else ''}"
+    )
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

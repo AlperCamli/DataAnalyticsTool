@@ -2,11 +2,13 @@
 
 Closed contracts: unknown keys are rejected (§4 — docs are numerous and
 typo-prone). Classes shipped here are the ones the 1.5/1.6 tree contains:
-the three machine classes the generator emits, plus the §4.2 human object/
-group classes (the generator reads their `status` for index roll-ups, and
-task 1.7 lands them). `entity`, `metric`, and `lineage-note` schemas land
-with tasks 1.8/1.9 — validation reports their doc_classes as unregistered
-until then, additively per the same pattern.
+the three machine classes the generator emits, the §4.2 human object/
+group classes (the generator reads their `status` for index roll-ups and
+their D-49 purpose fields for merged renders; task 1.7 lands authoring),
+and the §4.7 `human-notes` class for `_notes.md` siblings. `entity`,
+`metric`, and `lineage-note` schemas land with tasks 1.8/1.9 — validation
+reports their doc_classes as unregistered until then, additively per the
+same pattern.
 """
 
 _PROVENANCE = {
@@ -78,6 +80,12 @@ MACHINE_INDEX = {
     ],
 }
 
+# D-49 purpose enrichment: one-liners the generator merges into machine
+# renders (KB §4.2/§4.7, §7). One line is a schema property, not a style
+# hint — slots must stay line-stable under regeneration.
+_ONE_LINE = {"type": "string", "minLength": 1, "pattern": r"^[^\r\n]*$"}
+_PURPOSE_MAP = {"type": "object", "additionalProperties": _ONE_LINE}
+
 # §4.2 — provisional strictness: required fields are the identity/trust
 # core; task 1.7 (enrich) owns tightening the rest when it authors these.
 _HUMAN_COMMON = {
@@ -91,6 +99,7 @@ _HUMAN_COMMON = {
         "items": {"anyOf": [{"type": "string"}, {"type": "object"}]},
     },
     "contamination": {"type": ["object", "null"]},
+    "purpose": _ONE_LINE,
 }
 _HUMAN_REQUIRED = ["doc_class", "object", "written_against_schema_hash", "status"]
 
@@ -99,7 +108,11 @@ HUMAN_OBJECT = {
     "type": "object",
     "required": _HUMAN_REQUIRED,
     "additionalProperties": False,
-    "properties": {"doc_class": {"const": "human-object"}, **_HUMAN_COMMON},
+    "properties": {
+        "doc_class": {"const": "human-object"},
+        **_HUMAN_COMMON,
+        "column_purposes": _PURPOSE_MAP,
+    },
 }
 
 HUMAN_GROUP = {
@@ -107,7 +120,21 @@ HUMAN_GROUP = {
     "type": "object",
     "required": _HUMAN_REQUIRED,
     "additionalProperties": False,
-    "properties": {"doc_class": {"const": "human-group"}, **_HUMAN_COMMON},
+    "properties": {
+        "doc_class": {"const": "human-group"},
+        **_HUMAN_COMMON,
+        "object_purposes": _PURPOSE_MAP,
+    },
+}
+
+# §4.7 — `_notes.md` siblings; front-matter optional (§4.6), this class
+# when present.
+HUMAN_NOTES = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": ["doc_class"],
+    "additionalProperties": False,
+    "properties": {"doc_class": {"const": "human-notes"}, "purpose": _ONE_LINE},
 }
 
 DOC_CLASS_SCHEMAS: dict[str, dict] = {
@@ -116,4 +143,5 @@ DOC_CLASS_SCHEMAS: dict[str, dict] = {
     "machine-index": MACHINE_INDEX,
     "human-object": HUMAN_OBJECT,
     "human-group": HUMAN_GROUP,
+    "human-notes": HUMAN_NOTES,
 }

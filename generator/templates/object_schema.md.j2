@@ -15,10 +15,10 @@
 ## Columns
 
 {% if o.columns %}
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
 {% for c in o.columns %}
-| {{ c.ordinal }} | `{{ c.name }}` | `{{ c.type }}` | {{ c.nullable }} | {{ c.default }} | {{ c.description }} |
+| {{ c.ordinal }} | `{{ c.name }}` | `{{ c.type }}` | {{ c.nullable }} | {{ c.default }} | {{ c.description }} | {{ c.purpose }} |
 {% endfor %}
 {% else %}
 —

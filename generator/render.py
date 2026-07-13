@@ -5,8 +5,8 @@ Deterministic and idempotent by construction:
 - render is a function of (snapshot set, existing output tree); the tree
   contributes only prior `generated_at` values (D-33 Rule B) and the
   existence/front-matter of human-owned siblings (hot/stub, status
-  roll-ups, `_notes.md` links). On an empty output dir it is a pure
-  function of the snapshots.
+  roll-ups, `_notes.md` links, D-49 purpose enrichment). On an empty
+  output dir it is a pure function of the snapshots.
 - stored file order is never trusted: objects re-sorted (kind, schema,
   name), columns by ordinal, keys per §6 rule 5 (D-36.6);
 - a file whose candidate render equals the existing bytes modulo the
@@ -86,6 +86,59 @@ def _opt_cell(value: str | None) -> str:
 
 def _code_or_dash(value: str | None) -> str:
     return code(value) if value is not None else DASH
+
+
+# --------------------------------------------------------------------------
+# purpose slots (D-49): enrichment merged from human-sibling front-matter
+#
+# Every body renders in one of three modes. "real" reads the sibling's
+# purpose fields; "none" renders every slot absent; "marker" renders every
+# slot with a sentinel. The synthetic pair exists solely for the §4.1 date
+# rule: their per-line diff locates each slot byte-exactly (no markdown
+# parsing), so a rewrite confined to slots keeps the old `generated_at` —
+# enrichment is not a fact, and purpose edits must not restamp provenance.
+
+_MARKER = "purpose-slot"  # never written; must not share first/last char with DASH
+
+
+def _purpose_cell(value: Any, mode: str) -> str:
+    if mode == "marker":
+        return _MARKER
+    if mode == "real" and isinstance(value, str) and value:
+        return cell(value)
+    return DASH
+
+
+def _fm_map(fm: dict, key: str) -> dict:
+    """A front-matter purpose map, or {} — type errors are KB-1's to report."""
+    value = fm.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _purpose_confined(old_body: str, absent_body: str, marked_body: str) -> bool:
+    """True iff old_body differs from the candidate only inside purpose
+    slots (KB §4.1, D-49). The absent/marked variants agree everywhere
+    except slots — one slot per line by template construction (a second
+    slot on a line would make this prefix/suffix test unsound)."""
+    old, absent, marked = (s.split("\n") for s in (old_body, absent_body, marked_body))
+    if not (len(old) == len(absent) == len(marked)):
+        return False
+    for lo, la, lm in zip(old, absent, marked):
+        if la == lm:  # no slot here: the line is facts and must match
+            if lo != la:
+                return False
+            continue
+        # la = prefix + DASH + suffix, lm = prefix + _MARKER + suffix; the
+        # variants' first/last slot chars differ, so p/q are exact bounds.
+        p = 0
+        while p < len(la) and p < len(lm) and la[p] == lm[p]:
+            p += 1
+        q = 0
+        while q < len(la) - p and q < len(lm) - p and la[len(la) - 1 - q] == lm[len(lm) - 1 - q]:
+            q += 1
+        if len(lo) < p + q or lo[:p] != la[:p] or (q and lo[len(lo) - q :] != la[len(la) - q :]):
+            return False
+    return True
 
 
 # --------------------------------------------------------------------------
@@ -187,24 +240,35 @@ def expected_docs(snapshot: dict) -> dict[str, dict]:
 
 
 # --------------------------------------------------------------------------
-# human-owned sibling reads (hot/stub, status roll-up — K-8)
+# human-owned sibling reads (hot/stub, status roll-up — K-8; purposes — D-49)
 
 
-def _human_info(path: Path) -> tuple[bool, str | None]:
-    """(exists, status) for a human-owned doc; unparseable front-matter
-    reads as no status — reporting that is KB-1's job, not the index's."""
-    if not path.is_file():
-        return False, None
-    fm, _ = frontmatter.split(path.read_text(encoding="utf-8", errors="replace"))
-    status = fm.get("status") if isinstance(fm, dict) else None
-    return True, status if isinstance(status, str) else None
+def _human_info(path: Path, cache: dict[Path, tuple[bool, dict]]) -> tuple[bool, dict]:
+    """(exists, front-matter) for a human-owned doc; missing or unparseable
+    front-matter reads as {} — reporting that is KB-1's job, not the
+    render's. Cached per system render: the D-49 mode variants re-read
+    the same siblings."""
+    if path not in cache:
+        if not path.is_file():
+            cache[path] = (False, {})
+        else:
+            fm, _ = frontmatter.split(path.read_text(encoding="utf-8", errors="replace"))
+            cache[path] = (True, fm if isinstance(fm, dict) else {})
+    return cache[path]
+
+
+def _status_cell(fm: dict) -> str:
+    status = fm.get("status")
+    return cell(status) if isinstance(status, str) and status else DASH
 
 
 # --------------------------------------------------------------------------
 # body builders (facts verbatim-or-absent, S-8; structure only)
 
 
-def _column_rows(columns: list[dict]) -> list[dict]:
+def _column_rows(
+    columns: list[dict], purposes: dict | None = None, mode: str = "none"
+) -> list[dict]:
     return [
         {
             "ordinal": c["ordinal"],
@@ -213,13 +277,16 @@ def _column_rows(columns: list[dict]) -> list[dict]:
             "nullable": "true" if c["nullable"] else "false",
             "default": _code_or_dash(c["default"]),
             "description": _opt_cell(c["description"]),
+            "purpose": _purpose_cell(
+                purposes.get(c["name"]) if purposes else None, mode
+            ),
         }
         for c in columns
     ]
 
 
 def _sql_object_context(
-    system: str, obj: dict, all_objects: list[dict]
+    system: str, obj: dict, all_objects: list[dict], human_fm: dict, mode: str
 ) -> dict:
     keys = obj["keys"]
     identities = {(o["schema"], o["name"]) for o in all_objects}
@@ -265,7 +332,9 @@ def _sql_object_context(
         "kind": obj["kind"],
         "schema_hash": obj["schema_hash"],
         "description": obj["description"],
-        "columns": _column_rows(obj["columns"]),
+        "columns": _column_rows(
+            obj["columns"], _fm_map(human_fm, "column_purposes"), mode
+        ),
         "primary": ", ".join(code(c) for c in keys.get("primary", [])) or DASH,
         "foreign": foreign,
         "unique": [
@@ -289,7 +358,10 @@ _FACT_LABELS = [
 ]
 
 
-def _group_context(system: str, group: str, members: list[dict]) -> dict:
+def _group_context(
+    system: str, group: str, members: list[dict], human_fm: dict, mode: str
+) -> dict:
+    object_purposes = _fm_map(human_fm, "object_purposes")
     rendered = []
     for o in members:
         stats = o["stats"]
@@ -307,15 +379,17 @@ def _group_context(system: str, group: str, members: list[dict]) -> dict:
                     "value": "true" if stats["is_key_event"] else "false",
                 }
             )
+        member_fqn = fqn(system, o["schema"], o["name"])
         rendered.append(
             {
                 "anchor": anchor_id(o["schema"], o["name"]),
                 "name": cell(o["name"]),
-                "fqn": fqn(system, o["schema"], o["name"]),
+                "fqn": member_fqn,
                 "kind": o["kind"],
                 "namespace": cell(o["schema"]),
                 "fact_rows": fact_rows,
                 "schema_hash": o["schema_hash"],
+                "purpose": _purpose_cell(object_purposes.get(member_fqn), mode),
                 "description": o["description"],
                 "parameters": _column_rows(o["columns"]),
             }
@@ -330,13 +404,18 @@ def _group_context(system: str, group: str, members: list[dict]) -> dict:
 
 
 def _schema_index_context(
-    system: str, schema: str, members: list[dict], schema_dir: Path
+    system: str,
+    schema: str,
+    members: list[dict],
+    schema_dir: Path,
+    cache: dict,
+    mode: str,
 ) -> dict:
     rows = []
     hot = 0
     for o in members:
         stem = mangle(o["name"])
-        exists, status = _human_info(schema_dir / f"{stem}.md")
+        exists, fm = _human_info(schema_dir / f"{stem}.md", cache)
         if exists:
             hot += 1
         rows.append(
@@ -345,7 +424,8 @@ def _schema_index_context(
                 "kind": o["kind"],
                 "machine": f"{stem}.schema.md",
                 "human": f"[{stem}.md]({stem}.md)" if exists else DASH,
-                "status": cell(status) if status else DASH,
+                "status": _status_cell(fm),
+                "purpose": _purpose_cell(fm.get("purpose"), mode),
             }
         )
     count = len(members)
@@ -366,9 +446,11 @@ def _source_properties_json(snapshot: dict) -> str | None:
     return json.dumps(props, sort_keys=True, indent=2, ensure_ascii=False)
 
 
-def _system_index_context(snapshot: dict, known: list[dict], sysdir: Path) -> dict:
+def _system_index_context(
+    snapshot: dict, known: list[dict], sysdir: Path, cache: dict, mode: str
+) -> dict:
     system = snapshot["system"]
-    has_notes = (sysdir / "_notes.md").is_file()
+    has_notes, _ = _human_info(sysdir / "_notes.md", cache)
     if snapshot["system_class"] == "sql":
         schemas: dict[str, list[dict]] = {}
         for o in known:
@@ -379,14 +461,18 @@ def _system_index_context(snapshot: dict, known: list[dict], sysdir: Path) -> di
             human_count = sum(
                 1
                 for o in members
-                if _human_info(sysdir / mangle(schema) / f"{mangle(o['name'])}.md")[0]
+                if _human_info(
+                    sysdir / mangle(schema) / f"{mangle(o['name'])}.md", cache
+                )[0]
             )
+            _, notes_fm = _human_info(sysdir / mangle(schema) / "_notes.md", cache)
             rows.append(
                 {
                     "schema": cell(schema),
                     "count": len(members),
                     "human_count": human_count,
                     "href": f"{mangle(schema)}/index.md",
+                    "purpose": _purpose_cell(notes_fm.get("purpose"), mode),
                 }
             )
         n_schemas = len(schemas)
@@ -401,7 +487,7 @@ def _system_index_context(snapshot: dict, known: list[dict], sysdir: Path) -> di
         rows = []
         for group in sorted(groups):
             members = groups[group]
-            exists, status = _human_info(sysdir / f"{group}.md")
+            exists, group_fm = _human_info(sysdir / f"{group}.md", cache)
             rows.append(
                 {
                     "group": group,
@@ -409,7 +495,8 @@ def _system_index_context(snapshot: dict, known: list[dict], sysdir: Path) -> di
                     "count": len(members),
                     "machine": f"{group}.schema.md",
                     "human": f"[{group}.md]({group}.md)" if exists else DASH,
-                    "status": cell(status) if status else DASH,
+                    "status": _status_cell(group_fm),
+                    "purpose": _purpose_cell(group_fm.get("purpose"), mode),
                 }
             )
         n_groups = len(groups)
@@ -471,18 +558,26 @@ def _write_machine(
     path: Path,
     rel: str,
     fields: Callable[[str], list[tuple[str, Any]]],
-    body: str,
+    body_for: Callable[[str], str],
     new_date: str,
     result: RenderResult,
 ) -> None:
+    body = body_for("real")
     if path.exists():
         old = path.read_text(encoding="utf-8", errors="replace")
         fm, _ = frontmatter.split(old)
         old_date = fm.get("generated_at") if isinstance(fm, dict) else None
         if isinstance(old_date, str) and _DATE.match(old_date):
-            if frontmatter.emit(fields(old_date)) + "\n" + body == old:
+            head = frontmatter.emit(fields(old_date)) + "\n"
+            if head + body == old:
                 result.unchanged.append(rel)
                 return
+            # D-49 date rule (KB §4.1): a rewrite confined to purpose
+            # slots keeps the old stamp — enrichment is not a fact.
+            if old.startswith(head) and _purpose_confined(
+                old[len(head) :], body_for("none"), body_for("marker")
+            ):
+                new_date = old_date
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes((frontmatter.emit(fields(new_date)) + "\n" + body).encode("utf-8"))
     result.written.append(rel)
@@ -520,37 +615,56 @@ def _render_system(out_dir: Path, snapshot: dict, result: RenderResult) -> None:
     sysdir = out_dir / "systems" / mangle(system)
     new_date = snapshot["captured_at"][:10]
     plan = expected_docs(snapshot)
+    cache: dict[Path, tuple[bool, dict]] = {}
+
+    def body_for(entry: dict, rel: str, mode: str) -> str:
+        members = entry["_objects"]
+        if entry["doc_class"] == "machine-object":
+            obj = members[0]
+            _, human_fm = _human_info(
+                sysdir / mangle(obj["schema"]) / f"{mangle(obj['name'])}.md", cache
+            )
+            # all known objects of the system feed Referenced-by
+            return _env.get_template("object_schema.md.j2").render(
+                o=_sql_object_context(
+                    system, obj, _known_sql(snapshot), human_fm, mode
+                )
+            )
+        if entry["doc_class"] == "machine-group":
+            group = Path(rel).name.removesuffix(".schema.md")
+            _, human_fm = _human_info(sysdir / f"{group}.md", cache)
+            return _env.get_template("group_schema.md.j2").render(
+                g=_group_context(system, group, members, human_fm, mode)
+            )
+        if entry["scope"] == "schema":
+            return _env.get_template("index_schema.md.j2").render(
+                i=_schema_index_context(
+                    system,
+                    entry["schema"],
+                    members,
+                    sysdir / mangle(entry["schema"]),
+                    cache,
+                    mode,
+                )
+            )
+        template = (
+            "index_system_sql.md.j2"
+            if snapshot["system_class"] == "sql"
+            else "index_system_api.md.j2"
+        )
+        return _env.get_template(template).render(
+            s=_system_index_context(snapshot, members, sysdir, cache, mode)
+        )
 
     for rel in sorted(plan):
         entry = plan[rel]
-        members = entry["_objects"]
-        if entry["doc_class"] == "machine-object":
-            # all known objects of the system feed Referenced-by
-            body = _env.get_template("object_schema.md.j2").render(
-                o=_sql_object_context(system, members[0], _known_sql(snapshot))
-            )
-        elif entry["doc_class"] == "machine-group":
-            group = Path(rel).name.removesuffix(".schema.md")
-            body = _env.get_template("group_schema.md.j2").render(
-                g=_group_context(system, group, members)
-            )
-        elif entry["scope"] == "schema":
-            body = _env.get_template("index_schema.md.j2").render(
-                i=_schema_index_context(
-                    system, entry["schema"], members, sysdir / mangle(entry["schema"])
-                )
-            )
-        else:
-            template = (
-                "index_system_sql.md.j2"
-                if snapshot["system_class"] == "sql"
-                else "index_system_api.md.j2"
-            )
-            body = _env.get_template(template).render(
-                s=_system_index_context(snapshot, members, sysdir)
-            )
         _write_machine(
-            out_dir / rel, rel, _fields_fn(entry, snapshot), body, new_date, result
+            out_dir / rel,
+            rel,
+            _fields_fn(entry, snapshot),
+            lambda mode, entry=entry, rel=rel: body_for(entry, rel, mode),
+            new_date,
+            result,
         )
 
     _prune_system(out_dir, system, set(plan), result)

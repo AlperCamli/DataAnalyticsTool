@@ -8,10 +8,10 @@ Notes: [_notes.md](_notes.md)
 
 ## Schemas
 
-| Schema | Objects | Human docs | Index |
-|---|---|---|---|
+| Schema | Objects | Human docs | Index | Purpose |
+|---|---|---|---|---|
 {% for r in s.rows %}
-| `{{ r.schema }}` | {{ r.count }} | {{ r.human_count }} | [{{ r.href }}]({{ r.href }}) |
+| `{{ r.schema }}` | {{ r.count }} | {{ r.human_count }} | [{{ r.href }}]({{ r.href }}) | {{ r.purpose }} |
 {% endfor %}
 
 ## Source properties
