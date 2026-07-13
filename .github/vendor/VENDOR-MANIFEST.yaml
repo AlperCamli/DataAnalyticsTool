@@ -15,11 +15,11 @@
 # validation pass that "should" have caught something.
 
 package: contextlayer-snapshot
-version: 0.2.0
-wheel: contextlayer_snapshot-0.2.0-py3-none-any.whl
-sha256: 66e9ca0d529746f9238c0846e4fa815002a65c6dd6ac13cc35fdb13dc3eccb1f
-platform_commit: 674eeebcb8f1911fc42ba9d240e4fc7d8e03a1ae
+version: 0.3.0
+wheel: contextlayer_snapshot-0.3.0-py3-none-any.whl
+sha256: ca11ffcf76c4c378b9b8c5892f557ae4daf45092c0ff8845e7d373ad008e98be
+platform_commit: af011b7aeaa443b45b4f54c4a7c72caf7659536a
 built: 2026-07-13
-built_by: task 1.6 bootstrap session
+built_by: purpose-merge session (platform DECISIONS D-49)
 source: platform repo (local, no public remote) — DataProject
 runtime_deps_pinned_in: ../workflows/kb-ci.yml
