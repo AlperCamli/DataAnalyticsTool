@@ -23,15 +23,15 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
-| 2 | `name` | `text` | false | — | — | — |
-| 3 | `slug` | `text` | false | — | — | — |
-| 4 | `status` | `text` | false | — | — | — |
-| 5 | `preview_config` | `jsonb` | true | — | — | — |
-| 6 | `export_config` | `jsonb` | true | — | — | — |
-| 7 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
-| 8 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
-| 9 | `module_type` | `text` | false | `'standard'::text` | — | — |
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal template id (FK target for CVs and exports). |
+| 2 | `name` | `text` | false | — | — | Human-readable template name shown in the gallery. |
+| 3 | `slug` | `text` | false | — | — | URL- and code-safe unique identifier used to look up the template. |
+| 4 | `status` | `text` | false | — | — | Template lifecycle status; see body for grounding limits. |
+| 5 | `preview_config` | `jsonb` | true | — | — | Renderer config for in-app previews as JSONB; structure in body. |
+| 6 | `export_config` | `jsonb` | true | — | — | Renderer config for PDF/DOCX exports as JSONB; structure in body. |
+| 7 | `created_at` | `timestamp with time zone` | false | `now()` | — | When the template record was created. |
+| 8 | `updated_at` | `timestamp with time zone` | false | `now()` | — | When the template record was last updated. |
+| 9 | `module_type` | `text` | false | `'standard'::text` | — | CV module family this template serves (standard vs medical); enum in body. |
 
 ## Keys & indexes
 

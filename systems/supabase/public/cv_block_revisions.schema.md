@@ -23,19 +23,19 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
-| 2 | `user_id` | `uuid` | false | — | — | — |
-| 3 | `cv_kind` | `text` | false | — | — | — |
-| 4 | `master_cv_id` | `uuid` | true | — | — | — |
-| 5 | `tailored_cv_id` | `uuid` | true | — | — | — |
-| 6 | `block_id` | `text` | false | — | — | — |
-| 7 | `block_type` | `text` | false | — | — | — |
-| 8 | `revision_number` | `integer` | false | — | — | — |
-| 9 | `content_snapshot` | `jsonb` | false | — | — | — |
-| 10 | `change_source` | `text` | false | — | — | — |
-| 11 | `ai_suggestion_id` | `uuid` | true | — | — | — |
-| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
-| 13 | `created_by_user_id` | `uuid` | true | — | — | — |
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal revision id. |
+| 2 | `user_id` | `uuid` | false | — | — | Owning user whose CV this revision belongs to (FK to users.id). |
+| 3 | `cv_kind` | `text` | false | — | — | Which CV kind this revision is scoped to; enum in body. |
+| 4 | `master_cv_id` | `uuid` | true | — | — | Master CV the revision belongs to when cv_kind='master' (FK). |
+| 5 | `tailored_cv_id` | `uuid` | true | — | — | Tailored CV the revision belongs to when cv_kind='tailored' (FK). |
+| 6 | `block_id` | `text` | false | — | — | Identifier of the CV block this revision captures. |
+| 7 | `block_type` | `text` | false | — | — | Type of the block at revision time (e.g. experience, education). |
+| 8 | `revision_number` | `integer` | false | — | — | Monotonic revision number per (cv, block_id); positive. |
+| 9 | `content_snapshot` | `jsonb` | false | — | — | Full block content snapshot as JSONB; structure in body. |
+| 10 | `change_source` | `text` | false | — | — | What produced the revision; enum in body. |
+| 11 | `ai_suggestion_id` | `uuid` | true | — | — | AI suggestion that originated this revision when change_source='ai' (FK). |
+| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — | When the revision was recorded. |
+| 13 | `created_by_user_id` | `uuid` | true | — | — | User who triggered the revision, when applicable (FK to users.id). |
 
 ## Keys & indexes
 

@@ -23,12 +23,12 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
-| 2 | `job_id` | `uuid` | false | — | — | — |
-| 3 | `from_status` | `text` | true | — | — | — |
-| 4 | `to_status` | `text` | false | — | — | — |
-| 5 | `changed_at` | `timestamp with time zone` | false | `now()` | — | — |
-| 6 | `changed_by_user_id` | `uuid` | false | — | — | — |
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal status-history entry id. |
+| 2 | `job_id` | `uuid` | false | — | — | Job whose status transition is recorded (FK to jobs.id). |
+| 3 | `from_status` | `text` | true | — | — | Previous status before the transition, or null for the first entry; enum in body. |
+| 4 | `to_status` | `text` | false | — | — | New status after the transition; enum in body. |
+| 5 | `changed_at` | `timestamp with time zone` | false | `now()` | — | When the transition was recorded. |
+| 6 | `changed_by_user_id` | `uuid` | false | — | — | User who performed the transition (FK to users.id). |
 
 ## Keys & indexes
 

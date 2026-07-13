@@ -23,15 +23,15 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
-| 2 | `user_id` | `uuid` | false | — | — | — |
-| 3 | `cover_letter_id` | `uuid` | false | — | — | — |
-| 4 | `file_id` | `uuid` | true | — | — | — |
-| 5 | `format` | `text` | false | — | — | — |
-| 6 | `status` | `text` | false | — | — | — |
-| 7 | `error_message` | `text` | true | — | — | — |
-| 8 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
-| 9 | `completed_at` | `timestamp with time zone` | true | — | — | — |
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal cover letter export id. |
+| 2 | `user_id` | `uuid` | false | — | — | Owning user that initiated the export (FK to users.id). |
+| 3 | `cover_letter_id` | `uuid` | false | — | — | Cover letter being exported (FK to cover_letters.id). |
+| 4 | `file_id` | `uuid` | true | — | — | Generated file artifact, populated when the export completes (FK to files.id). |
+| 5 | `format` | `text` | false | — | — | Output format; enum in body. |
+| 6 | `status` | `text` | false | — | — | Export lifecycle stage; enum in body. |
+| 7 | `error_message` | `text` | true | — | — | Error description recorded when the export fails. |
+| 8 | `created_at` | `timestamp with time zone` | false | `now()` | — | When the export was requested. |
+| 9 | `completed_at` | `timestamp with time zone` | true | — | — | When the export reached a terminal state. |
 
 ## Keys & indexes
 
