@@ -1098,3 +1098,92 @@ fixtures/verify pass: `fixtures/supabase-customer.json` was produced
 via the D-20 `postgres:15` ddl-file image — C-3 mode invariance
 should be re-checked against a 17-class image before that fixture is
 used as live-parity evidence.
+
+---
+
+# DECISIONS — purpose merge (owner ruling issued as "D-38", recorded as D-49)
+
+## D-49 — Purpose enrichment merged into machine renders **[user ruling, applied]**
+
+**Numbering note:** the 2026-07-13 session brief issued this as "RULING
+D-38", but D-38 is already the sqlglot stack amendment (task 1.9). It is
+recorded here as **D-49**; spec citations say D-49. The subsection
+numbers below (D-49.1..7) correspond one-to-one to the brief's D-38.1..7.
+
+**The ruling (condensed; authorizes the KB-spec amendments it names,
+fence otherwise unchanged):**
+
+1. Purposes are enrichment → human-owned, additive front-matter:
+   `human-object` gains optional `purpose` + `column_purposes`
+   (column → one-liner); `human-group` gains `purpose` +
+   `object_purposes` (FQN → one-liner); new `doc_class: human-notes`
+   for `_notes.md` siblings with optional `purpose`. Unknown keys still
+   rejected.
+2. Generator inputs amended (KB §3/§7): render = deterministic function
+   of (latest accepted snapshot, enrichment front-matter at repo HEAD).
+   Columns tables gain a Purpose column; API group docs a Purpose row
+   per roster object; per-schema index rows the object's `purpose`;
+   per-system index rows the schema/kind-group purposes from
+   `_notes.md` / human group docs. `—` when absent.
+3. Consistency invariant: machine files at HEAD always equal the render
+   of (latest snapshot, HEAD enrichment). KB-8 runs on every PR
+   touching enrichment; enrichment PRs include their implied
+   re-renders. KB-3 amended: machine diffs CI reproduces exactly by
+   regeneration pass without warning.
+4. `generated_at` remains Rule B; purpose-driven re-renders never
+   change it.
+5. New warn-level CI check: dangling `column_purposes`/`object_purposes`
+   keys, naming doc and key.
+6. JSON structure documentation stays human-doc body content — not
+   merged in v1.
+7. Register: "purpose-merge scope growth" (entity/metric one-liners
+   into indexes) filed and parked → KB spec §12 item KB-G.
+
+**Implementation rulings made under it:**
+
+- **Committed accepted snapshots (`.contextlayer/snapshots/<system>.json`,
+  KB §3):** the D-49.3 invariant is a statement about repo HEAD, so
+  "latest accepted snapshot" must be part of HEAD for the invariant to
+  be well-defined per commit — and KB CI is the offline D-45/D-46
+  surface with no server to ask. Sync updates the snapshot in the same
+  PR as the renders it implies. No new exposure for the pilot: the
+  rendered machine docs already publish every fact the snapshot holds.
+  `python -m generator.validate` auto-discovers these (no workflow
+  change needed beyond the wheel bump); explicit `--snapshot` still
+  overrides.
+- **Slot rule (KB §7): purpose renders last and always renders** (`—`
+  marks absence; slots never collapse). Consequence: renders are
+  line-stable across enrichment changes, which is what makes the date
+  rule below exact.
+- **Date-rule mechanism (KB §4.1):** on a rewrite, the renderer also
+  renders the body with every purpose slot absent and with every slot
+  set to a sentinel; the per-line diff of that pair locates each slot
+  byte-exactly (no markdown parsing — the K-1 fence stands). If the old
+  body differs from the candidate only inside slots, the old
+  `generated_at` is kept; any fact-line difference restamps. Mixed
+  edits (facts + purposes in one render) restamp — honest, since facts
+  did change. One slot per template line by construction; a second slot
+  on a line would make the prefix/suffix test unsound — template
+  changes must preserve this.
+- **Scope of date-neutrality is purpose slots only:** status/hot-stub
+  cell changes share the slot's table row but sit in the fact prefix,
+  so they restamp exactly as before D-49 — pre-existing Rule-B
+  behavior, deliberately untouched.
+- **KB-8 runs whenever snapshots are supplied** (a superset of "every
+  PR touching enrichment") — so a PR that adds a human doc or flips a
+  status must carry the implied index re-renders too. That is the
+  invariant read literally; the enrich skill (task 1.7) automates it.
+- **KB-10** is the dangling-key check's number; `Finding` gained a
+  `level` field and the CLI exits 0 when only warns remain.
+- **KB-3's amendment is spec-level for now:** KB CI has no authorship
+  check yet; the KB-8 render check already subsumes the
+  reproducibility half (a diff CI regenerates exactly is, by
+  definition, consistent with snapshot + enrichment).
+- **Vendored wheel bumped to 0.3.0** (D-46 condition 1: version names
+  the build class) and delivered to the KB repo together with the
+  committed snapshots and the one-time estate re-render, in one PR —
+  separable pieces would leave intermediate commits red under the new
+  KB-8.
+- **Follow-up (out of fence here):** the onboarding playbook/skill
+  should gain the "commit the accepted snapshot to
+  `.contextlayer/snapshots/`" step; next onboarding session.

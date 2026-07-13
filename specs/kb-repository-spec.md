@@ -37,6 +37,7 @@ kb/
 │       ├── _notes.md               # H (optional): narrative about the system
 │       └── <schema>/               # SQL systems (K-4)
 │           ├── index.md            # M: per-schema listing
+│           ├── _notes.md           # H (optional): narrative about the schema (K-7)
 │           ├── <object>.schema.md  # M: facts (from snapshot)
 │           └── <object>.md         # H (optional): semantics
 │       # API systems instead carry grouped docs at the system level:
@@ -52,6 +53,7 @@ kb/
 ├── faults/                         # nothing — fault ledger is Postgres, not git (HLR §6); dir must not exist
 └── .contextlayer/
     ├── sources.yaml                # source configs (credential references only)
+    ├── snapshots/<system>.json     # latest accepted snapshot per system — the render input (D-49)
     ├── sync-policy.yaml            # trigger modes per system (HLR §8 P1), thresholds
     ├── roles.yaml                  # OIDC role → doc-visibility map
     ├── profiles/*.yaml             # agent profiles (platform-architecture §5)
@@ -61,6 +63,8 @@ kb/
 Legend: **M** = machine-owned (sync regenerates freely, humans warned off per K-6); **H** = human-owned (sync never writes, only flags).
 
 Path rules: directory and file names for objects use the source-native name lowercased with characters outside `[a-z0-9_-]` percent-free-mapped to `-`; the authoritative source-native name always lives in front-matter (`object:`), so filename mangling never loses identity. Entity and metric filenames are kebab-case English business terms.
+
+**Render inputs (purpose-merge amendment, D-49):** a machine render is a deterministic function of exactly two inputs — the **latest accepted snapshot** per system and the **enrichment front-matter at repo HEAD** (§4.2/§4.7 `purpose`, `column_purposes`, `object_purposes`, plus the human-sibling existence/status reads the indexes already made). `.contextlayer/snapshots/<system>.json` is the latest accepted snapshot's committed identity: it is what pins "latest accepted" at a given HEAD, what the generator renders from, and what KB CI re-renders against (KB-8, §10) — without it the §10 consistency invariant would not be well-defined per commit. Sync updates it in the same PR as the renders it implies; its JSON schema is the snapshot spec's, not this document's.
 
 ## 4. Front-matter schemas
 
@@ -82,6 +86,8 @@ status: machine
 ```
 
 **`generated_at` (clarifying amendment, task 1.5, applied):** the value is the capture date (the date part of `captured_at`) of the snapshot whose render last *changed this file's content* — never the generator's wall clock. A regeneration whose output differs only in this field leaves the file byte-untouched, which makes KB-8 a fixed point and makes a full render byte-identical to the KB-C changed-objects-only path — the two regeneration routes can never disagree. Corollary (single timestamp locus): machine-doc bodies never embed a timestamp; the §7 "freshness" reference points at this field. A `source_mode` switch (ddl-file → live) is a content change and restamps the field — honest provenance ("this doc now reflects live introspection"), not churn. Rationale: DECISIONS.md D-33.
+
+**D-49 clarification (purpose merge):** `generated_at` remains rule B — the capture date of the snapshot whose *facts* the render reflects. Enrichment is not a fact: a rewrite whose differences are confined to purpose slots (the §7 Purpose cells/rows) keeps the file's existing `generated_at`; only fact-content changes restamp. Purpose-driven re-renders therefore never change the field, even when the latest accepted snapshot's capture date has advanced past the file's stamp (recaptured-but-unchanged estates).
 
 Grouped API docs use `doc_class: machine-group` and replace `object`/`kind` with:
 
@@ -107,8 +113,13 @@ depends_on:                               # K-2: the contamination scan contract
   - supabase.public.users
   - supabase.public.order_items
 contamination: null                       # set by sync only — see §6
+purpose: "One row per checkout; the commerce fact table."   # optional (D-49)
+column_purposes:                          # optional (D-49): column name → one-liner
+  status: "Order lifecycle state; enum decodings in the body below."
 ---
 ```
+
+**Purpose enrichment (D-49, additive):** `human-object` docs may carry an optional `purpose` (string, one line) and `column_purposes` (map of column name → one-line string); `human-group` docs may carry `purpose` and `object_purposes` (map of FQN → one-line string). These fields are human-owned enrichment that the generator **merges into machine renders** (§7) — the one sanctioned flow of human-authored text into machine-owned files, safe under K-1 because the source is closed, schema-validated front-matter, never markdown bodies. Values are one-liners (no newlines); front-matter stays a closed contract — unknown keys are still rejected. JSON structure documentation for `json`/`jsonb` columns is human-doc *body* content (one subsection per column, evidence-cited or an explicit gap note), not merged into machine renders in v1.
 
 ### 4.3 Entity doc
 
@@ -148,7 +159,18 @@ status: machine
 ---
 ```
 
-**Root-bootstrap exemption:** the K-7 bootstrap artifacts — `kb/index.md`, `kb/conventions.md`, and optional `_notes.md` siblings — are human-owned navigation/narrative docs with no object identity; they carry **no front-matter** and are exempt from KB-1, latched by path (the two root files are written by the generator only when absent; `_notes.md` is never generator-written). Whether repo-level human docs need trust statuses for the MCP trust blocks is deliberately not designed here — register item KB-F. Rationale: DECISIONS.md D-34.
+**Root-bootstrap exemption (amended by D-49 for `_notes.md`):** the K-7 bootstrap artifacts — `kb/index.md`, `kb/conventions.md`, and optional `_notes.md` siblings — are human-owned navigation/narrative docs with no object identity; the two root files carry **no front-matter** and are exempt from KB-1, latched by path (they are written by the generator only when absent; `_notes.md` is never generator-written). `_notes.md` siblings *may* carry front-matter since D-49: absent front-matter remains exempt (additive evolution — existing notes stay valid); present front-matter must validate as `human-notes` (§4.7). Whether repo-level human docs need trust statuses for the MCP trust blocks is deliberately not designed here — register item KB-F. Rationale: DECISIONS.md D-34, D-49.
+
+### 4.7 Notes doc (`_notes.md` siblings) — registration record (D-49, applied)
+
+```yaml
+---
+doc_class: human-notes
+purpose: "Core commerce schema; everything an order touches."   # optional, one line
+---
+```
+
+Front-matter is optional on `_notes.md` (§4.6); when present, this is its class — `doc_class` required, `purpose` the only other key, unknown keys rejected. The `purpose` of a *schema-level* `_notes.md` is merged into that schema's row of the per-system machine index (§7). A system-level `_notes.md` may carry `purpose` too; v1 renders it nowhere (the per-system index has no self-row) — it is served, not merged.
 
 ## 5. Status lifecycle (K-3)
 
@@ -194,7 +216,9 @@ All markings land as front-matter edits inside the same drift PR — sync's only
 
 Generated machine docs and skill-authored human docs follow fixed section orders so agents can navigate by heading. Deviations in human docs are permitted (open editing) but the enrich skill always emits the canonical order.
 
-**`<object>.schema.md` (machine):** Identity (FQN, kind, hashes) · Columns (table: name, type, nullable, default, description) · Keys & indexes · Row estimate & freshness · Referenced-by (reverse FKs within system) · View definition (views/matviews, fenced SQL).
+**`<object>.schema.md` (machine):** Identity (FQN, kind, hashes) · Columns (table: name, type, nullable, default, description, purpose) · Keys & indexes · Row estimate & freshness · Referenced-by (reverse FKs within system) · View definition (views/matviews, fenced SQL).
+
+**Purpose merge (D-49):** machine renders carry the §4.2/§4.7 enrichment in fixed slots, populated from the human-owned sibling's front-matter and `—` when absent. Slot rule: *purpose renders last* — the trailing column of a table, the trailing row of a fact block — and every slot always renders (`—` marks absence; slots never collapse away), which keeps renders line-stable across enrichment changes. The slots: the columns table of `<object>.schema.md` gains a Purpose column from the sibling's `column_purposes`; each roster object's fact block in an API `<kind-group>.schema.md` gains a Purpose row from the sibling's `object_purposes`; per-schema index rows gain the object's `purpose` one-liner; per-system index rows gain the schema's purpose (from the schema-level `_notes.md`, SQL) or the kind-group's purpose (from the human group doc, API). Facts still come only from the snapshot (S-8); purposes come only from these declared front-matter fields — a generator emitting prose from any other source, or reading markdown bodies, is the K-1 violation this design exists to avoid.
 
 **`<object>.md` (human):** Purpose · Grain · Column meanings & enum decodings · Join guidance · Reporting notes (which reporting views expose it) · Warnings.
 
@@ -224,13 +248,14 @@ Generated machine docs and skill-authored human docs follow fixed section orders
 |---|---|---|
 | KB-1 | Front-matter parses and validates against its `doc_class` schema (§4); K-7 root-bootstrap artifacts exempt (§4.6) | Block |
 | KB-2 | Every `depends_on`/`maps` FQN resolves against the latest snapshot (or is explicitly marked `external:`) | Block |
-| KB-3 | Machine-owned file modified by a non-sync author | **Warn** (K-6): "will be overwritten; semantics belong in `<object>.md`" |
+| KB-3 | Machine-owned file modified by a non-sync author — except diffs CI reproduces exactly by regeneration, which pass without warning (D-49: enrichment PRs carry their implied re-renders) | **Warn** (K-6): "will be overwritten; semantics belong in `<object>.md`" |
 | KB-4 | Sync-authored commit touches human-doc body text (below front-matter) | Block (violates §6 exception boundary) |
 | KB-5 | Relative links and anchors resolve | Block |
 | KB-6 | Entity `depends_on` ⊇ `maps[].object` | Block |
 | KB-7 | `verified` status without `last_verified` or with stale `written_against_schema_hash` | Block |
-| KB-8 | Generator idempotency (run in CI on sync PRs): regenerating from the same snapshot produces a no-op diff | Block |
+| KB-8 | Render consistency (amended by D-49): machine files at HEAD byte-equal the render of (latest accepted snapshot, HEAD enrichment) — regeneration is a no-op. Runs on sync PRs and on every PR touching enrichment front-matter; PRs editing enrichment must include the implied machine re-renders | Block |
 | KB-9 | Golden benchmark regression suite (product spec §11) on KB-content PRs | Per customer policy: block or report |
+| KB-10 | `column_purposes` / `object_purposes` keys that do not resolve against the current snapshot, naming doc and key (D-49; repair pressure stays with the contamination flow) | **Warn** |
 
 ## 11. Retrieval-budget guidance (non-normative)
 
@@ -245,4 +270,5 @@ The hierarchical path (index → entity → 3–8 object docs) targets ~5–10K 
 | KB-C | Machine-doc regeneration scope per drift run: changed objects only vs full re-render | Changed objects only (cheap PRs); KB-8 guards correctness | If template changes require estate-wide re-renders, add a `regen-all` manual job |
 | KB-D | Localization of human docs (customer-language KBs) | Out of scope v1; docs in the customer's working language, templates language-neutral | First non-English deployment |
 | KB-E | Grouped API docs splitting threshold (huge custom-dimension estates) | **No split in v1** — one group file regardless of roster size (owner ruling 2026-07-13, superseding the earlier split-at-200 default). Evidence: the trigger fired on the first example estate (pilot GA4: 376 standard dimensions) and it renders, validates, and holds KB-8 as a single group doc; a split scheme (file naming, roster partitioning, anchor stability) remains undesigned and none is improvised | Retrieval/navigation degradation in pilot, or the MCP session finds group docs too large to serve |
-| KB-F | Trust semantics of repo-level human docs (`index.md`, `conventions.md`, `_notes.md`): do they need `status` front-matter for the MCP trust blocks? | No front-matter, KB-1-exempt (§4.6); the MCP server serves them without a trust block | CP-4/M1 MCP server session, when the trust-block consumer exists |
+| KB-F | Trust semantics of repo-level human docs (`index.md`, `conventions.md`, `_notes.md`): do they need `status` front-matter for the MCP trust blocks? | No front-matter, KB-1-exempt (§4.6, amended by D-49: optional `human-notes` front-matter on `_notes.md`); the MCP server serves them without a trust block | CP-4/M1 MCP server session, when the trust-block consumer exists |
+| KB-G | Purpose-merge scope growth: entity/metric one-liners into indexes (D-49.7) | **Parked** — v1 merges only the §4.2/§4.7 purpose fields; no new prose sources | Demonstrated retrieval need for entity/metric purposes in machine indexes |
