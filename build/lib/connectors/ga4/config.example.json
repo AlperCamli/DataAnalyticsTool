@@ -1,6 +1,0 @@
-{
-  "system": "ga4",
-  "mode": "api",
-  "property_id": "313459823",
-  "credentials_env": "GA4_SERVICE_ACCOUNT_JSON"
-}

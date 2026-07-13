@@ -7,3 +7,8 @@ __pycache__/
 .hypothesis/
 .DS_Store
 *.egg-info/
+
+# packaging artifacts (wheel builds for KB-repo vendoring, D-46)
+build/
+dist/
+*.egg-info/

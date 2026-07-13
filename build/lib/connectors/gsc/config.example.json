@@ -1,6 +1,0 @@
-{
-  "system": "gsc",
-  "mode": "api",
-  "site_url": "sc-domain:example.com",
-  "credentials_env": "GSC_SA_JSON"
-}

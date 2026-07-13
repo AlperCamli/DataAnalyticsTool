@@ -1,9 +1,0 @@
-# {{ i.system }} — schema `{{ i.schema }}`
-
-{{ i.summary }}
-
-| Object | Kind | Machine doc | Human doc | Status |
-|---|---|---|---|---|
-{% for r in i.rows %}
-| `{{ r.name }}` | {{ r.kind }} | [{{ r.machine }}]({{ r.machine }}) | {{ r.human }} | {{ r.status }} |
-{% endfor %}
