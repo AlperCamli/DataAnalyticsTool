@@ -1,0 +1,16 @@
+{
+  "edges": [],
+  "generated_at": "2026-07-13T07:03:36Z",
+  "graph_version": "1",
+  "inputs": [
+    {
+      "kind": "sql-parse",
+      "snapshot_ref": {
+        "ga4": "sha256:737f0205d50c76329cf820e622cf7c324bb250aa125f106f87c9b28513457d6a",
+        "gsc": "sha256:a40d0fab958dd8bbca4502d1a084a2947ee562e9c0fb7c8db402cea016ab836e",
+        "supabase": "sha256:e2033bce197532a1161f600fa9a22c5d8bfbb0741291634cac29a83fae0d1776"
+      }
+    }
+  ],
+  "nodes": []
+}
