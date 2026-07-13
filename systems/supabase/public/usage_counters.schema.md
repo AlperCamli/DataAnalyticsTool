@@ -21,16 +21,16 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `period_month` | `date` | false | — | — |
-| 4 | `tailored_cv_generations_count` | `integer` | false | `0` | — |
-| 5 | `exports_count` | `integer` | false | `0` | — |
-| 6 | `ai_actions_count` | `integer` | false | `0` | — |
-| 7 | `storage_bytes_used` | `bigint` | false | `0` | — |
-| 8 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `period_month` | `date` | false | — | — | — |
+| 4 | `tailored_cv_generations_count` | `integer` | false | `0` | — | — |
+| 5 | `exports_count` | `integer` | false | `0` | — | — |
+| 6 | `ai_actions_count` | `integer` | false | `0` | — | — |
+| 7 | `storage_bytes_used` | `bigint` | false | `0` | — | — |
+| 8 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
 
 ## Keys & indexes
 

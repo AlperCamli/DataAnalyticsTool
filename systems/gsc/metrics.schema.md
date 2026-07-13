@@ -24,6 +24,7 @@ status: machine
 | Namespace | standard |
 | Data type | integer |
 | Schema hash | `sha256:048520872d9e025cc7e45a41492dbf7079717167d07bf9a0f4af36f3b7b03583` |
+| Purpose | — |
 
 ## <a id="standard--ctr"></a>`ctr`
 
@@ -34,6 +35,7 @@ status: machine
 | Namespace | standard |
 | Data type | double |
 | Schema hash | `sha256:39bcba6c1dba4ae13b842c3a2f315b71cf9c82ef8880f9ab006a93adc08a804d` |
+| Purpose | — |
 
 ## <a id="standard--impressions"></a>`impressions`
 
@@ -44,6 +46,7 @@ status: machine
 | Namespace | standard |
 | Data type | integer |
 | Schema hash | `sha256:00ee65b645b2c93880b1a5d18636156fbba3df8570f96e5f5559688e33a303f8` |
+| Purpose | — |
 
 ## <a id="standard--position"></a>`position`
 
@@ -54,3 +57,4 @@ status: machine
 | Namespace | standard |
 | Data type | double |
 | Schema hash | `sha256:d9e97a288e6d80dcdcfb1fbd886cdbb48ef9a4da19cdc2ba7a53b46db38757ea` |
+| Purpose | — |

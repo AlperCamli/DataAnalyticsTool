@@ -21,3 +21,4 @@ status: machine
 | Namespace | standard |
 | Key event | true |
 | Schema hash | `sha256:1bec423ed25c615dc3cc1c4996fc64d22901ff440ed2e31537b668f12da68c24` |
+| Purpose | — |

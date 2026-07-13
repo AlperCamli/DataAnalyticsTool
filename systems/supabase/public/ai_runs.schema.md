@@ -21,27 +21,27 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `master_cv_id` | `uuid` | true | — | — |
-| 4 | `tailored_cv_id` | `uuid` | true | — | — |
-| 5 | `job_id` | `uuid` | true | — | — |
-| 6 | `flow_type` | `text` | false | — | — |
-| 7 | `provider` | `text` | false | — | — |
-| 8 | `model_name` | `text` | false | — | — |
-| 9 | `status` | `text` | false | — | — |
-| 10 | `input_payload` | `jsonb` | false | — | — |
-| 11 | `output_payload` | `jsonb` | true | — | — |
-| 12 | `error_message` | `text` | true | — | — |
-| 13 | `started_at` | `timestamp with time zone` | false | `now()` | — |
-| 14 | `completed_at` | `timestamp with time zone` | true | — | — |
-| 15 | `progress_stage` | `text` | false | `'queued'::text` | — |
-| 16 | `debug_payload` | `jsonb` | true | — | — |
-| 17 | `input_tokens` | `integer` | true | — | — |
-| 18 | `output_tokens` | `integer` | true | — | — |
-| 19 | `total_tokens` | `integer` | true | — | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `master_cv_id` | `uuid` | true | — | — | — |
+| 4 | `tailored_cv_id` | `uuid` | true | — | — | — |
+| 5 | `job_id` | `uuid` | true | — | — | — |
+| 6 | `flow_type` | `text` | false | — | — | — |
+| 7 | `provider` | `text` | false | — | — | — |
+| 8 | `model_name` | `text` | false | — | — | — |
+| 9 | `status` | `text` | false | — | — | — |
+| 10 | `input_payload` | `jsonb` | false | — | — | — |
+| 11 | `output_payload` | `jsonb` | true | — | — | — |
+| 12 | `error_message` | `text` | true | — | — | — |
+| 13 | `started_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 14 | `completed_at` | `timestamp with time zone` | true | — | — | — |
+| 15 | `progress_stage` | `text` | false | `'queued'::text` | — | — |
+| 16 | `debug_payload` | `jsonb` | true | — | — | — |
+| 17 | `input_tokens` | `integer` | true | — | — | — |
+| 18 | `output_tokens` | `integer` | true | — | — | — |
+| 19 | `total_tokens` | `integer` | true | — | — | — |
 
 ## Keys & indexes
 

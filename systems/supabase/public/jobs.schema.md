@@ -21,22 +21,22 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `tailored_cv_id` | `uuid` | true | — | — |
-| 4 | `company_name` | `text` | false | — | — |
-| 5 | `job_title` | `text` | false | — | — |
-| 6 | `job_description` | `text` | false | — | — |
-| 7 | `job_posting_url` | `text` | true | — | — |
-| 8 | `location_text` | `text` | true | — | — |
-| 9 | `status` | `text` | false | `'saved'::text` | — |
-| 10 | `notes` | `text` | true | — | — |
-| 11 | `applied_at` | `timestamp with time zone` | true | — | — |
-| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 13 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
-| 14 | `cover_letter_id` | `uuid` | true | — | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `tailored_cv_id` | `uuid` | true | — | — | — |
+| 4 | `company_name` | `text` | false | — | — | — |
+| 5 | `job_title` | `text` | false | — | — | — |
+| 6 | `job_description` | `text` | false | — | — | — |
+| 7 | `job_posting_url` | `text` | true | — | — | — |
+| 8 | `location_text` | `text` | true | — | — | — |
+| 9 | `status` | `text` | false | `'saved'::text` | — | — |
+| 10 | `notes` | `text` | true | — | — | — |
+| 11 | `applied_at` | `timestamp with time zone` | true | — | — | — |
+| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 13 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 14 | `cover_letter_id` | `uuid` | true | — | — | — |
 
 ## Keys & indexes
 

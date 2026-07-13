@@ -21,14 +21,14 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `job_id` | `uuid` | false | — | — |
-| 3 | `from_status` | `text` | true | — | — |
-| 4 | `to_status` | `text` | false | — | — |
-| 5 | `changed_at` | `timestamp with time zone` | false | `now()` | — |
-| 6 | `changed_by_user_id` | `uuid` | false | — | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `job_id` | `uuid` | false | — | — | — |
+| 3 | `from_status` | `text` | true | — | — | — |
+| 4 | `to_status` | `text` | false | — | — | — |
+| 5 | `changed_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 6 | `changed_by_user_id` | `uuid` | false | — | — | — |
 
 ## Keys & indexes
 

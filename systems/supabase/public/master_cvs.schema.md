@@ -21,20 +21,20 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `title` | `text` | false | — | — |
-| 4 | `language` | `text` | false | — | — |
-| 5 | `template_id` | `uuid` | true | — | — |
-| 6 | `current_content` | `jsonb` | false | — | — |
-| 7 | `summary_text` | `text` | true | — | — |
-| 8 | `source_type` | `text` | false | — | — |
-| 9 | `is_deleted` | `boolean` | false | `false` | — |
-| 10 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 11 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
-| 12 | `module_type` | `text` | false | `'standard'::text` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `title` | `text` | false | — | — | — |
+| 4 | `language` | `text` | false | — | — | — |
+| 5 | `template_id` | `uuid` | true | — | — | — |
+| 6 | `current_content` | `jsonb` | false | — | — | — |
+| 7 | `summary_text` | `text` | true | — | — | — |
+| 8 | `source_type` | `text` | false | — | — | — |
+| 9 | `is_deleted` | `boolean` | false | `false` | — | — |
+| 10 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 11 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 12 | `module_type` | `text` | false | `'standard'::text` | — | — |
 
 ## Keys & indexes
 

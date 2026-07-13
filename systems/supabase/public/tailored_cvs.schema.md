@@ -21,23 +21,23 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `master_cv_id` | `uuid` | false | — | — |
-| 4 | `job_id` | `uuid` | true | — | — |
-| 5 | `title` | `text` | false | — | — |
-| 6 | `language` | `text` | false | — | — |
-| 7 | `template_id` | `uuid` | true | — | — |
-| 8 | `current_content` | `jsonb` | false | — | — |
-| 9 | `status` | `text` | false | `'draft'::text` | — |
-| 10 | `ai_generation_status` | `text` | true | — | — |
-| 11 | `last_exported_at` | `timestamp with time zone` | true | — | — |
-| 12 | `is_deleted` | `boolean` | false | `false` | — |
-| 13 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 14 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
-| 15 | `module_type` | `text` | false | `'standard'::text` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `master_cv_id` | `uuid` | false | — | — | — |
+| 4 | `job_id` | `uuid` | true | — | — | — |
+| 5 | `title` | `text` | false | — | — | — |
+| 6 | `language` | `text` | false | — | — | — |
+| 7 | `template_id` | `uuid` | true | — | — | — |
+| 8 | `current_content` | `jsonb` | false | — | — | — |
+| 9 | `status` | `text` | false | `'draft'::text` | — | — |
+| 10 | `ai_generation_status` | `text` | true | — | — | — |
+| 11 | `last_exported_at` | `timestamp with time zone` | true | — | — | — |
+| 12 | `is_deleted` | `boolean` | false | `false` | — | — |
+| 13 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 14 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 15 | `module_type` | `text` | false | `'standard'::text` | — | — |
 
 ## Keys & indexes
 

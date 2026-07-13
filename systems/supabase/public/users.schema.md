@@ -21,18 +21,18 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `auth_user_id` | `uuid` | false | — | — |
-| 3 | `email` | `text` | false | — | — |
-| 4 | `full_name` | `text` | true | — | — |
-| 5 | `locale` | `text` | false | `'en'::text` | — |
-| 6 | `default_cv_language` | `text` | true | — | — |
-| 7 | `onboarding_completed` | `boolean` | false | `false` | — |
-| 8 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 9 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
-| 10 | `onboarding_state` | `jsonb` | false | `'{}'::jsonb` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `auth_user_id` | `uuid` | false | — | — | — |
+| 3 | `email` | `text` | false | — | — | — |
+| 4 | `full_name` | `text` | true | — | — | — |
+| 5 | `locale` | `text` | false | `'en'::text` | — | — |
+| 6 | `default_cv_language` | `text` | true | — | — | — |
+| 7 | `onboarding_completed` | `boolean` | false | `false` | — | — |
+| 8 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 9 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 10 | `onboarding_state` | `jsonb` | false | `'{}'::jsonb` | — | — |
 
 ## Keys & indexes
 

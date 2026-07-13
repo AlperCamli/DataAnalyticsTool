@@ -14,11 +14,11 @@ System class: api · 466 objects across 3 groups.
 
 ## Groups
 
-| Group | Kind | Objects | Machine doc | Human doc | Status |
-|---|---|---|---|---|---|
-| dimensions | api_dimension | 376 | [dimensions.schema.md](dimensions.schema.md) | — | — |
-| events | api_event | 1 | [events.schema.md](events.schema.md) | — | — |
-| metrics | api_metric | 89 | [metrics.schema.md](metrics.schema.md) | — | — |
+| Group | Kind | Objects | Machine doc | Human doc | Status | Purpose |
+|---|---|---|---|---|---|---|
+| dimensions | api_dimension | 376 | [dimensions.schema.md](dimensions.schema.md) | — | — | — |
+| events | api_event | 1 | [events.schema.md](events.schema.md) | — | — | — |
+| metrics | api_metric | 89 | [metrics.schema.md](metrics.schema.md) | — | — | — |
 
 ## Source properties
 

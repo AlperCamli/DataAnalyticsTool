@@ -21,17 +21,17 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `name` | `text` | false | — | — |
-| 3 | `slug` | `text` | false | — | — |
-| 4 | `status` | `text` | false | — | — |
-| 5 | `preview_config` | `jsonb` | true | — | — |
-| 6 | `export_config` | `jsonb` | true | — | — |
-| 7 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 8 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
-| 9 | `module_type` | `text` | false | `'standard'::text` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `name` | `text` | false | — | — | — |
+| 3 | `slug` | `text` | false | — | — | — |
+| 4 | `status` | `text` | false | — | — | — |
+| 5 | `preview_config` | `jsonb` | true | — | — | — |
+| 6 | `export_config` | `jsonb` | true | — | — | — |
+| 7 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 8 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 9 | `module_type` | `text` | false | `'standard'::text` | — | — |
 
 ## Keys & indexes
 

@@ -21,20 +21,20 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `source_file_id` | `uuid` | false | — | — |
-| 4 | `target_master_cv_id` | `uuid` | true | — | — |
-| 5 | `status` | `text` | false | — | — |
-| 6 | `parser_name` | `text` | true | — | — |
-| 7 | `raw_extracted_text` | `text` | true | — | — |
-| 8 | `parsed_content` | `jsonb` | true | — | — |
-| 9 | `error_message` | `text` | true | — | — |
-| 10 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 11 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
-| 12 | `module_type` | `text` | false | `'standard'::text` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `source_file_id` | `uuid` | false | — | — | — |
+| 4 | `target_master_cv_id` | `uuid` | true | — | — | — |
+| 5 | `status` | `text` | false | — | — | — |
+| 6 | `parser_name` | `text` | true | — | — | — |
+| 7 | `raw_extracted_text` | `text` | true | — | — | — |
+| 8 | `parsed_content` | `jsonb` | true | — | — | — |
+| 9 | `error_message` | `text` | true | — | — | — |
+| 10 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 11 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 12 | `module_type` | `text` | false | `'standard'::text` | — | — |
 
 ## Keys & indexes
 

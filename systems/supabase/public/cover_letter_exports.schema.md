@@ -21,17 +21,17 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `cover_letter_id` | `uuid` | false | — | — |
-| 4 | `file_id` | `uuid` | true | — | — |
-| 5 | `format` | `text` | false | — | — |
-| 6 | `status` | `text` | false | — | — |
-| 7 | `error_message` | `text` | true | — | — |
-| 8 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 9 | `completed_at` | `timestamp with time zone` | true | — | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `cover_letter_id` | `uuid` | false | — | — | — |
+| 4 | `file_id` | `uuid` | true | — | — | — |
+| 5 | `format` | `text` | false | — | — | — |
+| 6 | `status` | `text` | false | — | — | — |
+| 7 | `error_message` | `text` | true | — | — | — |
+| 8 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 9 | `completed_at` | `timestamp with time zone` | true | — | — | — |
 
 ## Keys & indexes
 

@@ -21,20 +21,20 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `provider` | `text` | false | — | — |
-| 4 | `provider_customer_id` | `text` | true | — | — |
-| 5 | `provider_subscription_id` | `text` | true | — | — |
-| 6 | `plan_code` | `text` | false | — | — |
-| 7 | `status` | `text` | false | — | — |
-| 8 | `current_period_start` | `timestamp with time zone` | true | — | — |
-| 9 | `current_period_end` | `timestamp with time zone` | true | — | — |
-| 10 | `cancel_at_period_end` | `boolean` | false | `false` | — |
-| 11 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 12 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `provider` | `text` | false | — | — | — |
+| 4 | `provider_customer_id` | `text` | true | — | — | — |
+| 5 | `provider_subscription_id` | `text` | true | — | — | — |
+| 6 | `plan_code` | `text` | false | — | — | — |
+| 7 | `status` | `text` | false | — | — | — |
+| 8 | `current_period_start` | `timestamp with time zone` | true | — | — | — |
+| 9 | `current_period_end` | `timestamp with time zone` | true | — | — | — |
+| 10 | `cancel_at_period_end` | `boolean` | false | `false` | — | — |
+| 11 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 12 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
 
 ## Keys & indexes
 

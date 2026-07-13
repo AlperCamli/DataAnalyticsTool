@@ -21,18 +21,18 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `job_id` | `uuid` | false | — | — |
-| 4 | `tailored_cv_id` | `uuid` | true | — | — |
-| 5 | `title` | `text` | false | — | — |
-| 6 | `content` | `text` | false | `''::text` | — |
-| 7 | `status` | `text` | false | `'draft'::text` | — |
-| 8 | `last_exported_at` | `timestamp with time zone` | true | — | — |
-| 9 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 10 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `job_id` | `uuid` | false | — | — | — |
+| 4 | `tailored_cv_id` | `uuid` | true | — | — | — |
+| 5 | `title` | `text` | false | — | — | — |
+| 6 | `content` | `text` | false | `''::text` | — | — |
+| 7 | `status` | `text` | false | `'draft'::text` | — | — |
+| 8 | `last_exported_at` | `timestamp with time zone` | true | — | — | — |
+| 9 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 10 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
 
 ## Keys & indexes
 

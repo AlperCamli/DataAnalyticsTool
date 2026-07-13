@@ -21,21 +21,21 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `cv_kind` | `text` | false | — | — |
-| 4 | `master_cv_id` | `uuid` | true | — | — |
-| 5 | `tailored_cv_id` | `uuid` | true | — | — |
-| 6 | `block_id` | `text` | false | — | — |
-| 7 | `block_type` | `text` | false | — | — |
-| 8 | `revision_number` | `integer` | false | — | — |
-| 9 | `content_snapshot` | `jsonb` | false | — | — |
-| 10 | `change_source` | `text` | false | — | — |
-| 11 | `ai_suggestion_id` | `uuid` | true | — | — |
-| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 13 | `created_by_user_id` | `uuid` | true | — | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `cv_kind` | `text` | false | — | — | — |
+| 4 | `master_cv_id` | `uuid` | true | — | — | — |
+| 5 | `tailored_cv_id` | `uuid` | true | — | — | — |
+| 6 | `block_id` | `text` | false | — | — | — |
+| 7 | `block_type` | `text` | false | — | — | — |
+| 8 | `revision_number` | `integer` | false | — | — | — |
+| 9 | `content_snapshot` | `jsonb` | false | — | — | — |
+| 10 | `change_source` | `text` | false | — | — | — |
+| 11 | `ai_suggestion_id` | `uuid` | true | — | — | — |
+| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 13 | `created_by_user_id` | `uuid` | true | — | — | — |
 
 ## Keys & indexes
 

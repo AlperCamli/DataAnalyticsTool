@@ -21,21 +21,21 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `profile` | `text` | false | — | — |
-| 3 | `flow_type` | `text` | false | — | — |
-| 4 | `action_type` | `text` | true | — | — |
-| 5 | `provider` | `text` | false | `'gemini'::text` | — |
-| 6 | `model_name` | `text` | true | — | — |
-| 7 | `prompt_key` | `text` | false | — | — |
-| 8 | `prompt_version` | `text` | false | — | — |
-| 9 | `system_prompt` | `text` | false | — | — |
-| 10 | `user_prompt_template` | `text` | true | — | — |
-| 11 | `is_active` | `boolean` | false | `true` | — |
-| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 13 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `profile` | `text` | false | — | — | — |
+| 3 | `flow_type` | `text` | false | — | — | — |
+| 4 | `action_type` | `text` | true | — | — | — |
+| 5 | `provider` | `text` | false | `'gemini'::text` | — | — |
+| 6 | `model_name` | `text` | true | — | — | — |
+| 7 | `prompt_key` | `text` | false | — | — | — |
+| 8 | `prompt_version` | `text` | false | — | — | — |
+| 9 | `system_prompt` | `text` | false | — | — | — |
+| 10 | `user_prompt_template` | `text` | true | — | — | — |
+| 11 | `is_active` | `boolean` | false | `true` | — | — |
+| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 13 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
 
 ## Keys & indexes
 
