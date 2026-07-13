@@ -23,18 +23,18 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
-| 2 | `user_id` | `uuid` | false | — | — | — |
-| 3 | `title` | `text` | false | — | — | — |
-| 4 | `language` | `text` | false | — | — | — |
-| 5 | `template_id` | `uuid` | true | — | — | — |
-| 6 | `current_content` | `jsonb` | false | — | — | — |
-| 7 | `summary_text` | `text` | true | — | — | — |
-| 8 | `source_type` | `text` | false | — | — | — |
-| 9 | `is_deleted` | `boolean` | false | `false` | — | — |
-| 10 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
-| 11 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
-| 12 | `module_type` | `text` | false | `'standard'::text` | — | — |
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal master CV id. |
+| 2 | `user_id` | `uuid` | false | — | — | Owning user (FK to users.id). |
+| 3 | `title` | `text` | false | — | — | Human-readable title for the master CV. |
+| 4 | `language` | `text` | false | — | — | Language code of the CV content. |
+| 5 | `template_id` | `uuid` | true | — | — | Template selected for previewing this CV (FK to cv_templates.id). |
+| 6 | `current_content` | `jsonb` | false | — | — | Canonical structured CV content as JSONB; structure in body. |
+| 7 | `summary_text` | `text` | true | — | — | Plain-text summary derived from content for search and AI context. |
+| 8 | `source_type` | `text` | false | — | — | How the CV was created; enum decoded in body. |
+| 9 | `is_deleted` | `boolean` | false | `false` | — | Soft-delete flag hiding this CV from active lists. |
+| 10 | `created_at` | `timestamp with time zone` | false | `now()` | — | When the master CV was created. |
+| 11 | `updated_at` | `timestamp with time zone` | false | `now()` | — | When the master CV was last updated. |
+| 12 | `module_type` | `text` | false | `'standard'::text` | — | CV module family (standard vs medical); enum decoded in body. |
 
 ## Keys & indexes
 
