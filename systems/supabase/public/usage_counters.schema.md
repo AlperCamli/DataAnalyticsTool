@@ -23,14 +23,14 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
-| 2 | `user_id` | `uuid` | false | — | — | — |
-| 3 | `period_month` | `date` | false | — | — | — |
-| 4 | `tailored_cv_generations_count` | `integer` | false | `0` | — | — |
-| 5 | `exports_count` | `integer` | false | `0` | — | — |
-| 6 | `ai_actions_count` | `integer` | false | `0` | — | — |
-| 7 | `storage_bytes_used` | `bigint` | false | `0` | — | — |
-| 8 | `updated_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal counter-row id. |
+| 2 | `user_id` | `uuid` | false | — | — | User whose usage is tracked (FK to users.id). |
+| 3 | `period_month` | `date` | false | — | — | First day of the calendar month this row covers. |
+| 4 | `tailored_cv_generations_count` | `integer` | false | `0` | — | Tailored CV generations consumed in the period. |
+| 5 | `exports_count` | `integer` | false | `0` | — | Export jobs completed in the period. |
+| 6 | `ai_actions_count` | `integer` | false | `0` | — | AI block actions invoked in the period. |
+| 7 | `storage_bytes_used` | `bigint` | false | `0` | — | Total bytes of files stored as of this period. |
+| 8 | `updated_at` | `timestamp with time zone` | false | `now()` | — | When this counter was last incremented. |
 
 ## Keys & indexes
 
