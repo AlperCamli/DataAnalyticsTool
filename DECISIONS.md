@@ -1019,3 +1019,71 @@ regeneration command is recorded in the fixture-generating test's
 docstring. Exit demo: every customer DDL view resolves to its upstream
 tables with column mappings on that snapshot, and `get_lineage` walks
 both directions.
+
+---
+
+# DECISIONS — task 1.6 (customer KB bootstrap, `AlperCamli/DataAnalyticsTool`)
+
+## D-45 — KB-5 lands in the validation library; scope of the offline CI surface
+
+The 1.5 docstring assigned link/anchor resolution (KB-5) to task 1.6;
+it now lives in `generator/validate.py` so the KB CI entry point
+(`python -m generator.validate <kb-dir>`) is the complete offline
+surface: KB-1 front-matter schemas, §3 layout conformance, the
+`faults/` prohibition, and KB-5. Scope rulings: external URLs and
+`mailto:` are out of KB-5 scope (the KB attests its own integrity, not
+the web's); links inside fenced code blocks are ignored (view-definition
+SQL is not hypertext); dot-directories (`.contextlayer/`, `.github/`,
+editor state) are not KB docs and are skipped; anchors use the
+github-slugger algorithm because the generator's deterministic anchor
+IDs are defined by what the git host renders. KB-2 (`depends_on`
+resolution) needs the latest snapshot server-side and stays with the
+sync engine (CP-3).
+
+## D-46 — KB CI gets the validation library as a vendored wheel **[user ruling, three conditions]**
+
+The KB repo may carry no platform code, KB CI may hold no secrets, and
+the platform repo has no reachable remote — so the workflow cannot
+check the library out. **Ruling (approved at task 1.6): the KB repo
+vendors the library as a built wheel under `.github/vendor/`.**
+Conditions, verbatim intent:
+
+1. **Provenance:** the wheel is versioned and sits next to a manifest
+   (`.github/vendor/VENDOR-MANIFEST.yaml`) recording the platform-repo
+   commit SHA and library version it was built from. Never an
+   anonymous binary. (`pyproject.toml` bumped to 0.2.0 so the wheel
+   name distinguishes this build class from the pre-generator 0.1.0.)
+2. **Update path:** validation-library changes → rebuild wheel → PR to
+   the KB repo, manual for now; CP-3's sync PRs can carry wheel bumps
+   later. The named failure mode: a stale wheel silently validating
+   against old rules — the manifest SHA is what makes staleness
+   visible in review.
+3. **Fence interpretation:** `.github/vendor/` is CI tooling, not KB
+   content. The "no platform code in the KB repo" fence means no
+   platform *logic in the KB tree*; this is the one sanctioned
+   exception.
+
+The workflow installs the wheel `--no-deps` plus only the three
+runtime deps validation imports (jsonschema[format-nongpl], PyYAML,
+jinja2), pinned — connector deps (psycopg, google-auth, requests,
+sqlglot) never enter KB CI.
+
+## D-47 — KB repo rulings at bootstrap **[user rulings recorded]**
+
+- **Visibility:** `AlperCamli/DataAnalyticsTool` stays **public** for
+  this pilot — GitHub Free gates branch protection on private repos,
+  and enforced protection (PRs only, KB CI required, code-owner
+  review) was ruled to win over privacy for now. May flip private
+  later; protection then degrades to convention until a plan or host
+  change restores enforcement.
+- **Identities:** all five playbook roles (R1–R5) map to
+  `AlperCamli` for the pilot; real handles swap in when the KB moves
+  to a customer git server.
+- **OD-3 closure applied per system** in `.contextlayer/
+  sync-policy.yaml`: ga4 3d, gsc 3d, supabase 30d — the register's
+  "per customer at onboarding" path, values ruled at this onboarding.
+  The master register row itself is spec-fenced and untouched.
+- Sync triggers in the policy file are **placeholders armed at CP-3**;
+  commits are session-authored via PR until the platform's machine
+  identity exists (CP-3). The initial generation PR is merged by the
+  R2 steward by hand — deliberately their first review-flow rehearsal.

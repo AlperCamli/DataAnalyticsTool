@@ -4,20 +4,25 @@ Importable (task 1.6 wires it into KB CI as the KB-1 front-matter check
 and the layout half of the §3 rules); ``python -m generator.validate``
 is a thin CLI over it.
 
-Scope (deliverable 4): front-matter schema validation for the §4 classes
-present in a generated tree, layout conformance under ``systems/``, the
-``faults/`` prohibition, and — when snapshots are supplied — machine-doc
-set and provenance cross-checks (missing/orphan machine docs, front-matter
-hash/provenance drift). Link/anchor resolution (KB-5) and `depends_on`
-resolution (KB-2) are KB-CI checks task 1.6 owns; entity/metric/
-lineage-note schemas land with tasks 1.8/1.9.
+Scope (deliverable 4 + task 1.6): front-matter schema validation for the
+§4 classes present in a generated tree, layout conformance under
+``systems/``, the ``faults/`` prohibition, relative link/anchor
+resolution (KB-5, §8 — external URLs are out of scope), and — when
+snapshots are supplied — machine-doc set and provenance cross-checks
+(missing/orphan machine docs, front-matter hash/provenance drift).
+`depends_on` resolution (KB-2) needs the latest snapshot server-side and
+stays with the sync engine (CP-3); entity/metric/lineage-note schemas
+land with tasks 1.7/1.8.
 """
 
 import argparse
 import json
+import posixpath
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote
 
 from jsonschema import Draft202012Validator
 
@@ -35,7 +40,7 @@ _GROUP_STEMS = frozenset(KIND_GROUPS.values())
 @dataclass(frozen=True)
 class Finding:
     path: str  # repo-relative posix path
-    check: str  # "KB-1" | "layout" | "provenance"
+    check: str  # "KB-1" | "KB-5" | "layout" | "provenance"
     message: str
 
 
@@ -121,6 +126,109 @@ def _check_path_consistency(rel: str, parts: tuple[str, ...], fm: dict) -> list[
     return findings
 
 
+# --------------------------------------------------------------------------
+# KB-5 — relative links and anchors resolve (KB §8, §10)
+
+_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]*)(?:\s+\"[^\"]*\")?\)")
+_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+_HEADING = re.compile(r"^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
+_FENCE_LINE = re.compile(r"^ {0,3}(```|~~~)")
+_INLINE_LINK_TEXT = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+
+
+def _gfm_slug(heading: str) -> str:
+    """GitHub's anchor id for a heading (github-slugger algorithm)."""
+    text = _INLINE_LINK_TEXT.sub(r"\1", heading).replace("`", "")
+    text = "".join(c for c in text.lower() if c.isalnum() or c in "_- ")
+    return text.replace(" ", "-")
+
+
+def _body_lines_outside_fences(text: str):
+    _, body = frontmatter.split(text)
+    fence: str | None = None
+    for line in body.splitlines():
+        m = _FENCE_LINE.match(line)
+        if m:
+            if fence is None:
+                fence = m.group(1)
+            elif m.group(1) == fence:
+                fence = None
+            continue
+        if fence is None:
+            yield line
+
+
+def _anchors(text: str) -> frozenset[str]:
+    slugs: dict[str, int] = {}
+    out = []
+    for line in _body_lines_outside_fences(text):
+        m = _HEADING.match(line)
+        if not m:
+            continue
+        slug = _gfm_slug(m.group(2))
+        seen = slugs.get(slug)
+        slugs[slug] = 0 if seen is None else seen + 1
+        out.append(slug if seen is None else f"{slug}-{slugs[slug]}")
+    return frozenset(out)
+
+
+def _check_links(kb_dir: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    anchor_cache: dict[str, frozenset[str]] = {}
+
+    def anchors_of(rel: str, path: Path) -> frozenset[str]:
+        if rel not in anchor_cache:
+            anchor_cache[rel] = _anchors(path.read_text(encoding="utf-8", errors="replace"))
+        return anchor_cache[rel]
+
+    docs = [
+        p
+        for p in sorted(kb_dir.rglob("*.md"))
+        if not any(part.startswith(".") for part in p.relative_to(kb_dir).parts)
+    ]
+    for path in docs:
+        rel = path.relative_to(kb_dir).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for line in _body_lines_outside_fences(text):
+            for m in _LINK.finditer(line):
+                target = m.group(1)
+                if _SCHEME.match(target):
+                    continue  # external URL / mailto — out of KB-5 scope
+                if not target:
+                    findings.append(Finding(rel, "KB-5", "empty link target"))
+                    continue
+                if target.startswith("/"):
+                    findings.append(
+                        Finding(rel, "KB-5", f"absolute link {target!r} — intra-KB links are relative (§8)")
+                    )
+                    continue
+                dest, _, fragment = target.partition("#")
+                fragment = unquote(fragment)
+                if dest:
+                    dest_rel = posixpath.normpath(
+                        posixpath.join(posixpath.dirname(rel), unquote(dest))
+                    )
+                    if dest_rel.split("/", 1)[0] == "..":
+                        findings.append(
+                            Finding(rel, "KB-5", f"link {target!r} escapes the KB root")
+                        )
+                        continue
+                    dest_path = kb_dir / dest_rel
+                    if not dest_path.exists():
+                        findings.append(
+                            Finding(rel, "KB-5", f"broken link {target!r}: no such file")
+                        )
+                        continue
+                else:
+                    dest_rel, dest_path = rel, path
+                if fragment and dest_path.suffix == ".md" and dest_path.is_file():
+                    if fragment not in anchors_of(dest_rel, dest_path):
+                        findings.append(
+                            Finding(rel, "KB-5", f"broken link {target!r}: no such anchor in {dest_rel}")
+                        )
+    return findings
+
+
 def validate_tree(
     kb_dir: Path | str, snapshots: list[dict] | None = None
 ) -> list[Finding]:
@@ -166,6 +274,7 @@ def validate_tree(
         if not fm_findings and implied is not None:
             findings.extend(_check_path_consistency(rel, parts, fm))
 
+    findings.extend(_check_links(kb_dir))
     if snapshots is not None:
         findings.extend(_cross_check(kb_dir, snapshots, machine_on_disk))
     return sorted(findings, key=lambda f: (f.path, f.check, f.message))

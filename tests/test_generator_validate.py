@@ -113,7 +113,10 @@ def test_missing_machine_doc_flagged_with_snapshots(kb):
     assert any(
         f.check == "provenance" and f.path.endswith("users.schema.md") for f in findings
     )
-    assert validate_tree(kb_dir) == []  # without snapshots, absence is invisible
+    # without snapshots there is no provenance check — but the index's
+    # dangling link to the deleted doc still surfaces through KB-5
+    without = validate_tree(kb_dir)
+    assert {f.check for f in without} == {"KB-5"}
 
 
 def test_orphan_machine_doc_flagged_with_snapshots(kb):
@@ -140,6 +143,67 @@ def test_hash_drift_flagged_with_snapshots(kb):
     )
     findings = validate_tree(kb_dir, snaps)
     assert any(f.check == "provenance" and "schema_hash" in f.message for f in findings)
+
+
+def test_kb5_broken_relative_link(kb):
+    kb_dir, _ = kb
+    (kb_dir / "systems/supabase/_notes.md").write_text(
+        "see [ghost](public/ghost.schema.md)\n", encoding="utf-8"
+    )
+    findings = validate_tree(kb_dir)
+    assert any(f.check == "KB-5" and "no such file" in f.message for f in findings)
+
+
+def test_kb5_broken_anchor(kb):
+    kb_dir, _ = kb
+    (kb_dir / "systems/supabase/_notes.md").write_text(
+        "ok [cols](public/orders.schema.md#columns) "
+        "bad [x](public/orders.schema.md#no-such-heading)\n",
+        encoding="utf-8",
+    )
+    findings = validate_tree(kb_dir)
+    assert [f for f in findings if f.check == "KB-5"] == [
+        f for f in findings if "no-such-heading" in f.message
+    ]
+    assert any(f.check == "KB-5" for f in findings)
+
+
+def test_kb5_same_file_anchor_and_backticked_headings(kb):
+    kb_dir, _ = kb
+    # heading with inline code slugs per GitHub: backticks/dots dropped
+    (kb_dir / "systems/supabase/_notes.md").write_text(
+        "# About `supabase.public`\n\n[up](#about-supabasepublic)\n",
+        encoding="utf-8",
+    )
+    assert validate_tree(kb_dir) == []
+
+
+def test_kb5_external_and_fenced_links_ignored(kb):
+    kb_dir, _ = kb
+    (kb_dir / "systems/supabase/_notes.md").write_text(
+        "[docs](https://example.com/x) [mail](mailto:a@b.c)\n\n"
+        "```sql\n-- [not a link](nowhere.md)\n```\n",
+        encoding="utf-8",
+    )
+    assert validate_tree(kb_dir) == []
+
+
+def test_kb5_escape_and_absolute_links_flagged(kb):
+    kb_dir, _ = kb
+    (kb_dir / "systems/supabase/_notes.md").write_text(
+        "[out](../../../etc/passwd) [abs](/etc/passwd)\n", encoding="utf-8"
+    )
+    messages = [f.message for f in validate_tree(kb_dir) if f.check == "KB-5"]
+    assert any("escapes the KB root" in m for m in messages)
+    assert any("absolute link" in m for m in messages)
+
+
+def test_kb5_skips_dot_directories(kb):
+    kb_dir, _ = kb
+    hidden = kb_dir / ".contextlayer"
+    hidden.mkdir()
+    (hidden / "notes.md").write_text("[broken](nowhere.md)\n", encoding="utf-8")
+    assert validate_tree(kb_dir) == []
 
 
 def test_cli_exit_codes(kb):

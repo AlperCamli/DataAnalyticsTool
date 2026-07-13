@@ -4,8 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "contextlayer-snapshot"
-version = "0.1.0"
-description = "Snapshot layer (task 1.1) + shared connector SDK harness (tasks 1.2-1.4)"
+# 0.2.0: generator + lineage + KB-5 in the validation library — the
+# build class vendored into KB CI (D-46 condition 1)
+version = "0.2.0"
+description = "Snapshot layer (task 1.1) + connector SDK (1.2-1.4) + generator (1.5) + lineage (1.9)"
 requires-python = ">=3.12"
 dependencies = [
     # format-nongpl pulls rfc3339-validator: without it jsonschema treats
