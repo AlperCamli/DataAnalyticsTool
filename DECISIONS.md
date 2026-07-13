@@ -1087,3 +1087,14 @@ sqlglot) never enter KB CI.
   commits are session-authored via PR until the platform's machine
   identity exists (CP-3). The initial generation PR is merged by the
   R2 steward by hand — deliberately their first review-flow rehearsal.
+
+## D-48 — Live engine version supersedes the D-20 assumption **[flag]**
+
+The task-1.6 brief and D-20 both said "customer 2 is Supabase 15.x";
+the live snapshot's envelope says `server_version: "17.6"`. The KB may
+not contradict its own snapshot, so `conventions.md` records
+PostgreSQL 17 (with the envelope value cited). Left open for the next
+fixtures/verify pass: `fixtures/supabase-customer.json` was produced
+via the D-20 `postgres:15` ddl-file image — C-3 mode invariance
+should be re-checked against a 17-class image before that fixture is
+used as live-parity evidence.
