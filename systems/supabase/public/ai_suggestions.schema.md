@@ -23,19 +23,19 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
-| 2 | `ai_run_id` | `uuid` | false | — | — | — |
-| 3 | `user_id` | `uuid` | false | — | — | — |
-| 4 | `tailored_cv_id` | `uuid` | true | — | — | — |
-| 5 | `block_id` | `text` | true | — | — | — |
-| 6 | `action_type` | `text` | false | — | — | — |
-| 7 | `before_content` | `jsonb` | true | — | — | — |
-| 8 | `suggested_content` | `jsonb` | false | — | — | — |
-| 9 | `option_group_key` | `text` | true | — | — | — |
-| 10 | `status` | `text` | false | `'pending'::text` | — | — |
-| 11 | `applied_at` | `timestamp with time zone` | true | — | — | — |
-| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
-| 13 | `master_cv_id` | `uuid` | true | — | — | — |
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal suggestion id. |
+| 2 | `ai_run_id` | `uuid` | false | — | — | AI run that produced this suggestion (FK to ai_runs.id). |
+| 3 | `user_id` | `uuid` | false | — | — | User the suggestion is offered to (FK to users.id). |
+| 4 | `tailored_cv_id` | `uuid` | true | — | — | Tailored CV this suggestion targets, when scope is tailored (FK). |
+| 5 | `block_id` | `text` | true | — | — | Identifier of the CV block the suggestion applies to, if block-scoped. |
+| 6 | `action_type` | `text` | false | — | — | Kind of edit suggested; enum in body. |
+| 7 | `before_content` | `jsonb` | true | — | — | Snapshot of block content before the change as JSONB; structure in body. |
+| 8 | `suggested_content` | `jsonb` | false | — | — | Proposed block content as JSONB; structure in body. |
+| 9 | `option_group_key` | `text` | true | — | — | Grouping key linking sibling suggestions offered as alternatives. |
+| 10 | `status` | `text` | false | `'pending'::text` | — | Review state of the suggestion; enum in body. |
+| 11 | `applied_at` | `timestamp with time zone` | true | — | — | When the suggestion was applied to the target CV. |
+| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — | When the suggestion was created. |
+| 13 | `master_cv_id` | `uuid` | true | — | — | Master CV this suggestion targets, when scope is master (FK). |
 
 ## Keys & indexes
 

@@ -23,17 +23,17 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
-| 2 | `user_id` | `uuid` | false | — | — | — |
-| 3 | `tailored_cv_id` | `uuid` | true | — | — | — |
-| 4 | `file_id` | `uuid` | true | — | — | — |
-| 5 | `format` | `text` | false | — | — | — |
-| 6 | `status` | `text` | false | — | — | — |
-| 7 | `template_id` | `uuid` | true | — | — | — |
-| 8 | `error_message` | `text` | true | — | — | — |
-| 9 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
-| 10 | `completed_at` | `timestamp with time zone` | true | — | — | — |
-| 11 | `master_cv_id` | `uuid` | true | — | — | — |
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal export id. |
+| 2 | `user_id` | `uuid` | false | — | — | User that initiated the export (FK to users.id). |
+| 3 | `tailored_cv_id` | `uuid` | true | — | — | Tailored CV being exported, when scope is tailored (FK). |
+| 4 | `file_id` | `uuid` | true | — | — | Generated file artifact, populated when the export completes (FK to files.id). |
+| 5 | `format` | `text` | false | — | — | Output format; enum in body. |
+| 6 | `status` | `text` | false | — | — | Export lifecycle stage; enum in body. |
+| 7 | `template_id` | `uuid` | true | — | — | Template used to render this export (FK to cv_templates.id). |
+| 8 | `error_message` | `text` | true | — | — | Error description recorded when the export fails. |
+| 9 | `created_at` | `timestamp with time zone` | false | `now()` | — | When the export was requested. |
+| 10 | `completed_at` | `timestamp with time zone` | true | — | — | When the export reached a terminal state. |
+| 11 | `master_cv_id` | `uuid` | true | — | — | Master CV being exported, when scope is master (FK). |
 
 ## Keys & indexes
 
