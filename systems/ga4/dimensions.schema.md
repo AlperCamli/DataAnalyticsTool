@@ -396,7 +396,7 @@ status: machine
 | Namespace | custom |
 | Data type | string |
 | Schema hash | `sha256:4c9d3001961b1b5e9448877d8ecf77a471d7cf10e061771ece6e04a4008eeb49` |
-| Purpose | — |
+| Purpose | Event-scoped custom dimension: the export outcome recorded on cv_exported events. |
 
 An event scoped custom dimension for your Analytics property.
 
