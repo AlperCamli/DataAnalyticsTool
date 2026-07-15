@@ -66,6 +66,8 @@ class SnapshotInventory:
         self.fqns: set[str] = set()
         # SQL: {system: {relation name: [schemas]}} for unqualified binding.
         self._sql_relations: dict[str, dict[str, list[str]]] = {}
+        # SQL: {(system, schema, name): {column names}} for the R7 column check.
+        self._sql_columns: dict[tuple[str, str, str], set[str]] = {}
         # API: {system: {object name: fqn}}.
         self._api_names: dict[str, dict[str, str]] = {}
         # GSC-style contract metrics: {system: {metric fqns always returned}}.
@@ -83,6 +85,9 @@ class SnapshotInventory:
                     self._sql_relations.setdefault(system, {}).setdefault(
                         name, []
                     ).append(schema)
+                    self._sql_columns[(system, schema, name)] = {
+                        c["name"] for c in obj.get("columns", [])
+                    }
                 elif kind in API_KINDS:
                     self._api_names.setdefault(system, {})[name] = fqn
                     if kind == "api_metric":
@@ -95,6 +100,24 @@ class SnapshotInventory:
 
     def unresolved(self, fqns: Iterable[str]) -> list[str]:
         return [f for f in fqns if f not in self.fqns]
+
+    def sql_relation_columns(
+        self, system: str, schema: str | None, name: str
+    ) -> tuple[str, frozenset[str] | None]:
+        """Resolve a SQL relation to ``(fqn, columns)`` for the R7 column check.
+
+        Columns are ``None`` when the relation does not resolve (unknown or
+        an ambiguous unqualified name) — the caller treats that as
+        "cannot check", never as "no columns".
+        """
+        if schema is not None:
+            cols = self._sql_columns.get((system, schema, name))
+            return object_fqn(system, schema, name), (frozenset(cols) if cols is not None else None)
+        schemas = self._sql_relations.get(system, {}).get(name, [])
+        if len(schemas) == 1:
+            cols = self._sql_columns.get((system, schemas[0], name))
+            return object_fqn(system, schemas[0], name), (frozenset(cols) if cols is not None else None)
+        return f"{system}.{name}", None
 
     # -- scored-set extraction (R4) ---------------------------------------
 
