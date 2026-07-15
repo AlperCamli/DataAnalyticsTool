@@ -798,7 +798,7 @@ The number of units viewed in promotion for a single item. This metric counts th
 | Namespace | standard |
 | Data type | TYPE_FLOAT |
 | Schema hash | `sha256:0443be5d7bb60fd74fc4f2efcf6edaeb90122a57e0329532d7fcc14ea813f918` |
-| Purpose | — |
+| Purpose | Count of all key events (conversions) across every event marked as a key event. |
 
 The count of key events. Marking an event as a key event affects reports from time of creation. It doesn't change historic data. You can mark any event as key in Google Analytics, and some events (such as `first_open` or `purchase`) are marked as key events by default.
 
@@ -811,7 +811,7 @@ The count of key events. Marking an event as a key event affects reports from ti
 | Namespace | standard |
 | Data type | TYPE_INTEGER |
 | Schema hash | `sha256:26363f49b73d33a4a7bd2dc473ecb82a397c69f7f3cc49e822a0e80cf7141898` |
-| Purpose | — |
+| Purpose | Count of the purchase key event specifically. |
 
 The count of a specific key event.
 
