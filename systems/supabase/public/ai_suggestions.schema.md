@@ -21,21 +21,21 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `ai_run_id` | `uuid` | false | — | — |
-| 3 | `user_id` | `uuid` | false | — | — |
-| 4 | `tailored_cv_id` | `uuid` | true | — | — |
-| 5 | `block_id` | `text` | true | — | — |
-| 6 | `action_type` | `text` | false | — | — |
-| 7 | `before_content` | `jsonb` | true | — | — |
-| 8 | `suggested_content` | `jsonb` | false | — | — |
-| 9 | `option_group_key` | `text` | true | — | — |
-| 10 | `status` | `text` | false | `'pending'::text` | — |
-| 11 | `applied_at` | `timestamp with time zone` | true | — | — |
-| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 13 | `master_cv_id` | `uuid` | true | — | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `ai_run_id` | `uuid` | false | — | — | — |
+| 3 | `user_id` | `uuid` | false | — | — | — |
+| 4 | `tailored_cv_id` | `uuid` | true | — | — | — |
+| 5 | `block_id` | `text` | true | — | — | — |
+| 6 | `action_type` | `text` | false | — | — | — |
+| 7 | `before_content` | `jsonb` | true | — | — | — |
+| 8 | `suggested_content` | `jsonb` | false | — | — | — |
+| 9 | `option_group_key` | `text` | true | — | — | — |
+| 10 | `status` | `text` | false | `'pending'::text` | — | — |
+| 11 | `applied_at` | `timestamp with time zone` | true | — | — | — |
+| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 13 | `master_cv_id` | `uuid` | true | — | — | — |
 
 ## Keys & indexes
 

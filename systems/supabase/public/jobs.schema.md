@@ -21,22 +21,22 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `tailored_cv_id` | `uuid` | true | — | — |
-| 4 | `company_name` | `text` | false | — | — |
-| 5 | `job_title` | `text` | false | — | — |
-| 6 | `job_description` | `text` | false | — | — |
-| 7 | `job_posting_url` | `text` | true | — | — |
-| 8 | `location_text` | `text` | true | — | — |
-| 9 | `status` | `text` | false | `'saved'::text` | — |
-| 10 | `notes` | `text` | true | — | — |
-| 11 | `applied_at` | `timestamp with time zone` | true | — | — |
-| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 13 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
-| 14 | `cover_letter_id` | `uuid` | true | — | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal job id. |
+| 2 | `user_id` | `uuid` | false | — | — | Owning user who saved this job (FK to users.id). |
+| 3 | `tailored_cv_id` | `uuid` | true | — | — | Tailored CV currently associated with this job (FK to tailored_cvs.id). |
+| 4 | `company_name` | `text` | false | — | — | Company posting the job. |
+| 5 | `job_title` | `text` | false | — | — | Title of the role being applied to. |
+| 6 | `job_description` | `text` | false | — | — | Full job description text used for AI tailoring and analysis. |
+| 7 | `job_posting_url` | `text` | true | — | — | URL of the original posting, if known. |
+| 8 | `location_text` | `text` | true | — | — | Free-text location for the role. |
+| 9 | `status` | `text` | false | `'saved'::text` | — | Application pipeline stage; enum decoded in body. |
+| 10 | `notes` | `text` | true | — | — | User's free-form notes about this job. |
+| 11 | `applied_at` | `timestamp with time zone` | true | — | — | When the user marked the job as applied. |
+| 12 | `created_at` | `timestamp with time zone` | false | `now()` | — | When the job record was created. |
+| 13 | `updated_at` | `timestamp with time zone` | false | `now()` | — | When the job record was last updated. |
+| 14 | `cover_letter_id` | `uuid` | true | — | — | Cover letter currently associated with this job (FK to cover_letters.id). |
 
 ## Keys & indexes
 

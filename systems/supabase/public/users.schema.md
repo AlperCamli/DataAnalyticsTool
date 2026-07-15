@@ -21,18 +21,18 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `auth_user_id` | `uuid` | false | — | — |
-| 3 | `email` | `text` | false | — | — |
-| 4 | `full_name` | `text` | true | — | — |
-| 5 | `locale` | `text` | false | `'en'::text` | — |
-| 6 | `default_cv_language` | `text` | true | — | — |
-| 7 | `onboarding_completed` | `boolean` | false | `false` | — |
-| 8 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 9 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
-| 10 | `onboarding_state` | `jsonb` | false | `'{}'::jsonb` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal application user id; the FK target for every owned domain table. |
+| 2 | `auth_user_id` | `uuid` | false | — | — | The Supabase auth user that owns this profile (unique). |
+| 3 | `email` | `text` | false | — | — | Primary email for login and notifications (PII). |
+| 4 | `full_name` | `text` | true | — | — | Display name shown across the product (PII). |
+| 5 | `locale` | `text` | false | `'en'::text` | — | UI locale preference; enum decoded in body. |
+| 6 | `default_cv_language` | `text` | true | — | — | Language code used when seeding new CVs for this user. |
+| 7 | `onboarding_completed` | `boolean` | false | `false` | — | Legacy paywall flag: whether onboarding was finished. |
+| 8 | `created_at` | `timestamp with time zone` | false | `now()` | — | When the user record was created. |
+| 9 | `updated_at` | `timestamp with time zone` | false | `now()` | — | When the user record was last updated. |
+| 10 | `onboarding_state` | `jsonb` | false | `'{}'::jsonb` | — | Guided-onboarding progress as JSONB; structure in body. |
 
 ## Keys & indexes
 

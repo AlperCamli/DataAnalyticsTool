@@ -8,7 +8,12 @@
 #
 # Entry point:  python -m generator.validate <kb-root>
 # Covers: KB-1 front-matter schemas, KB §3 layout conformance,
-# KB-5 relative link/anchor resolution, faults/ absence.
+# KB-5 relative link/anchor resolution, faults/ absence; and — via the
+# accepted snapshots auto-discovered at .contextlayer/snapshots/ —
+# provenance cross-checks, KB-8 render consistency (machine files at
+# HEAD must byte-equal the render of latest accepted snapshot + HEAD
+# enrichment; enrichment PRs must include their implied re-renders),
+# and the KB-10 dangling-purpose-key warns (platform DECISIONS D-49).
 
 name: KB CI
 
@@ -30,7 +35,7 @@ jobs:
 
       - name: Install validation library (vendored wheel + pinned deps)
         run: |
-          python -m pip install --no-deps .github/vendor/contextlayer_snapshot-0.2.0-py3-none-any.whl
+          python -m pip install --no-deps .github/vendor/contextlayer_snapshot-0.3.0-py3-none-any.whl
           python -m pip install "jsonschema[format-nongpl]==4.26.0" "PyYAML==6.0.3" "jinja2==3.1.6"
 
       - name: Validate KB

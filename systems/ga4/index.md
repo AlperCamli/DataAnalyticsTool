@@ -12,13 +12,15 @@ status: machine
 
 System class: api · 466 objects across 3 groups.
 
+Notes: [_notes.md](_notes.md)
+
 ## Groups
 
-| Group | Kind | Objects | Machine doc | Human doc | Status |
-|---|---|---|---|---|---|
-| dimensions | api_dimension | 376 | [dimensions.schema.md](dimensions.schema.md) | — | — |
-| events | api_event | 1 | [events.schema.md](events.schema.md) | — | — |
-| metrics | api_metric | 89 | [metrics.schema.md](metrics.schema.md) | — | — |
+| Group | Kind | Objects | Machine doc | Human doc | Status | Purpose |
+|---|---|---|---|---|---|---|
+| dimensions | api_dimension | 376 | [dimensions.schema.md](dimensions.schema.md) | [dimensions.md](dimensions.md) | draft | Dimensions available for GA4 reporting on the jobspecificcv property — 375 Google-standard plus one custom (export_status). |
+| events | api_event | 1 | [events.schema.md](events.schema.md) | [events.md](events.md) | draft | GA4 events registered for the jobspecificcv property; purchase is the property's key event. |
+| metrics | api_metric | 89 | [metrics.schema.md](metrics.schema.md) | [metrics.md](metrics.md) | draft | GA4 metrics for the jobspecificcv property — all Google-standard; the key-event counts surface the purchase conversion. |
 
 ## Source properties
 

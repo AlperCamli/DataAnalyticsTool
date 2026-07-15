@@ -21,19 +21,19 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `tailored_cv_id` | `uuid` | true | — | — |
-| 4 | `file_id` | `uuid` | true | — | — |
-| 5 | `format` | `text` | false | — | — |
-| 6 | `status` | `text` | false | — | — |
-| 7 | `template_id` | `uuid` | true | — | — |
-| 8 | `error_message` | `text` | true | — | — |
-| 9 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 10 | `completed_at` | `timestamp with time zone` | true | — | — |
-| 11 | `master_cv_id` | `uuid` | true | — | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `tailored_cv_id` | `uuid` | true | — | — | — |
+| 4 | `file_id` | `uuid` | true | — | — | — |
+| 5 | `format` | `text` | false | — | — | — |
+| 6 | `status` | `text` | false | — | — | — |
+| 7 | `template_id` | `uuid` | true | — | — | — |
+| 8 | `error_message` | `text` | true | — | — | — |
+| 9 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 10 | `completed_at` | `timestamp with time zone` | true | — | — | — |
+| 11 | `master_cv_id` | `uuid` | true | — | — | — |
 
 ## Keys & indexes
 

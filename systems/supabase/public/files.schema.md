@@ -21,19 +21,19 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `file_type` | `text` | false | — | — |
-| 4 | `storage_bucket` | `text` | false | — | — |
-| 5 | `storage_path` | `text` | false | — | — |
-| 6 | `original_filename` | `text` | false | — | — |
-| 7 | `mime_type` | `text` | false | — | — |
-| 8 | `size_bytes` | `bigint` | false | — | — |
-| 9 | `checksum` | `text` | true | — | — |
-| 10 | `is_deleted` | `boolean` | false | `false` | — |
-| 11 | `created_at` | `timestamp with time zone` | false | `now()` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
+| 2 | `user_id` | `uuid` | false | — | — | — |
+| 3 | `file_type` | `text` | false | — | — | — |
+| 4 | `storage_bucket` | `text` | false | — | — | — |
+| 5 | `storage_path` | `text` | false | — | — | — |
+| 6 | `original_filename` | `text` | false | — | — | — |
+| 7 | `mime_type` | `text` | false | — | — | — |
+| 8 | `size_bytes` | `bigint` | false | — | — | — |
+| 9 | `checksum` | `text` | true | — | — | — |
+| 10 | `is_deleted` | `boolean` | false | `false` | — | — |
+| 11 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
 
 ## Keys & indexes
 

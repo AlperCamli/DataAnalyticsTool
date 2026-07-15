@@ -21,23 +21,23 @@ status: machine
 
 ## Columns
 
-| # | Column | Type | Nullable | Default | Description |
-|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — |
-| 2 | `user_id` | `uuid` | false | — | — |
-| 3 | `master_cv_id` | `uuid` | false | — | — |
-| 4 | `job_id` | `uuid` | true | — | — |
-| 5 | `title` | `text` | false | — | — |
-| 6 | `language` | `text` | false | — | — |
-| 7 | `template_id` | `uuid` | true | — | — |
-| 8 | `current_content` | `jsonb` | false | — | — |
-| 9 | `status` | `text` | false | `'draft'::text` | — |
-| 10 | `ai_generation_status` | `text` | true | — | — |
-| 11 | `last_exported_at` | `timestamp with time zone` | true | — | — |
-| 12 | `is_deleted` | `boolean` | false | `false` | — |
-| 13 | `created_at` | `timestamp with time zone` | false | `now()` | — |
-| 14 | `updated_at` | `timestamp with time zone` | false | `now()` | — |
-| 15 | `module_type` | `text` | false | `'standard'::text` | — |
+| # | Column | Type | Nullable | Default | Description | Purpose |
+|---|---|---|---|---|---|---|
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal tailored CV id. |
+| 2 | `user_id` | `uuid` | false | — | — | Owning user (FK to users.id). |
+| 3 | `master_cv_id` | `uuid` | false | — | — | Master CV this variant was derived from (FK to master_cvs.id). |
+| 4 | `job_id` | `uuid` | true | — | — | Job this variant targets, if linked (FK to jobs.id). |
+| 5 | `title` | `text` | false | — | — | Human-readable title for the tailored CV. |
+| 6 | `language` | `text` | false | — | — | Language code of the tailored CV content. |
+| 7 | `template_id` | `uuid` | true | — | — | Template selected for previewing this CV (FK to cv_templates.id). |
+| 8 | `current_content` | `jsonb` | false | — | — | Canonical structured CV content as JSONB; structure in master_cvs body. |
+| 9 | `status` | `text` | false | `'draft'::text` | — | Lifecycle stage of the tailored CV; enum decoded in body. |
+| 10 | `ai_generation_status` | `text` | true | — | — | Status of the most recent AI tailoring run; enum decoded in body. |
+| 11 | `last_exported_at` | `timestamp with time zone` | true | — | — | When this tailored CV was most recently exported. |
+| 12 | `is_deleted` | `boolean` | false | `false` | — | Soft-delete flag hiding this CV from active lists. |
+| 13 | `created_at` | `timestamp with time zone` | false | `now()` | — | When the tailored CV was created. |
+| 14 | `updated_at` | `timestamp with time zone` | false | `now()` | — | When the tailored CV was last updated. |
+| 15 | `module_type` | `text` | false | `'standard'::text` | — | CV module family (standard vs medical); enum decoded in master_cvs body. |
 
 ## Keys & indexes
 
