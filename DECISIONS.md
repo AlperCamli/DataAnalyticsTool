@@ -1187,3 +1187,215 @@ fence otherwise unchanged):**
 - **Follow-up (out of fence here):** the onboarding playbook/skill
   should gain the "commit the accepted snapshot to
   `.contextlayer/snapshots/`" step; next onboarding session.
+
+---
+
+# DECISIONS — task 1.8 (customer entity drafts, `AlperCamli/DataAnalyticsTool`)
+
+The CP-1 exit deliverable: the cross-system routing hubs (`entities/`) an
+agent uses to decide which system answers which question and how sources
+join. Landed as KB PR #13 (`enrich/entities` → `main`, single commit
+`4e47c55`, merge `ccda04f`; +251, 3 files, 0 deletions).
+
+## D-50 — Task 1.8 landed / CP-1 closed
+
+Three entity docs merged: `entities/user.md`, `entities/page.md`,
+`entities/conversion.md`. **All three landed `status: draft`,
+`last_verified: null` — no mapping was customer-certified to verified.**
+The grounded mappings are cited but uncertified: user's
+`supabase.public.users` (system-of-record, ✅ structural); page's
+`gsc.standard.page` ↔ `ga4.standard.pagePath` path blend (✅ config-derived
+— single-domain property `sc-domain:example-estate.com` makes host constant);
+conversion's `ga4.standard.purchase`/`keyEvents:purchase` +
+`supabase.public.subscriptions` (✅ config + structural). Certification
+(draft → verified) is the customer step; it did not run — it is blocked on
+five open customer questions (D-52), so every doc stays draft **by design,
+not omission**. Review/merge trail: PR #13 opened and merged by `AlperCamli`
+(all playbook roles collapse to one in the pilot, D-47) ~3.5 min apart
+(11:34→11:37Z), **no reviews, no review comments, never draft-flipped** —
+the steward's by-hand merge (D-47's review-flow rehearsal), with no
+independent review recorded. Local KB CI on the vendored 0.3.0 wheel: 0
+errors, 0 warnings. CP-1 closes here.
+
+## D-51 — OB-2 evidence (skill-drafted / customer-certified path)
+
+OB-2's stated default — "skill-drafted, R5-paired review, always
+customer-certified" — was exercised in its **draft half only**; PR #13 is
+one register-grade data point toward the "after 2–3 onboardings" revisit.
+What the trail evidences:
+
+- **Draft quality is high under strictest grounding.** Every mapping is
+  cited to a machine-doc FQN, an app-code config fact, or a customer doc, or
+  it is **dropped and recorded** under Ungrounded gaps — nothing
+  plausible-but-unattested was asserted (the bodies say so in-line: "Do not
+  invent one"). The join keys that do not exist were dropped, not guessed:
+  user's Supabase↔GA4 identity (app sends no GA4 `user_id`; User-ID off; no
+  `userId`/`clientId` dimension) and conversion's `purchase`↔`subscriptions`
+  row join (no shared key). CI clean, 0/0.
+- **Gaps flagged honestly, not papered over.** Four ungrounded gaps carry
+  explicit unblock notes; five customer questions are posed. This is the
+  strong signal: the drafting discipline surfaces its own limits.
+- **Mappings needing correction at review: none surfaced — but the trail
+  cannot evidence review efficacy.** No reviewer comments, no inline
+  corrections, and R5-paired review is untestable in the pilot because R1–R5
+  all map to `AlperCamli` (D-47). So this point evidences *drafting*
+  discipline, not *review* catch-rate, and does not exercise the
+  customer-certification half at all (everything draft). Weigh accordingly
+  when OB-2 is revisited — it is data point 1 of the promised 2–3.
+
+## D-52 — Standing gaps at CP-1 close (future ledger / enrich items)
+
+Recorded so they are visible items, not silent losses (the D-18 pattern).
+From PR #13's Ungrounded gaps + open questions:
+
+1. **user — Supabase↔GA4 identity.** No cross-system user key exists.
+   Unblock: enable GA4 User-ID + app sends `user_id = users.id`, or a
+   customer statement that a server-side/GTM identity stitch exists (cited).
+2. **page — Supabase leg.** No DB-backed public page found. Unblock: a table
+   carrying a slug/URL column, or customer confirmation that all public
+   pages are frontend-static (closes it as "intentionally no Supabase leg").
+3. **conversion — GA4 `purchase` population.** App emits `payment_completed`,
+   not `purchase`; whether `purchase` is produced server-side / GTM /
+   provider is unknown. Unblock: customer states the population path + its
+   `transaction_id`.
+4. **conversion — `purchase`↔subscription row join.** No shared key; only
+   aggregate reconciliation supported. Unblock: a shared identifier
+   (`checkout_session_id`/`transaction_id` on the subscription row, or GA4
+   `user_id = users.id`).
+
+Five open customer questions gate the draft→verified certification of these
+docs (GA4 User-ID config; `purchase` population + `transaction_id`;
+static-vs-DB public pages; whether `subscriptions` is the only
+paid-conversion record / a per-payment ledger exists; any Supabase column
+holding a GA4/Stripe checkout id). Answers certify the grounded mappings and
+may close gaps 1–4.
+
+**Validation-coverage gap (flagged by PR #13, HARD RULE 4; confirmed in
+platform code).** The vendored 0.3.0 validator does not schema-validate
+entity front-matter — `generator/schemas.py` registers no `entity`
+`doc_class` (only machine-object/group/index + human-object/group/notes)
+and `generator/validate.py` skips every path outside `systems/`
+(`parts[0] != "systems"`), so entity docs receive KB-5 link/anchor checks
+only; `depends_on ⊇ maps[].object` resolution is deferred to the sync engine
+(CP-3). The three docs' `maps`/`depends_on` were verified by hand this
+session, not by CI — a real gap to close when CP-3 lands the server-side
+resolver, or sooner via an additive validator amendment (register-item
+candidate).
+
+---
+
+# DECISIONS — task 2 (CP-2 benchmark harness, `benchmark/`)
+
+The CP-2 deliverable: the CVBuilder golden-benchmark harness — suite
+ingestion/validation, the three R1 context conditions, a dual-backend
+journey runner + journey-prompt v1, R4-R6 scoring, the R7 CI integrity gate,
+and the R8/R9 results+report machinery. Landed on branch
+`task/2-benchmark-harness` (commits `d2a81b1`..`cec5347`). Full platform
+suite green (87 benchmark tests + the existing suite).
+
+## D-53 — Suite is execution-deferred; correctness scores same-run goldens
+
+`benchmark-seed-v0.yaml` shipped `execution_status: draft-pending-execution`:
+every `verified_result` is a stub (checksum/rows `null`) because the
+authoring session had no source access. Resolved **without mutating the
+fenced seed**:
+
+- The CP-2 exit criterion "all packet checksums reproduce" has nothing to
+  reproduce. Reinterpreted: the canonical-CSV checksum machinery is proven by
+  unit test (`tests/test_benchmark_canonical.py`), and byte-stable cases
+  produce a reproducible checksum **in-run**, recorded in the results
+  artifact — never written back to the seed.
+- R5 correctness executes each golden leg **once per run** (`GoldenCache`) and
+  compares agent-vs-same-run-golden for every case (the R5 unstable path,
+  applied uniformly since no frozen results exist). Byte-stable cases use
+  checksum identity; time-unstable cases use shape + tolerant values (exact
+  ints, 1e-9 rel floats; live-mutation integer drift flagged, not absorbed).
+- Env reconciliation: this machine has live Supabase/GA4/GSC (verified
+  2026-07-13, `connections.md`), so the seed's deferral is resolvable — the
+  handoff resume-checklist executions run inside the harness.
+
+## D-54 — R3 amended: dual runner backends; baseline runs Backend B **[user ruling, applied]**
+
+The runner supports two backends behind one interface; `JourneyRecord` is the
+backend-agnostic contract (carries `backend` id + `cost_usd`; backend joins
+the R8 key). **Backend A** (`api`) = direct Anthropic tool loop. **Backend B**
+(`claude-code`) = headless Claude Code (`claude -p`, `--output-format
+stream-json`, pinned `--model`, fresh session per journey; executors as a
+local MCP server `benchmark.mcp_executor`; `--allowedTools` = `Read` +
+`mcp__executor` only, no Bash; credentials scoped to the MCP server's
+`.mcp.json` env, never in the agent process). Comparability: one backend per
+baseline; cross-backend comparison out of scope. Auth via the VS Code
+extension's Claude Code binary (`CLAUDE_CODE_EXECPATH`, subscription); the
+CLI is not otherwise on PATH here.
+
+- **Subscription-policy note (ruling):** subscription coverage of `claude -p`
+  is current Anthropic policy under review (support.claude.com article
+  15036540). Re-verify before future large runs.
+
+## D-55 — Smoke evidence; full baseline held
+
+Smoke (RB-01 × 3 conditions × 1 rep, Backend B, `claude-opus-4-8`) —
+`results/smoke-2026-07-15/`:
+
+- Selection precision/recall **1.0** and first-try executable **1.0** in all
+  three conditions; **cost $0.85** total (~$0.28/journey); **GA4 executions
+  0** (RB-01 is Supabase-only); golden executed once.
+- Correctness **0** everywhere — a *real grain/window divergence*, not a header
+  artifact: golden is daily-over-June (6 rows); agents chose weekly/monthly
+  all-time (11 / 4 rows). That resolution lives in the seed
+  `resolution_notes` (customer intent), not in schema or either KB, so no
+  condition can hit it from context alone. The benchmark is cleanly
+  separating "found the right source" (perfect) from "matched the customer's
+  exact intent" (context-bounded).
+- The full 90-journey baseline is **held pending go** (user, this session).
+  Launch: `python -m benchmark.baseline --backend claude-code --reps 3 --out
+  results/ --workdir <scratch> --enriched-kb ~/Desktop/kb`.
+
+## D-56 — Evidence pointers (MC-1 / FM-2 / SP-4·FM-4)
+
+From the suite + the smoke report (`results/smoke-2026-07-15/report.md`):
+
+- **MC-1** (retrieval recall, lexical default — no embeddings): per-journey
+  selection-recall table, labeled MC-1. Smoke: recall 1.0 on RB-01 in all
+  conditions.
+- **FM-2** (visual registry): **5/5** registry kinds
+  (`table|line|bar|scorecard|pivot`) exercised + one `other:funnel` (RB-07).
+- **SP-4 / FM-4** (recurring/parameterized): **10/10** cases `recurring:
+  true`; the suite exercises the re-journey path SP-4 leaves as the v1 answer.
+
+## D-57 — Suite-format change proposals (back to the author; seed unchanged)
+
+Surfaced by building/scoring; none applied to the fenced seed (JC — format
+changes are proposals, never silent mutations):
+
+1. **Execution-deferred `verified_result`.** The stubs mean the suite cannot
+   self-check numeric correctness in CI. Proposal: on the next live session,
+   fill `verified_result` (rows/checksum/executed_at) for the byte-stable
+   cases (RB-01/06/07) so those gain a frozen anchor; unstable cases stay
+   same-run.
+2. **API contract-object precision (RB-05).** A golden-faithful agent scores
+   selection precision **0.556** on RB-05 because GSC returns 4 metrics by
+   contract and the GA4 golden pulls `activeUsers`, while `expected_objects`
+   lists a curated subset. Options: (a) list every contract-returned object in
+   `expected_objects`, or (b) score API contract metrics as a bundle.
+   Reported per-case meanwhile; recommend (a), consistent with R4's "score
+   what the executed statement actually pulls."
+3. **Customer resolution not in context.** Cases whose golden encodes an
+   arbitrary customer grain/window (RB-01) make correctness near-unhittable
+   from context. Not a defect; recorded so the baseline's low-correctness rows
+   read as *intent-gap*, not *competence-gap*. The full run should show the
+   enriched KB's edge on cases where the resolution *is* KB-encoded
+   (conventions `dataState`, entity join rules) vs. arbitrary like RB-01.
+
+## D-58 — CP-2 exit-criteria status
+
+**Met:** suite validates; the R7 CI integrity gate is green on the current
+suite and the staged-defect (a golden referencing a dropped column against a
+doctored snapshot) fails it; the machine-kb builder is deterministic
+(byte-identical rebuilds); scoring covers R4-R6 with the four required
+fixture paths (perfect / wrong-table / unexecutable / unstable); the
+dual-backend runner + prompt v1 exist; results/report machinery emits the
+R9 report; GA4-count and golden-execution caching are observable (smoke:
+GA4=0, golden executed once). **Pending:** the 90-journey baseline (held by
+the user) and its committed results — the harness + the three-journey smoke
+prove the path end-to-end.
