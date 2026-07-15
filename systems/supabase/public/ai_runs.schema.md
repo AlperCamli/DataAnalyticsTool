@@ -23,25 +23,25 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
-| 2 | `user_id` | `uuid` | false | — | — | — |
-| 3 | `master_cv_id` | `uuid` | true | — | — | — |
-| 4 | `tailored_cv_id` | `uuid` | true | — | — | — |
-| 5 | `job_id` | `uuid` | true | — | — | — |
-| 6 | `flow_type` | `text` | false | — | — | — |
-| 7 | `provider` | `text` | false | — | — | — |
-| 8 | `model_name` | `text` | false | — | — | — |
-| 9 | `status` | `text` | false | — | — | — |
-| 10 | `input_payload` | `jsonb` | false | — | — | — |
-| 11 | `output_payload` | `jsonb` | true | — | — | — |
-| 12 | `error_message` | `text` | true | — | — | — |
-| 13 | `started_at` | `timestamp with time zone` | false | `now()` | — | — |
-| 14 | `completed_at` | `timestamp with time zone` | true | — | — | — |
-| 15 | `progress_stage` | `text` | false | `'queued'::text` | — | — |
-| 16 | `debug_payload` | `jsonb` | true | — | — | — |
-| 17 | `input_tokens` | `integer` | true | — | — | — |
-| 18 | `output_tokens` | `integer` | true | — | — | — |
-| 19 | `total_tokens` | `integer` | true | — | — | — |
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal AI-run id. |
+| 2 | `user_id` | `uuid` | false | — | — | User on whose behalf the run executed (FK to users.id). |
+| 3 | `master_cv_id` | `uuid` | true | — | — | Master CV the run operated on, if applicable (FK). |
+| 4 | `tailored_cv_id` | `uuid` | true | — | — | Tailored CV the run operated on, if applicable (FK). |
+| 5 | `job_id` | `uuid` | true | — | — | Job context the run operated against, if applicable (FK). |
+| 6 | `flow_type` | `text` | false | — | — | Logical AI flow being executed; enum in body. |
+| 7 | `provider` | `text` | false | — | — | AI provider that executed this run (e.g. gemini). |
+| 8 | `model_name` | `text` | false | — | — | Specific model used for this run. |
+| 9 | `status` | `text` | false | — | — | Terminal status of the run; enum in body. |
+| 10 | `input_payload` | `jsonb` | false | — | — | Structured input passed to the model as JSONB; structure in body. |
+| 11 | `output_payload` | `jsonb` | true | — | — | Structured output returned by the model as JSONB; structure in body. |
+| 12 | `error_message` | `text` | true | — | — | Error description recorded when the run fails. |
+| 13 | `started_at` | `timestamp with time zone` | false | `now()` | — | When the run began. |
+| 14 | `completed_at` | `timestamp with time zone` | true | — | — | When the run reached a terminal state. |
+| 15 | `progress_stage` | `text` | false | `'queued'::text` | — | Granular execution stage; enum in body. |
+| 16 | `debug_payload` | `jsonb` | true | — | — | Optional diagnostic payload as JSONB; structure in body. |
+| 17 | `input_tokens` | `integer` | true | — | — | Input tokens consumed by the model. |
+| 18 | `output_tokens` | `integer` | true | — | — | Output tokens produced by the model. |
+| 19 | `total_tokens` | `integer` | true | — | — | Total tokens billed for this run. |
 
 ## Keys & indexes
 

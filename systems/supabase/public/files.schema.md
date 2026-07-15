@@ -23,17 +23,17 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | — |
-| 2 | `user_id` | `uuid` | false | — | — | — |
-| 3 | `file_type` | `text` | false | — | — | — |
-| 4 | `storage_bucket` | `text` | false | — | — | — |
-| 5 | `storage_path` | `text` | false | — | — | — |
-| 6 | `original_filename` | `text` | false | — | — | — |
-| 7 | `mime_type` | `text` | false | — | — | — |
-| 8 | `size_bytes` | `bigint` | false | — | — | — |
-| 9 | `checksum` | `text` | true | — | — | — |
-| 10 | `is_deleted` | `boolean` | false | `false` | — | — |
-| 11 | `created_at` | `timestamp with time zone` | false | `now()` | — | — |
+| 1 | `id` | `uuid` | false | `gen_random_uuid()` | — | Internal file id (referenced by imports and exports). |
+| 2 | `user_id` | `uuid` | false | — | — | Owning user this file belongs to (FK to users.id). |
+| 3 | `file_type` | `text` | false | — | — | Domain role of the file; enum in body. |
+| 4 | `storage_bucket` | `text` | false | — | — | Name of the storage bucket that holds the object. |
+| 5 | `storage_path` | `text` | false | — | — | Path of the object inside the storage bucket. |
+| 6 | `original_filename` | `text` | false | — | — | Original filename supplied at upload time. |
+| 7 | `mime_type` | `text` | false | — | — | MIME type of the stored object. |
+| 8 | `size_bytes` | `bigint` | false | — | — | Size of the stored object in bytes. |
+| 9 | `checksum` | `text` | true | — | — | Optional content checksum for duplicate/corruption detection. |
+| 10 | `is_deleted` | `boolean` | false | `false` | — | Soft-delete flag hiding the file from active listings. |
+| 11 | `created_at` | `timestamp with time zone` | false | `now()` | — | When this file record was created. |
 
 ## Keys & indexes
 
