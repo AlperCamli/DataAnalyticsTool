@@ -48,6 +48,11 @@ class Case:
     notes: str
     origin: str
     verified_by: str
+    byte_stable: bool = False  # set from handoff.byte_stable_cases at load
+
+    @property
+    def is_byte_stable(self) -> bool:
+        return self.byte_stable
 
     @property
     def verified_status(self) -> str:
@@ -92,8 +97,9 @@ def _golden(entry: Mapping[str, Any]) -> Golden:
     )
 
 
-def _case(entry: Mapping[str, Any]) -> Case:
+def _case(entry: Mapping[str, Any], byte_stable_ids: frozenset[str]) -> Case:
     return Case(
+        byte_stable=entry["id"] in byte_stable_ids,
         id=entry["id"],
         request=entry["request"],
         systems=tuple(entry.get("systems", [])),
@@ -131,14 +137,15 @@ def _suite_from_raw(raw: Mapping[str, Any], *, source_path: Path | None) -> Suit
         if isinstance(handoff, Mapping)
         else []
     )
+    byte_stable_ids = frozenset(byte_stable)
     return Suite(
         suite_version=str(raw.get("suite_version", "")),
         customer=raw.get("customer", ""),
         authored_at=str(raw.get("authored_at", "")),
         execution_status=raw.get("execution_status", ""),
-        cases=tuple(_case(c) for c in raw.get("cases", [])),
+        cases=tuple(_case(c, byte_stable_ids) for c in raw.get("cases", [])),
         handoff=handoff,
-        byte_stable_ids=frozenset(byte_stable),
+        byte_stable_ids=byte_stable_ids,
         source_path=source_path,
         raw=raw,
     )
