@@ -50,6 +50,9 @@ class JourneyRecord:
     condition: str
     rep: int
     model_id: str
+    backend: str = "api"        # "api" (Backend A) | "claude-code" (Backend B); joins R8 key
+    cost_usd: float | None = None  # total_cost_usd from the CLI (Backend B)
+    session_id: str = ""
     started_at: str = ""
     ended_at: str = ""
     context_reads: list[str] = field(default_factory=list)   # resolved refs (files / discovery)
@@ -105,6 +108,9 @@ class JourneyRecord:
             condition=data["condition"],
             rep=data["rep"],
             model_id=data["model_id"],
+            backend=data.get("backend", "api"),
+            cost_usd=data.get("cost_usd"),
+            session_id=data.get("session_id", ""),
             started_at=data.get("started_at", ""),
             ended_at=data.get("ended_at", ""),
             context_reads=list(data.get("context_reads", [])),
