@@ -1477,3 +1477,47 @@ code or spec changed.
   reads (built-in `Read`) are not observable from the executor log, so
   `context_reads` under-reports in kb conditions (scoring never consumes
   `context_reads`; unaffected).
+
+## D-60 — Readiness verification; no-kb property-grounding gap found & fixed
+
+Pre-baseline readiness pass (user request). One **correction to D-59's
+deliverable-3 verdict**, one empirical verification, both recorded:
+
+- **Gap (fixed):** GA4/GSC *object* metadata was exposed to no-kb via
+  `discover_schema`, but the **property identity was not** —
+  `snapshot_discovery` omitted the snapshot's `source_properties`, and no
+  case request names `properties/000000000` / `sc-domain:example-estate.com`.
+  A no-kb agent therefore could not ground the `property` argument of
+  `run_ga4_report`/`run_gsc_query` at all: RB-03/04/05/08 were unwinnable
+  under no-kb *by construction* (never caught because the D-55 smoke ran
+  only supabase-only RB-01). Both KB conditions document the ids (verified
+  in the built trees). Fix: the discovery payload now includes
+  `source_properties` (`runner.snapshot_discovery`; harness change, uniform
+  across Backend A/B/manual — faithful to the introspection stand-in, since
+  the service account inherently knows which property it queries). Test
+  pins it. Condition trees were **not** rebuilt (the fix is code-side;
+  KB trees are unaffected).
+- **Interactive MCP path verified end-to-end, empirically** (the "will
+  Claude Code run the mcp?" question): (1) pinned binary (VS Code
+  extension, Claude Code 2.1.211) supports every OPERATOR.md flag;
+  (2) stdio JSON-RPC probe against `benchmark.mcp_executor`, launched
+  exactly as `.mcp.json` does from the real `no-kb` dir: handshake OK, all
+  6 tools listed, `discover_schema(ga4)` returns the property id,
+  `list_context` correctly returns no documents in no-kb, both calls land
+  in the journey log; (3) one minimal one-shot `claude -p` probe with the
+  exact operator flags (`--model claude-opus-4-8 --mcp-config .mcp.json
+  --strict-mcp-config --allowedTools "Read,mcp__executor" …`) from the real
+  condition dir: `${VAR}` expansion proven (journey log materialized at the
+  exported `BENCHMARK_JOURNEY_LOG` path with the `list_context` entry), the
+  agent called the tool and echoed `{"documents": []}`, and the
+  `claude-opus-4-8` pin launches on this subscription. Nuance: *without*
+  `--mcp-config`, project `.mcp.json` servers sit "pending approval" until
+  approved once interactively — the operator command bypasses this via
+  `--strict-mcp-config` (verified), and OPERATOR.md covers the
+  approve-if-asked case.
+- **Starter prompts:** five pre-rendered paste files (per user request:
+  a handful, not the full 30) at `<runs>/prompts/{case}.{condition}.prompt.md`
+  — RB-01 in all three conditions, RB-04 no-kb (exercises the new property
+  grounding), RB-05 enriched-kb (three-system blend). Convenience copies of
+  `manual prompt` output; the versioned template stays the source of truth.
+  Remaining journeys render on demand.

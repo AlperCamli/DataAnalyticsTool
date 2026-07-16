@@ -104,6 +104,20 @@ def test_prompt_unknown_case_fails_cleanly(suite):
         render_manual_prompt(suite, "RB-99", "no-kb")
 
 
+def test_no_kb_discovery_grounds_the_property_ids():
+    """A no-kb agent must be able to ground run_ga4_report/run_gsc_query's
+    `property` argument from discovery alone (the requests never name it)."""
+    from benchmark.runner import snapshot_discovery
+    from benchmark.validate import DEFAULT_SNAPSHOTS, load_snapshots
+
+    snaps = load_snapshots(DEFAULT_SNAPSHOTS)
+    ga4 = json.loads(snapshot_discovery(snaps, "ga4"))
+    assert ga4["source_properties"]["property_id"].startswith("properties/")
+    gsc = json.loads(snapshot_discovery(snaps, "gsc"))
+    assert any(p.get("site_url", "").startswith("sc-domain:")
+               for p in gsc["source_properties"]["properties"])
+
+
 # --------------------------------------------------------------------------
 # conditions (deliverable 1)
 

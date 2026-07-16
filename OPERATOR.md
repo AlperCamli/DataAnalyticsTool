@@ -59,6 +59,8 @@ the record filename convention is **`{case_id}.{condition}.{rep}.jsonl`**.
 cd ~/Desktop/cp2-runs/no-kb                                    # the condition dir
 export BENCHMARK_JOURNEY_LOG="$PWD/records/RB-01.no-kb.0.jsonl"   # RE-EXPORT EVERY JOURNEY
 "$REPO/.venv/bin/python" -m benchmark.manual prompt --case RB-01 --condition no-kb | pbcopy
+# (five pre-rendered starters live at ~/Desktop/cp2-runs/prompts/*.prompt.md —
+#  `pbcopy < ../prompts/RB-01.no-kb.prompt.md` is equivalent for those)
 
 "$CLAUDE" --model claude-opus-4-8 \
   --mcp-config .mcp.json --strict-mcp-config \

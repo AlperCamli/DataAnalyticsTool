@@ -123,6 +123,11 @@ def snapshot_discovery(snapshots: Sequence[Mapping[str, Any]], system: str) -> s
     if snap is None:
         return json.dumps({"error": f"unknown system {system}"})
     out: dict[str, Any] = {"system": system, "system_class": snap.get("system_class")}
+    # Introspection knows which property/site it is querying (the service
+    # account lists it); without this, no-kb agents cannot ground the
+    # `property` argument of the GA4/GSC executors at all.
+    if snap.get("source_properties"):
+        out["source_properties"] = snap["source_properties"]
     if snap.get("system_class") == "sql":
         out["tables"] = [
             {"schema": o["schema"], "name": o["name"], "kind": o["kind"],
