@@ -61,7 +61,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 
 | ID | Item | Status | Default | Revisit trigger |
 |---|---|---|---|---|
-| MC-1 | Semantic search (embeddings) | Open | Lexical + aliases only (M-6) | Benchmark shows recall is the accuracy bottleneck |
+| MC-1 | Semantic search (embeddings) | Open | Lexical + aliases only (M-6) | Baseline v1 (CP-5 per D-62; was CP-2) shows recall is the accuracy bottleneck |
 | MC-2 | Validation-token TTL | Open | 300 s | Revalidation friction in long sessions |
 | MC-3 | Very-wide-table responses | Open | Full columns; paginate at 300 with continuation | First SAP-scale estate |
 | MC-4 | Rate limits per profile class vs per identity | Open | Global per-identity defaults, profile-overridable | Pilot telemetry |
@@ -74,7 +74,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | SP-1 | Execute-without-resolution heuristic as class-1 detector | Open | Shipped log-only, disabled by default (ledger §5) | Pilot false-positive rate |
 | SP-2 | Benchmark-mode waiver leakage | Open | Waiver keyed to server-known `benchmark` profile; AS-8 guards | Security review (expected non-issue) |
 | SP-3 | Enrich batch size | Open | 10 objects | Steward PR-review ergonomics |
-| SP-4 | Saved/parameterized report re-runs | Open | Out of v1; re-run = re-journey | Recurring-report demand; pairs with FM-4 |
+| SP-4 | Saved/parameterized report re-runs | Open | Out of v1; re-run = re-journey | Recurring-report demand; pairs with FM-4 (packet demand evidence recorded at CP-2, D-56; baseline numbers land at CP-5, D-62) |
 | SP-5 | Skill language localization | Open | Session-language naturally; checkpoints language-neutral | First non-English pilot |
 
 ## Lineage & artifact formats (FM-1..5)
@@ -82,9 +82,9 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | ID | Item | Status | Default | Revisit trigger |
 |---|---|---|---|---|
 | FM-1 | Column-level contamination walks | Open | Node-level flagging; mappings served as context | Node flags too noisy on wide models |
-| FM-2 | Visual registry growth | Open | Five kinds; additions via register | First inexpressible customer report |
+| FM-2 | Visual registry growth | Open | Five kinds; additions via register | First inexpressible customer report (registry verdict from packet fields recorded at CP-2, D-56; re-tested at CP-5 baseline v1, D-62) |
 | FM-3 | Artifact retention | Open | All published revisions kept (audit evidence); unpersisted drafts pruned | Storage telemetry |
-| FM-4 | Parameterized artifacts | Open | Defaults-only filters | Pairs with SP-4 |
+| FM-4 | Parameterized artifacts | Open | Defaults-only filters | Pairs with SP-4 (see SP-4's D-62 re-point) |
 | FM-5 | Cross-system source-to-source lineage edges | Open | Entity-doc knowledge only; blends edge into the report node from each side | Reconciliation needs source-to-source edges |
 | FM-6 | Column-mapping expressiveness gaps: per-column derivation kind (sketched: optional additive `columns[].via`) + filter/join/group-key column dependencies (no `to` to attach to) | Open | Not expressible in v1; edge-level `operation` + relation-level edge carry the facts; walks node-level (FM-1) | FM-1's revisit — decide both together (entered via formats spec §7, task 1.9) |
 

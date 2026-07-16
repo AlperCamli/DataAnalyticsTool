@@ -116,18 +116,26 @@ Independent tracks after CP-1; both must land before CP-4. Staff as two tracks i
 |---|---|
 | 2.1 | Convert seed requests into benchmark cases: request → analyst-verified SQL/result (customer-supplied SQL where it exists, verified otherwise) |
 | 2.2 | Scoring harness: runs the suite against a KB commit, scores accuracy, records per-journey **retrieval recall** (the MC-1 metric) |
-| 2.3 | Baseline runs: with the KB and without (live-discovery baseline) — the product's value claim in one number |
+| 2.3 | Baseline runs: with the KB and without (live-discovery baseline) — the product's value claim in one number — **moved to CP-5 per ruling D-62 (2026-07-16)** |
 | 2.4 | Wire benchmark into CI keyed to KB commits (regression detection from here on) |
 | 2.5 | FM-2 check: map each seed report onto the five visual kinds; any inexpressible report goes to the register *now*, before phase-8 work builds against the registry |
 | 2.6 | SP-4/FM-4 scan: flag seed requests that are obviously recurring; record demand evidence |
 
-**Exit gate:**
-1. Baseline accuracy measured and recorded, with and without KB.
-2. Retrieval recall emitted per journey by the harness.
-3. Benchmark runs in CI against KB HEAD.
-4. FM-2 verdict recorded (registry survives, or an addition is registered).
+**Exit gate** *(amended per ruling D-62, 2026-07-16 — baseline deferred to CP-5)*:
+1. Suite validates and all packet checksums reproduce.
+2. CI integrity check green; the staged-defect test fires.
+3. Harness proven end-to-end on the manual journeys: records ingested from
+   files, scored per R4–R6, both scoring paths exercised (checksum and
+   same-run golden re-execution), ≥1 journey per condition.
+4. FM-2 and SP-4/FM-4 evidence emitted from packet fields.
+5. Results artifact committed, keyed per R8 with transport "manual-interactive".
 
-**Register items due:** MC-1 trigger becomes a metric; FM-2 tested; SP-4/FM-4 demand evidence noted.
+*Removed by D-62: the 90-journey (and reduced 30-journey) baseline. The full
+three-condition baseline is CP-5's added exit criterion (§6.1); its journeys
+are transport-proof only until then, and no quantitative KB-value claims go
+into customer or demo material before baseline v1 lands.*
+
+**Register items due:** MC-1's metric lands with CP-5 baseline v1 (D-62); FM-2 tested; SP-4/FM-4 demand evidence noted.
 
 **Risks live here:** GA4 quota exhaustion under repeated benchmark iteration (mitigate: cache `runReport` results per session; document quota behavior in `conventions.md`).
 
@@ -209,7 +217,7 @@ Independent after CP-4: skills depend on the MCP surface, the gateway depends on
 |---|---|
 | 5.1 | Package `enrich` (production version: ledger-item scope priority, `CL-Resolves` trailers, batch size per the SP-3 answer from 1.7) |
 | 5.2 | Package `review-sync` (drift-PR summarization + risk ranking; flags PRs whose body references FQNs missing from `depends_on`) |
-| 5.3 | Package `benchmark` (runs the golden suite; benchmark-mode waiver keyed to the server-known profile per SP-2 ruling) |
+| 5.3 | Package `benchmark` (runs the golden suite; benchmark-mode waiver keyed to the server-known profile per SP-2 ruling); its first complete run is **baseline v1** (D-62) |
 | 5.4 | Package `report` (the guided J3 journey for business users, honest-failure behavior at every gap) |
 | 5.5 | Skill acceptance CI per skill-spec conformance; checkpoints enforced server-side where the spec says enforced |
 | 5.6 | Run one full growth cycle on real data: triage a real ledger issue → enrich batch → PRs with `CL-Resolves` → merge → issue auto-resolves → benchmark re-run |
@@ -218,6 +226,7 @@ Independent after CP-4: skills depend on the MCP surface, the gateway depends on
 1. All four skills pass acceptance CI.
 2. The 5.6 growth cycle demonstrated: a ledger issue resolved by a merged enrichment PR, loop closure attributed via trailer (L-5), occurrence counter behavior verified (L-4 reopen on recurrence, tested).
 3. Benchmark accuracy measurably improves after the enrichment batch (the platform plan's phase-6 criterion, scaled to customer 2's estate).
+4. *(added per ruling D-62, 2026-07-16)* **Baseline v1**: the benchmark skill's first complete three-condition run (10 cases × 3 conditions × ≥1 rep), executed via the skill in Claude Code under subscription/Agent SDK credit. MC-1's recall table and the enriched-vs-machine-vs-none comparison land here. Must inherit R2 fairness, R4–R6 scoring, R8 keying, and the harness's file-ingestion path unchanged.
 
 **Register items due:** none new; SP-3's phase-1 answer is now baked into the packaged skill.
 

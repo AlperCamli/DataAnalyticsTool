@@ -1558,3 +1558,54 @@ headless smoke, recorded here as the authoritative correction).
   added). Grain divergence across conditions (weekly in no-kb vs monthly
   in both KB conditions for RB-01) recorded as an early signal for the
   baseline read.
+
+## D-62 — CP-2 gate amendment: baseline deferred to CP-5 **[user ruling, applied]**
+
+Ruling (2026-07-16), applied to the plan (§4.1 exit gate, §6.1 exit gate),
+the open-decisions register (MC-1, SP-4/FM-4, FM-2 re-pointed), and the
+committed smoke artifact (non-citability README sidecar):
+
+1. **CP-2 exit criteria amended.** Retained: suite validates + packet
+   checksums reproduce; R7 CI integrity green + staged-defect fires;
+   harness proven end-to-end on the manual journeys (file-ingested records,
+   R4–R6 scoring, both scoring paths, ≥1 journey per condition); FM-2 and
+   SP-4/FM-4 evidence from packet fields; results artifact committed keyed
+   per R8 with the manual-interactive transport. Removed: the 90-journey
+   (and reduced 30-journey) baseline.
+2. **The 5 journeys are transport-proof, not baseline numbers** — never
+   comparable with future runs (prompt variant differs, n too small), never
+   citable as with/without-KB evidence.
+   `results/manual-20260716T103207Z/README.md` carries the notice.
+3. **Baseline v1 moves to CP-5** as an added exit criterion of the packaged
+   benchmark skill (10 × 3 × ≥1 rep, via the skill in Claude Code under
+   subscription/Agent SDK credit); MC-1's recall table and the
+   enriched-vs-machine-vs-none comparison land there. Until then: **no
+   quantitative KB-value claims in any customer or demo material.**
+4. **Watch-points recorded as binding for CP-5:** the CP-5 prompt inherits
+   R2 fairness, R4–R6 scoring, R8 keying, and the harness's file-ingestion
+   path unchanged; CP-6's JP-2 latency measurement unaffected.
+5. **Coverage check (ruling pt 5) — nothing unexercised; no additional
+   journeys required.** Evidence mapping against the retained gate, all
+   from committed artifacts:
+   - Suite validates (D-58); checksum-reproduction stands on D-53's
+     recorded reading (execution-deferred stubs → machinery unit-proven;
+     in-run checksums recorded: 13 draft checksums + golden checksums in
+     the artifact).
+   - R7 green + staged-defect fires (D-58).
+   - End-to-end: 5 file-ingested records scored R4–R6; **both** correctness
+     paths exercised (RB-01 = checksum mode ×3 conditions; RB-04/RB-05 =
+     structural same-run-golden mode); **≥1 journey per condition**
+     (no-kb 2, machine-kb 1, enriched-kb 2) (D-61).
+   - FM-2 + SP-4/FM-4 sections emitted from packet fields (D-56; present
+     in the committed report).
+   - Artifact committed keyed per R8: `results/manual-20260716T103207Z`,
+     backend key `claude-code-interactive` — read as the ruling's
+     "manual-interactive" transport key (the kit's R8 id for
+     operator-driven runs). D-61's honesty caveat stands: these five ran
+     headless over the identical executor/record/scoring path; the
+     interactive session leg itself was verified by the D-60 probe. If the
+     gate is read to require journeys through literal interactive sessions,
+     the minimum top-up is 3 (one per condition) — flagged, not assumed.
+
+**CP-2 status: exit criteria met under the amended gate** (supersedes
+D-58's "Pending: the 90-journey baseline").
