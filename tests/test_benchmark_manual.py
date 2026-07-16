@@ -247,6 +247,21 @@ def test_score_rejects_filename_content_mismatch(tmp_path, isolated_home, kb_rep
                  "--no-golden"]) == 1
 
 
+def test_finder_ds_store_is_not_drift(tmp_path, isolated_home, kb_repo):
+    """macOS drops .DS_Store into browsed dirs; it must trip neither the
+    drift guard nor the stray-file invariant."""
+    root, rc = _build(tmp_path, kb_repo)
+    assert rc == 0
+    (root / "machine-kb" / "kb" / ".DS_Store").write_bytes(b"\x00finder")
+    (root / "no-kb" / ".DS_Store").write_bytes(b"\x00finder")
+    log = root / "no-kb" / "records" / "RB-01.no-kb.0.jsonl"
+    log.write_text("\n".join(_journey_log_lines()) + "\n", encoding="utf-8")
+    assert main(["ingest", "--root", str(root)]) == 0
+    assert main(["preflight", "--root", str(root)]) == 0
+    assert main(["score", "--root", str(root), "--out", str(tmp_path / "r"),
+                 "--no-golden"]) == 0
+
+
 def test_score_refuses_condition_drift(tmp_path, isolated_home, kb_repo):
     root, rc = _build(tmp_path, kb_repo)
     assert rc == 0

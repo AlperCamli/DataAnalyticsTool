@@ -1521,3 +1521,40 @@ deliverable-3 verdict**, one empirical verification, both recorded:
   grounding), RB-05 enriched-kb (three-system blend). Convenience copies of
   `manual prompt` output; the versioned template stays the source of truth.
   Remaining journeys render on demand.
+
+## D-61 — Five-journey parallel smoke through the manual kit (headless transport)
+
+The five starter journeys ran in parallel (user request; five Sonnet-driven
+subagents as orchestrators only — each journey itself was one fresh
+headless `claude -p` on the pinned `claude-opus-4-8`, exact operator flags,
+real condition dirs, live data). **Not baseline records** — headless, not
+the interactive protocol — so after scoring they were moved out of the
+grid to `<runs>/smoke-2026-07-16/`; the baseline grid is back to 0/90.
+Scored artifact committed: `results/manual-20260716T103207Z/` (sanitized;
+its `run.notes` transport line is inaccurate for this one run — these were
+headless smoke, recorded here as the authoritative correction).
+
+- **All 5 journeys clean**: correct per-condition tool shapes (no-kb:
+  discover→exec→finish; kb: list_context→exec→finish), `finish` in every
+  log, zero failed executions, zero secret leakage, all within one 600s
+  invocation. **First live GA4 traffic through the harness**: 6 agent
+  `runReport`s (RB-04) + 3 more in RB-05, all ok; 2 GA4 golden legs
+  executed. The D-60 property fix held in real journeys (no-kb agents
+  grounded `properties/000000000` from discovery).
+- **Scores** (1 rep, 3 cases): first-try executable **1.00 everywhere**;
+  RB-01 selection P/R **1.00 in all three conditions**; correctness 0
+  across the board — every zero traces to a *known suite gap*, not the
+  harness: RB-01 grain intent-gap (agents chose weekly/monthly vs the
+  golden's daily-June; D-57 §3), RB-05 contract-object precision 0.44
+  (D-57 §2), and one **new suite finding → RB-04's GA4 golden returns
+  (5 cols, 0 rows) live** — the property has Google Signals/demographics
+  disabled, so `userAgeBracket`/`userGender` yield no rows; the golden is
+  correctness-unwinnable until Signals is enabled or the golden is
+  re-scoped (proposal for the seed author, D-57-style; the agent itself
+  detected and disclosed the empty demographics).
+- **Kit fix from the run:** Finder dropped `.DS_Store` into the KB trees
+  and tripped the drift guard (proving it fires); `.DS_Store`/`._*` are OS
+  noise, now ignored by `_tree_ref` and the stray-file invariant (test
+  added). Grain divergence across conditions (weekly in no-kb vs monthly
+  in both KB conditions for RB-01) recorded as an early signal for the
+  baseline read.

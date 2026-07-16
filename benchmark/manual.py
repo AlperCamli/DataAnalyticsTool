@@ -90,11 +90,20 @@ def _iso(ts: float) -> str:
     return _dt.datetime.fromtimestamp(ts, tz=_dt.timezone.utc).isoformat()
 
 
+def _os_noise(p: Path) -> bool:
+    """Finder droppings — not condition content, ignored by every check.
+
+    macOS writes .DS_Store/._* into any browsed directory; a multi-day
+    manual campaign would otherwise trip the drift guard spuriously.
+    """
+    return p.name == ".DS_Store" or p.name.startswith("._")
+
+
 def _tree_ref(root: Path) -> str:
     """conditions.py's manifest hash over an arbitrary tree (integrity ref)."""
     manifest = {
         p.relative_to(root).as_posix(): _sha256_file(p)
-        for p in sorted(root.rglob("*")) if p.is_file()
+        for p in sorted(root.rglob("*")) if p.is_file() and not _os_noise(p)
     }
     return _manifest_ref(manifest)
 
@@ -149,7 +158,7 @@ def _verify_condition_dir(cdir: Path, *, expect_kb: bool) -> list[str]:
     problems: list[str] = []
     allowed_top = {".mcp.json", "records"} | ({"kb"} if expect_kb else set())
     for entry in sorted(cdir.iterdir()):
-        if entry.name not in allowed_top:
+        if entry.name not in allowed_top and not _os_noise(entry):
             problems.append(f"stray entry in {cdir.name}/: {entry.name}")
     if expect_kb and not (cdir / "kb").is_dir():
         problems.append(f"{cdir.name}/kb missing")
