@@ -12,3 +12,9 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+
+# manual-baseline condition dirs must never live in-repo (CLAUDE.md
+# ancestor-walk contamination — see OPERATOR.md); this is belt-and-braces
+# in case one is created here anyway. Journey records carry customer rows.
+/runs/
+/cp2-runs/

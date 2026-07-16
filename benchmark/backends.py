@@ -291,24 +291,13 @@ def _is_rate_limited(meta: Mapping[str, Any], stderr: str) -> bool:
     return False
 
 
-def _assemble_record(case, condition, rep, model_id, backend, started,
-                     journey_log: Path, stdout: str) -> JourneyRecord:
-    meta = _parse_stream(stdout)
-    usage = meta.get("usage", {}) or {}
-    record = JourneyRecord(
-        case_id=case.id, condition=condition.name, rep=rep, model_id=model_id,
-        backend=backend, cost_usd=meta.get("total_cost_usd"),
-        session_id=meta.get("session_id", ""), started_at=started, ended_at=_now(),
-        notes=str(meta.get("result", "")),
-        tokens={
-            "input_tokens": usage.get("input_tokens", 0),
-            "output_tokens": usage.get("output_tokens", 0),
-            "cache_read_input_tokens": usage.get("cache_read_input_tokens", 0),
-            "cache_creation_input_tokens": usage.get("cache_creation_input_tokens", 0),
-        },
-        tool_calls=meta.get("num_turns", 0),
-    )
-    record.context_reads = list(meta.get("_reads", []))
+def apply_journey_log(record: JourneyRecord, journey_log: Path) -> None:
+    """Fold the MCP executor's JSONL log into a record (drafts, reads, finish).
+
+    The log is the authoritative execution trace for any transport that runs
+    ``benchmark.mcp_executor`` — Backend B and the manual-baseline kit both
+    assemble records through here. Marks final drafts.
+    """
     seq = 0
     for line in journey_log.read_text("utf-8").splitlines() if journey_log.is_file() else []:
         line = line.strip()
@@ -328,9 +317,32 @@ def _assemble_record(case, condition, rep, model_id, backend, started,
                                        executed=True, outcome=outcome))
         elif kind == "discover":
             record.context_reads.append(f"discover:{entry.get('system')}")
+        elif kind == "list_context":
+            record.context_reads.append("list_context")
         elif kind == "finish":
             record.declared_objects = list(entry.get("objects", []))
             if not record.notes:
                 record.notes = entry.get("answer", "")
     _mark_final(record)
+
+
+def _assemble_record(case, condition, rep, model_id, backend, started,
+                     journey_log: Path, stdout: str) -> JourneyRecord:
+    meta = _parse_stream(stdout)
+    usage = meta.get("usage", {}) or {}
+    record = JourneyRecord(
+        case_id=case.id, condition=condition.name, rep=rep, model_id=model_id,
+        backend=backend, cost_usd=meta.get("total_cost_usd"),
+        session_id=meta.get("session_id", ""), started_at=started, ended_at=_now(),
+        notes=str(meta.get("result", "")),
+        tokens={
+            "input_tokens": usage.get("input_tokens", 0),
+            "output_tokens": usage.get("output_tokens", 0),
+            "cache_read_input_tokens": usage.get("cache_read_input_tokens", 0),
+            "cache_creation_input_tokens": usage.get("cache_creation_input_tokens", 0),
+        },
+        tool_calls=meta.get("num_turns", 0),
+    )
+    record.context_reads = list(meta.get("_reads", []))
+    apply_journey_log(record, journey_log)
     return record

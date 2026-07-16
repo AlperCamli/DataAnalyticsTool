@@ -1399,3 +1399,81 @@ R9 report; GA4-count and golden-execution caching are observable (smoke:
 GA4=0, golden executed once). **Pending:** the 90-journey baseline (held by
 the user) and its committed results — the harness + the three-journey smoke
 prove the path end-to-end.
+
+## D-59 — Manual-baseline kit (operator-driven CP-2 baseline) **[user ruling, applied]**
+
+The CP-2 baseline runs as human-operated *interactive* Claude Code sessions
+(one fresh session per journey, subscription-billed), executing through
+`benchmark.mcp_executor`. Transport-ruling points applied: **(2)
+record-to-file** — the executor's JSONL log is the authoritative trace,
+ingested into R3 records; **(3) executor guardrails** — unchanged
+(SELECT-only SQL, one API call per tool call, credentials only in the MCP
+server env); **(5) isolation** — three sibling condition dirs containing
+only an identical `.mcp.json` + `records/` (+ `./kb` for the KB
+conditions); **(7) per-journey autonomy** — one paste, no steering, one
+sanctioned verbatim nudge max (OPERATOR.md §4). Kit = `benchmark/manual.py`
+(+ Makefile targets), dev tooling under the dev-runner boundary; no product
+code or spec changed.
+
+- **Condition dirs live OUTSIDE the repo** (default `~/Desktop/cp2-runs`,
+  `make conditions RUNS=…` to override), *deviating from the task's literal
+  `runs/` path*: interactive Claude Code auto-loads `CLAUDE.md` from the
+  cwd's directory ancestry, so an in-repo `runs/` would inject the repo's
+  `CLAUDE.md` into every journey — violating the same ruling's isolation
+  point. The builder/preflight hard-refuses roots with a `CLAUDE.md`
+  ancestor, a `~/.claude/CLAUDE.md`, or stray/nested-memory files;
+  `/runs/`+`/cp2-runs/` are git-ignored as belt-and-braces.
+- **The identical `.mcp.json`** stays secret-free and per-journey-variable
+  via Claude Code `${VAR}` env expansion: `${SUPABASE_DSN}` (operator
+  sources `.secrets/env.sh`), `${BENCHMARK_JOURNEY_LOG}` (exported per
+  journey; no default, so a forgotten export fails the server loudly
+  instead of silently dropping the record), `${PWD}/kb` (context root;
+  resolves to nothing in no-kb).
+- **Backend id `claude-code-interactive`** joins the R8 key — a distinct
+  key from headless `claude-code`, so manual and headless results never
+  silently merge (R9: one backend per baseline). Fields the transport
+  cannot measure are null (tokens, cost, session id); `tool_calls` counts
+  executor calls, not turns; timestamps come from the log file's
+  birth/mtime. Scoring is the unchanged harness: R4 selection stays
+  parser-extracted from executed statements (test pins that a bogus
+  self-declared list cannot leak into the scored set), R5 same-run goldens
+  (executed once per scoring run), R6 first-try. `score` refuses to run if
+  any condition tree or `.mcp.json` drifted from `manifest.json`
+  (machine-kb tree ref, enriched tree sha, mcp sha).
+- **Manifest** (`<runs>/manifest.json`) records kb_refs (machine-kb content
+  ref `sha256:400e359d…`, enriched pinned at kb_ref
+  `ccda04f499fc056ef324b51454d009ad7f8ea0fb`), snapshot_refs, prompt file
+  sha, model pin (`claude-opus-4-8`), repo ref. Rebuild reproduces the
+  machine-kb ref byte-identically (verified).
+- **No-kb discovery path verified (kit deliverable 3):** the SQL guard and
+  the live read-only executor both pass `information_schema` SELECTs
+  (live: 17 public tables, matching the snapshot); GA4 metadata **is
+  exposed** to no-kb via `mcp__executor__discover_schema("ga4")` — 466
+  objects (376 dimensions / 89 metrics / 1 event) served from the pinned
+  snapshot, the sanctioned introspection stand-in (runner.snapshot_discovery,
+  D-53-deterministic); GSC likewise (6 dimensions / 4 fixed metrics, plus
+  `run_gsc_query`'s fixed return schema). The live GA4 `getMetadata`
+  endpoint is *not* exposed (`run_ga4_report` is runReport-only) and is not
+  needed for no-kb — recorded so nobody expects live metadata.
+- **Prompt:** `journey-prompt-v1-manual.md` is a v1 *variant* (version
+  string stays `v1`; variant filename recorded in run notes). Deltas are
+  transport wording only: `mcp__executor__*` names, KB reads via built-in
+  `Read` (the server has no `read_context`; v1's kb-variant named a
+  nonexistent tool for this transport), `run_sql(statement)` (v1 wrote
+  `run_sql(system, statement)` — matches no executor surface; flagged), and
+  one added tool-surface-pinning Rules bullet (Backend B equivalent).
+  **Leak flags (recorded, not changed — R2 intact):** the shared Finishing
+  example FQNs name *real* estate objects — `supabase.public.users` exists
+  (17-table estate) and `ga4.standard.keyEvents:purchase` is the live key
+  event — pre-seeding two real ids into every condition including no-kb.
+  Condition-neutral (identical text in all three, and no-kb gets the full
+  schema via discover_schema anyway) but a v2 prompt should use
+  non-estate example ids. No KB *structure* (paths, doc layout) leaks into
+  any condition; each kb variant describes only its own condition's KB.
+- `backends.py` refactor: the JSONL→record fold extracted as
+  `apply_journey_log()` (shared by Backend B and `ingest`); Backend B now
+  also records `list_context` calls in `context_reads` (was silently
+  dropped). Interactive-transport limitation recorded: kb-condition *file*
+  reads (built-in `Read`) are not observable from the executor log, so
+  `context_reads` under-reports in kb conditions (scoring never consumes
+  `context_reads`; unaffected).
