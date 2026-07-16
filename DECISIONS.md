@@ -1187,3 +1187,131 @@ fence otherwise unchanged):**
 - **Follow-up (out of fence here):** the onboarding playbook/skill
   should gain the "commit the accepted snapshot to
   `.contextlayer/snapshots/`" step; next onboarding session.
+
+## D-63 — CP-3a core bootstrap: job API + queue + runner (implementation decisions)
+
+**Numbering note:** D-50..D-62 are allocated on the unmerged
+`task/2-benchmark-harness` branch (CP-2 work); this entry takes D-63 to
+avoid collision at merge.
+
+Scope: the CP-3a pre-rulings (A1 stack, B1 protocol scope, C1 no-ports,
+D1 thin Python runner, E1 ops schema) executed as issued. Everything
+below is an implementation decision *under* those rulings, or a flagged
+deferral. Fence note: `specs/sync-orchestrator-spec.md` was present but
+**untracked** at task start; it is not committed by this task's PR —
+it needs its own spec commit (its only consumer here is the `runs`
+table shape, §5.11).
+
+**C1 wrapper added (flagged per the ruling):**
+
+- `snapshot/accept.py` — the J-6 delivery gate as a CLI:
+  `python -m snapshot.accept BODY.json [--key result] [--out FILE]`.
+  Composes the existing `validate_snapshot` (schema + S-1 + C-4 hash
+  recomputation) and the §6 canonical serialization exactly as
+  `connectors.sdk.emission` builds it; zero new validation or
+  canonicalization logic. Emits a one-line JSON verdict (+ metadata,
+  sha256, canonical-body sha256) and writes the canonical bytes the
+  core stores verbatim.
+
+**Byte-fidelity transport design (the load-bearing one):** the runner
+splices the SDK's canonical snapshot bytes verbatim into the §6.4
+complete body; the core parses JSON for `lease_token` only and hands
+the **raw request bytes** to the Python gate (`--key result`), storing
+the gate's canonical output. JavaScript never re-serializes snapshot
+JSON anywhere on the path, so accepted snapshots are byte-identical to
+local CLI harness output (verified live: supabase/ga4/gsc canonical
+bodies hash-equal across transport vs. direct CLI pulls; envelopes
+equal modulo `captured_at`, which is per-run by §6/D-1). "Byte-identical
+to the CLI harness" in the exit criterion is read exactly so.
+
+**Protocol/queue decisions:**
+
+- **Claim declaration `types` field (additive, §9):** runners declare,
+  per connector, the job types they can execute
+  (`{"name","version","types":["snapshot"]}`); the core skips
+  non-declared types. Absent field = no filter (older clients).
+- **Follower absorption on requeue:** when a leased/running batch job
+  must requeue (retryable failure or lease expiry) while a §8 follower
+  is already queued, the follower is deleted and its trigger history
+  merges into the retrying job (entries marked `merged_from`). Both
+  rows describe identical work (snapshots are absolute states);
+  absorption preserves attempt count and backoff so persistent failures
+  still dead-letter instead of resetting via the follower. The spec's
+  state machine does not cover this corner; recorded here rather than
+  invented silently as spec text.
+- **Deadline enforcement is lease-derived:** heartbeats never extend a
+  lease past `started_at + deadline_s`; past the deadline the lease
+  lapses and the standard expiry path (requeue/dead-letter) applies. No
+  separate deadline reaper.
+- **Cancel of a non-running job:** `cancel` on `queued` is immediate;
+  on `leased/running` it sets `cancel_requested` (runner acks per
+  JC-7); a requeue/defer of a cancel-requested job terminalizes to
+  `cancelled` instead of retrying.
+- **Non-snapshot completes** (registered-but-unimplemented §4.2 types)
+  store `result` inline on the job row; no validation pipeline until
+  their capability consumers exist.
+- **Interactive `deadline_s` default = 120 s fixed** — normatively it
+  derives from the gateway guardrail, which doesn't exist until CP-6.
+
+**Runner (D1) decisions:**
+
+- **Credential injection convention:** manifest credential key → the
+  connector's shipped env-indirection config field
+  (`dsn → dsn_env`, `service_account → credentials_env`). The runner
+  resolves `env://NAME` refs (process-env or env-file resolver behind
+  the `CredentialResolver` seam), holds each value in a job-scoped
+  environment variable, passes only the variable name in config, and
+  deletes it after the job. Connectors and their config schemas are
+  byte-unchanged.
+- **Secret scrubbing (§7 defense in depth):** resolved values are
+  string-replaced with `[REDACTED]` in any outgoing error envelope.
+  JC-8 canary test drives a real postgres live job whose DSN password
+  is a canary and asserts absence across protocol traffic, core+runner
+  logs, and every ops row.
+- **Cancellation abandons the work thread:** Python can't preempt a
+  blocking introspection; on cancel/lease-loss the runner detaches the
+  worker (daemon thread), reports within one heartbeat interval, and
+  discards any late outcome — safe by J-7 (read-only, idempotent).
+
+**Ops surface decisions (scope-fenced):**
+
+- Enqueue/cancel/read endpoints (`POST /v1/jobs`, `GET /v1/jobs[/:id]`,
+  `POST /v1/jobs/:id/cancel`, `GET /v1/snapshots*`,
+  `GET /v1/health-events`) authenticate with the same per-runner bearer
+  token set — no second auth system before SSO (CP-4). Producers are
+  core-internal per J-1; these endpoints are the operator path (the
+  exit criterion's "one command" is `node dist/cli.js enqueue --wait`).
+- Tokens: `CORE_RUNNER_TOKENS="runner-id=token,…"`; binding a token to
+  a `runner_id` is enforced at claim.
+
+**Stack choices under A1:** fastify 5 + pg 8 + semver 7 (range matching
+for `version_constraint`); vitest 2 + fast-check 3 for tests; ULID and
+the migrations runner (numbered .sql, sha256-checksummed,
+advisory-locked) hand-rolled rather than added as dependencies; config
+is env-only. Core image carries a minimal python3 venv
+(jsonschema only) + the `snapshot/` package for the delivery gate.
+
+**Compose demo shape:** the stack's Postgres also hosts a `cl_demo`
+database seeded from `fixtures/supabase-customer.sql`, so the postgres
+connector exercises **live** mode in-stack with a
+credential-reference-resolved DSN; ddl-file mode is unavailable inside
+the runner container (it spins Docker containers) and stays a local-CLI
+concern. Live mode against the example estate is a git-ignored overlay
+(`deploy/compose.live.yml` + `.secrets/runner.env` +
+`.secrets/core-live/*.json`).
+
+**Conformance status (job spec §10):** JC-1..JC-9 implemented and green
+(JC-2/JC-9 also as fast-check properties; JC-4/JC-8 with real runner
+processes — SIGKILL mid-job → second-replica reclaim → canonical body
+hash-equal to the CLI harness). **Deferred: JC-10** (interactive result
+relay to a blocked producer — no producer exists until the CP-6
+gateway; the interactive lane itself is implemented) and the §8
+interactive per-system concurrency limits (same reason: the limits come
+from execution policy the gateway owns).
+
+**Exit-criteria evidence (2026-07-16, this machine):** compose demo
+2/2 systems accepted; live overlay 3/3 (supabase 17, ga4 466, gsc 10
+objects) accepted with J-6 validation and canonical-body hashes equal
+to direct CLI pulls; dedupe, kill-reclaim, and staged-invalid →
+dead-letter+health all asserted in the committed suites (TS 28 tests,
+Python 359).
