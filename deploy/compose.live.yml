@@ -1,0 +1,15 @@
+# Live-mode overlay (env-gated; this machine only). Adds the pilot
+# estate's credentials to the runner as its env-file vault and mounts
+# the live job specs into the core for `make stack-live`. Both paths
+# live under .secrets/ (git-ignored, JC-8): see .secrets/connections.md
+# for how to populate them; committed shapes are in deploy/jobs/live-example/.
+#
+#   docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d --build
+
+services:
+  core:
+    volumes:
+      - ./.secrets/core-live:/app/jobs/live:ro
+  runner:
+    env_file:
+      - ./.secrets/runner.env

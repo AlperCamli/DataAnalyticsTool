@@ -1,0 +1,71 @@
+# Local dev stack (CP-3a ruling A1): core + Postgres + one runner.
+#
+#   docker compose up -d --build
+#   make stack-demo        # enqueue the no-credentials demo jobs
+#
+# Live mode against configured external sources adds the git-ignored overlay:
+#   docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d
+#   make stack-live
+#
+# One token, bound to the one local runner (J-8); override via
+# CL_RUNNER_TOKEN in the shell environment.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: contextlayer
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres-init:/docker-entrypoint-initdb.d:ro
+      - ./fixtures/supabase-customer.sql:/seed/supabase-customer.sql:ro
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  core:
+    build:
+      context: .
+      dockerfile: core/Dockerfile
+    environment:
+      CORE_DATABASE_URL: postgres://postgres:contextlayer@postgres:5432/cl_ops
+      CORE_RUNNER_TOKENS: runner-local=${CL_RUNNER_TOKEN:-dev-runner-token}
+      CORE_MIGRATE_ON_START: "1"
+      # for `node dist/cli.js enqueue` runs inside the container
+      CORE_URL: http://127.0.0.1:8100
+      CORE_TOKEN: ${CL_RUNNER_TOKEN:-dev-runner-token}
+    ports:
+      - "127.0.0.1:8100:8100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8100/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  runner:
+    build:
+      context: .
+      dockerfile: deploy/runner.Dockerfile
+    environment:
+      CL_RUNNER_TOKEN: ${CL_RUNNER_TOKEN:-dev-runner-token}
+      # demo source for the postgres connector (live mode, in-stack)
+      DEMO_DSN: postgres://postgres:contextlayer@postgres:5432/cl_demo
+    volumes:
+      - ./deploy/runner-config.yaml:/etc/contextlayer/runner.yaml:ro
+    depends_on:
+      core:
+        condition: service_healthy
+
+volumes:
+  pgdata:

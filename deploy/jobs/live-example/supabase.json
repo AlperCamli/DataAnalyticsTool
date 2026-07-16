@@ -1,0 +1,10 @@
+{
+  "type": "snapshot",
+  "system": "supabase",
+  "connector": { "name": "postgres", "version_constraint": ">=0.1 <0.2" },
+  "payload": {
+    "config": { "system": "supabase", "mode": "live" },
+    "credentials": [{ "ref": "env://SUPABASE_DSN", "key": "dsn" }]
+  },
+  "trigger": { "kind": "manual", "detail": "live" }
+}

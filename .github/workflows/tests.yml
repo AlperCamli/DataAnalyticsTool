@@ -23,3 +23,35 @@ jobs:
         run: docker pull --quiet postgres:16
       - name: Run full suite (incl. postgres containers)
         run: python -m pytest -v
+
+  # CP-3a core service (TypeScript): protocol conformance, queue property
+  # tests, and e2e against real Python runner processes. Needs the Python
+  # package installed — the J-6 delivery gate and the e2e runner are the
+  # actual Python implementations (ruling C1), never TS ports.
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python package (delivery gate + e2e runner)
+        run: python -m pip install -e '.[dev]' -c constraints.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: core/package-lock.json
+      - name: Install
+        run: npm ci
+        working-directory: core
+      - name: Build (typecheck)
+        run: npm run build
+        working-directory: core
+      - name: Pre-pull postgres image
+        run: docker pull --quiet postgres:16
+      - name: Core suite
+        run: npm test
+        working-directory: core
+        env:
+          CORE_TEST_PYTHON: python

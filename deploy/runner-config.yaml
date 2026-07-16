@@ -1,0 +1,16 @@
+# Runner config for the Compose stack (connectors.sdk.service).
+# Credential references resolve against the runner's process
+# environment (compose `environment:`/`env_file:` — the local-dev vault
+# per ruling D1).
+core_url: http://core:8100
+token_env: CL_RUNNER_TOKEN
+runner_id: runner-local
+connectors:
+  - connectors.static_demo.connector:connector
+  - connectors.postgres.connector:connector
+  - connectors.ga4.connector:connector
+  - connectors.gsc.connector:connector
+classes: [batch]
+wait_s: 25
+resolver:
+  kind: process-env

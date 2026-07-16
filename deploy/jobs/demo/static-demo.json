@@ -1,0 +1,7 @@
+{
+  "type": "snapshot",
+  "system": "demo",
+  "connector": { "name": "static-demo", "version_constraint": ">=0.1 <0.2" },
+  "payload": { "config": { "system": "demo", "mode": "ddl-file" } },
+  "trigger": { "kind": "manual", "detail": "compose-demo" }
+}
