@@ -1,0 +1,30 @@
+{
+  "name": "@contextlayer/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Context Layer core service: job API + Postgres-backed queue (job protocol v1)",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "migrate": "node dist/cli.js migrate",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "pg": "^8.13.0",
+    "semver": "^7.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "@types/semver": "^7.5.0",
+    "fast-check": "^3.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  }
+}

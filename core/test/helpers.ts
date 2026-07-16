@@ -1,0 +1,177 @@
+/**
+ * Per-file test rig: every startCore() call provisions a fresh database
+ * on the shared server, migrates it, and boots a real listening core
+ * with fast-test timing defaults. The delivery gate runs the actual
+ * Python wrapper (repo venv locally, `python` in CI via
+ * CORE_TEST_PYTHON), so J-6 in tests is the real J-6.
+ */
+
+import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import pg from "pg";
+import { inject } from "vitest";
+import type { CoreConfig } from "../src/config.js";
+import { createPool, JobsNotifier } from "../src/db.js";
+import { migrate } from "../src/migrate.js";
+import { buildServer } from "../src/server.js";
+
+export const TEST_TOKEN = "test-token";
+
+export function repoRoot(): string {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+}
+
+export function pythonPath(): string {
+  if (process.env.CORE_TEST_PYTHON) return process.env.CORE_TEST_PYTHON;
+  const venv = path.join(repoRoot(), ".venv", "bin", "python");
+  return existsSync(venv) ? venv : "python3";
+}
+
+export function adminUrl(): string {
+  return process.env.CORE_TEST_DATABASE_URL ?? inject("adminUrl");
+}
+
+function withDatabase(url: string, database: string): string {
+  const parsed = new URL(url);
+  parsed.pathname = `/${database}`;
+  return parsed.toString();
+}
+
+export async function createTestDb(): Promise<{ url: string; drop: () => Promise<void> }> {
+  const name = `cl_test_${randomBytes(6).toString("hex")}`;
+  const admin = new pg.Client({ connectionString: adminUrl() });
+  await admin.connect();
+  await admin.query(`CREATE DATABASE ${name}`);
+  await admin.end();
+  return {
+    url: withDatabase(adminUrl(), name),
+    drop: async () => {
+      const client = new pg.Client({ connectionString: adminUrl() });
+      await client.connect();
+      await client.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(() => {});
+      await client.end();
+    },
+  };
+}
+
+export interface TestCore {
+  cfg: CoreConfig;
+  pool: pg.Pool;
+  baseUrl: string;
+  logs: () => string;
+  stop: () => Promise<void>;
+}
+
+export async function startCore(overrides: Partial<CoreConfig> = {}): Promise<TestCore> {
+  const { url, drop } = await createTestDb();
+  const pool = createPool(url);
+  await migrate(pool, path.resolve(repoRoot(), "core", "migrations"));
+  const cfg: CoreConfig = {
+    databaseUrl: url,
+    host: "127.0.0.1",
+    port: 0,
+    runnerTokens: new Map<string, string | null>([
+      [TEST_TOKEN, null],
+      ["bound-token", "runner-bound"],
+    ]),
+    validatorCmd: [pythonPath(), "-m", "snapshot.accept"],
+    migrateOnStart: false,
+    logLevel: "info",
+    leaseTtlS: 60,
+    retryBaseS: 0, // immediate requeue: tests assert states, not delays
+    retryCapS: 1,
+    maxDeferrals: 20,
+    resultMaxBytes: 64 * 1024 * 1024,
+    snapshotRetention: 10,
+    sweepIntervalMs: 60_000, // tests sweep explicitly unless overridden
+    claimPollMs: 50,
+    ...overrides,
+  };
+  const notifier = new JobsNotifier(url);
+  await notifier.start();
+  let captured = "";
+  const stream = { write: (chunk: string) => (captured += chunk) };
+  const app = buildServer(cfg, pool, notifier, stream);
+  await app.listen({ host: "127.0.0.1", port: 0 });
+  const address = app.server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  return {
+    cfg,
+    pool,
+    baseUrl: `http://127.0.0.1:${port}`,
+    logs: () => captured,
+    stop: async () => {
+      await app.close();
+      await notifier.stop();
+      await pool.end();
+      await drop();
+    },
+  };
+}
+
+/** Runs a connector through the existing local CLI harness (the C-2
+ * byte-identity reference) and returns the emitted canonical bytes. */
+export async function cliHarnessSnapshot(
+  connectorSpec: string,
+  config: Record<string, unknown>,
+): Promise<Buffer> {
+  const dir = await mkdtemp(path.join(tmpdir(), "cl-cli-"));
+  try {
+    const configFile = path.join(dir, "config.json");
+    const outFile = path.join(dir, "out.json");
+    await writeFile(configFile, JSON.stringify(config));
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(
+        pythonPath(),
+        ["-m", "connectors.sdk.local", connectorSpec, "--config", configFile, "--out", outFile],
+        { cwd: repoRoot(), env: { ...process.env, PYTHONPATH: repoRoot() } },
+      );
+      let stderr = "";
+      child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+      child.on("error", reject);
+      child.on("close", (code) =>
+        code === 0 ? resolve() : reject(new Error(`local CLI exited ${code}: ${stderr}`)),
+      );
+    });
+    return await readFile(outFile);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** Verdict of the Python delivery gate over a snapshot file's bytes —
+ * used to compute reference canonical-body hashes without any JS
+ * re-serialization. */
+export async function acceptVerdict(bytes: Buffer): Promise<Record<string, unknown>> {
+  const dir = await mkdtemp(path.join(tmpdir(), "cl-verdict-"));
+  try {
+    const file = path.join(dir, "doc.json");
+    await writeFile(file, bytes);
+    return await new Promise((resolve, reject) => {
+      const child = spawn(pythonPath(), ["-m", "snapshot.accept", file], {
+        cwd: repoRoot(),
+        env: { ...process.env, PYTHONPATH: repoRoot() },
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+      child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+      child.on("error", reject);
+      child.on("close", (code) => {
+        if (code === 0 || code === 1) resolve(JSON.parse(stdout));
+        else reject(new Error(`accept exited ${code}: ${stderr}`));
+      });
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
