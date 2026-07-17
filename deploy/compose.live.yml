@@ -10,6 +10,11 @@ services:
   core:
     volumes:
       - ./.secrets/core-live:/app/jobs/live:ro
+    env_file:
+      # SYNC_ENABLED=1, SYNC_GIT_REMOTE (customer KB), SYNC_GIT_TOKEN
+      # (fine-grained PAT, D2), SYNC_PLATFORM_COMMIT — shape described
+      # in .secrets/connections.md (JC-8: never committed)
+      - ./.secrets/sync.env
   runner:
     env_file:
       - ./.secrets/runner.env

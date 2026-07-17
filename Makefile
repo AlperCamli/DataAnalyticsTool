@@ -13,4 +13,7 @@ stack-live:  ## live overlay stack up + enqueue the example estate's three syste
 stack-down:  ## stop the stack (keeps the pgdata volume; add -v yourself to wipe)
 	docker compose down
 
-.PHONY: stack-up stack-demo stack-live stack-down
+drill:       ## staged drift drill (sync §9 / SO-4) through the real pipeline
+	cd core && npx vitest run test/sync-drill.test.ts
+
+.PHONY: stack-up stack-demo stack-live stack-down drill

@@ -7,7 +7,11 @@ name = "contextlayer-snapshot"
 # 0.3.0: D-49 purpose merge — enrichment slots in renders, KB-8 render
 # consistency + KB-10 purpose-key warns in the validation library — the
 # build class vendored into KB CI (D-46 condition 1)
-version = "0.3.0"
+# 0.4.0: CP-3b sync stages — lineage.severity (§7 note ³ finalization),
+# lineage.scan (KB §6 contamination scan), generator.statuses
+# (front-matter status writes). No validation-rule changes; the version
+# bump makes the §10 wheel carry state the new surface honestly.
+version = "0.4.0"
 description = "Snapshot layer (task 1.1) + connector SDK (1.2-1.4) + generator (1.5) + lineage (1.9)"
 requires-python = ">=3.12"
 dependencies = [

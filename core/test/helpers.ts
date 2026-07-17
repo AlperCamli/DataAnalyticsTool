@@ -90,6 +90,28 @@ export async function startCore(overrides: Partial<CoreConfig> = {}): Promise<Te
     snapshotRetention: 10,
     sweepIntervalMs: 60_000, // tests sweep explicitly unless overridden
     claimPollMs: 50,
+    sync: {
+      enabled: false,
+      gitRemote: "",
+      gitToken: "",
+      gitProvider: "local",
+      gitApiBase: "https://api.github.invalid",
+      baseBranch: "main",
+      committerName: "contextlayer-sync",
+      committerEmail: "sync@contextlayer.invalid",
+      pythonCmd: [pythonPath()],
+      workdir: "/tmp/cl-sync-test",
+      tickS: 3600,
+      acquisitionBudgetS: 60,
+      acquirePollMs: 100,
+      prRetries: 3,
+      prRetryBaseMs: 50,
+      hookBodyMaxBytes: 64 * 1024,
+      wheelPath: null,
+      wheelVersion: null,
+      platformCommit: null,
+      wheelBuilt: null,
+    },
     ...overrides,
   };
   const notifier = new JobsNotifier(url);

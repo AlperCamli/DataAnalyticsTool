@@ -38,6 +38,16 @@ services:
       # for `node dist/cli.js enqueue` runs inside the container
       CORE_URL: http://127.0.0.1:8100
       CORE_TOKEN: ${CL_RUNNER_TOKEN:-dev-runner-token}
+      # CP-3b sync orchestrator — off in the plain dev stack (no KB
+      # remote here). The live overlay's env file supplies SYNC_ENABLED,
+      # SYNC_GIT_REMOTE, SYNC_GIT_TOKEN (fine-grained PAT, ruling D2)
+      # and friends; the image itself carries SYNC_PYTHON and the §10
+      # wheel at SYNC_WHEEL_PATH.
+      SYNC_ENABLED: ${SYNC_ENABLED:-0}
+      SYNC_GIT_REMOTE: ${SYNC_GIT_REMOTE:-}
+      SYNC_GIT_TOKEN: ${SYNC_GIT_TOKEN:-}
+      SYNC_TICK_S: ${SYNC_TICK_S:-3600}
+      SYNC_PLATFORM_COMMIT: ${SYNC_PLATFORM_COMMIT:-}
     ports:
       - "127.0.0.1:8100:8100"
     depends_on:
