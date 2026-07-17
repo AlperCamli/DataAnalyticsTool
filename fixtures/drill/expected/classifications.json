@@ -1,0 +1,79 @@
+{
+ "title": "sync: 4 breaking, 1 additive across drill",
+ "objects": [
+  {
+   "object": "drill.reporting.v_order_totals",
+   "kind": "view",
+   "classification": "changed_structural",
+   "severity": "breaking",
+   "sub_diffs": [
+    {
+     "change": "column_added",
+     "severity": "additive"
+    },
+    {
+     "change": "definition_changed",
+     "severity": "breaking"
+    }
+   ]
+  },
+  {
+   "object": "drill.shop.customers",
+   "kind": "table",
+   "classification": "changed_structural",
+   "severity": "breaking",
+   "sub_diffs": [
+    {
+     "change": "column_added",
+     "severity": "additive"
+    },
+    {
+     "change": "column_removed",
+     "severity": "breaking"
+    }
+   ],
+   "rename_candidates": [
+    {
+     "from_column": "name",
+     "to_column": "full_name",
+     "type": "text",
+     "ordinal": 3
+    }
+   ]
+  },
+  {
+   "object": "drill.shop.legacy_sessions",
+   "kind": "table",
+   "classification": "removed",
+   "severity": "breaking"
+  },
+  {
+   "object": "drill.shop.order_items",
+   "kind": "table",
+   "classification": "changed_structural",
+   "severity": "additive",
+   "sub_diffs": [
+    {
+     "change": "column_added",
+     "severity": "additive"
+    }
+   ]
+  },
+  {
+   "object": "drill.shop.orders",
+   "kind": "table",
+   "classification": "changed_structural",
+   "severity": "breaking",
+   "sub_diffs": [
+    {
+     "change": "column_ordinal_changed",
+     "severity": "breaking"
+    },
+    {
+     "change": "column_removed",
+     "severity": "breaking"
+    }
+   ]
+  }
+ ]
+}

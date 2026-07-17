@@ -1,0 +1,8 @@
+{
+ "entities/customer.md": "contaminated",
+ "metrics/net-sales.md": "contaminated",
+ "systems/drill/reporting/v_net_sales.md": "contaminated",
+ "systems/drill/shop/customers.md": "contaminated",
+ "systems/drill/shop/legacy_sessions.md": "contaminated",
+ "systems/drill/shop/order_items.md": "stale"
+}

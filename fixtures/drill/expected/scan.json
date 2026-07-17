@@ -1,0 +1,148 @@
+{
+  "contaminated": [
+    {
+      "doc": "entities/customer.md",
+      "status_was": "verified",
+      "contamination": {
+        "object": "drill.shop.customers",
+        "change": "column_removed",
+        "detail": "column_removed: name"
+      },
+      "reasons": [
+        {
+          "object": "drill.shop.customers",
+          "change": "column_removed",
+          "detail": "column_removed: name"
+        }
+      ]
+    },
+    {
+      "doc": "metrics/net-sales.md",
+      "status_was": "verified",
+      "contamination": {
+        "object": "drill.reporting.v_order_totals",
+        "change": "definition_changed",
+        "detail": "definition_changed",
+        "path": [
+          "sha256:b6b4ccf14588acd3ac83c215e62519ebbaabb5ff5c4b2f909838bde1bc17acc7"
+        ]
+      },
+      "reasons": [
+        {
+          "object": "drill.reporting.v_order_totals",
+          "change": "definition_changed",
+          "detail": "definition_changed",
+          "path": [
+            "sha256:b6b4ccf14588acd3ac83c215e62519ebbaabb5ff5c4b2f909838bde1bc17acc7"
+          ]
+        },
+        {
+          "object": "drill.shop.orders",
+          "change": "column_ordinal_changed+column_removed",
+          "detail": "column_removed: discount; column_ordinal_changed: created_at",
+          "path": [
+            "sha256:3ffcb89caadd26158805318b9aef9e02615ef72038df24d09445f8cd01656b87",
+            "sha256:b6b4ccf14588acd3ac83c215e62519ebbaabb5ff5c4b2f909838bde1bc17acc7"
+          ]
+        }
+      ]
+    },
+    {
+      "doc": "systems/drill/reporting/v_net_sales.md",
+      "status_was": "verified",
+      "contamination": {
+        "object": "drill.reporting.v_order_totals",
+        "change": "definition_changed",
+        "detail": "definition_changed"
+      },
+      "reasons": [
+        {
+          "object": "drill.reporting.v_order_totals",
+          "change": "definition_changed",
+          "detail": "definition_changed"
+        },
+        {
+          "object": "drill.shop.orders",
+          "change": "column_ordinal_changed+column_removed",
+          "detail": "column_removed: discount; column_ordinal_changed: created_at",
+          "path": [
+            "sha256:3ffcb89caadd26158805318b9aef9e02615ef72038df24d09445f8cd01656b87"
+          ]
+        }
+      ]
+    },
+    {
+      "doc": "systems/drill/shop/customers.md",
+      "status_was": "verified",
+      "contamination": {
+        "object": "drill.shop.customers",
+        "change": "column_removed",
+        "detail": "column_removed: name"
+      },
+      "reasons": [
+        {
+          "object": "drill.shop.customers",
+          "change": "column_removed",
+          "detail": "column_removed: name"
+        },
+        {
+          "object": "drill.shop.orders",
+          "change": "column_ordinal_changed+column_removed",
+          "detail": "column_removed: discount; column_ordinal_changed: created_at"
+        }
+      ]
+    },
+    {
+      "doc": "systems/drill/shop/legacy_sessions.md",
+      "status_was": "verified",
+      "contamination": {
+        "object": "drill.shop.legacy_sessions",
+        "change": "removed",
+        "detail": "object removed from snapshot"
+      },
+      "reasons": [
+        {
+          "object": "drill.shop.legacy_sessions",
+          "change": "removed",
+          "detail": "object removed from snapshot"
+        }
+      ]
+    }
+  ],
+  "stale": [
+    {
+      "doc": "systems/drill/shop/order_items.md",
+      "status_was": "verified",
+      "objects": [
+        "drill.shop.order_items"
+      ]
+    }
+  ],
+  "undeclared_references": [
+    {
+      "doc": "systems/drill/reporting/v_net_sales.md",
+      "object": "drill.shop.legacy_sessions"
+    }
+  ],
+  "breaking": {
+    "drill.reporting.v_order_totals": {
+      "change": "definition_changed",
+      "detail": "definition_changed"
+    },
+    "drill.shop.customers": {
+      "change": "column_removed",
+      "detail": "column_removed: name"
+    },
+    "drill.shop.legacy_sessions": {
+      "change": "removed",
+      "detail": "object removed from snapshot"
+    },
+    "drill.shop.orders": {
+      "change": "column_ordinal_changed+column_removed",
+      "detail": "column_removed: discount; column_ordinal_changed: created_at"
+    }
+  },
+  "additive_changed": [
+    "drill.shop.order_items"
+  ]
+}

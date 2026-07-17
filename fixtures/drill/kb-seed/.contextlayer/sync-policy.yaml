@@ -1,0 +1,10 @@
+# Drill fixture sync policy (sync spec §9). The drill's re-handover is a
+# manual trigger (§4.3); scheduling stays off so runs are test-driven.
+
+systems:
+  drill:
+    freshness_threshold: 30d
+    triggers:
+      webhook: null
+      schedule: null
+      manual: true

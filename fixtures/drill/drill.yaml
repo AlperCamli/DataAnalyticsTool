@@ -1,0 +1,24 @@
+# Staged drift drill — shipped product fixture (sync spec §9, SY-8;
+# CP-3b ruling F2). Versioned with the product: running this drill
+# against a deployment is customer-onboarding playbook step-9 gate
+# item 7; running it in platform CI is conformance SO-4. The expected/
+# set is the canonical regression net for the whole drift pipeline.
+version: 1
+system: drill
+connector: postgres
+image: postgres:16          # ddl-file mode container image (see config.schema)
+ddl:
+  before: ddl/before.sql    # baseline handover
+  after: ddl/after.sql      # the scripted breaking change (§9): drop +
+                            # rename-candidate + output-changing view edit,
+                            # plus an additive column for the stale path
+kb_seed: kb-seed/           # human docs + entity + metric + sync policy;
+                            # machine docs and lineage/graph.json are
+                            # derived at seed time (render + lineage over
+                            # the before snapshot — deterministic)
+expected:
+  classifications: expected/classifications.json   # reduced finalized diff
+  scan: expected/scan.json                         # full scan output (KB §6)
+  statuses: expected/statuses.json                 # doc → post-run status
+  changelog: expected/changelog.md                 # exact PR body
+  title: "sync: 4 breaking, 1 additive across drill"
