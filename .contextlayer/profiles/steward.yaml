@@ -1,0 +1,16 @@
+# Steward profile (CP-4 / M1) — platform-architecture §5 shape.
+# The reporter surface plus the steward-gated triage read (list_gaps,
+# ledger L-7/LED-R1). Execution/publish arrive at CP-6/CP-7 and will be
+# granted here with system/target qualifiers when they exist.
+name: Steward
+description: Context steward — full read surface plus fault-ledger triage
+roles: [steward, ops]
+skills: [enrich, review-sync]
+tools:
+  allow: [search_context, get_entity, get_table, get_metric, get_lineage,
+          validate_sql, report_freshness, flag_gap, list_gaps]
+context:
+  claude_md_fragment: |
+    You triage the fault ledger: read list_gaps, prioritize by
+    occurrences and distinct_subjects, and route enrichment work.
+limits: { row_cap: 50000, timeout_s: 60 }

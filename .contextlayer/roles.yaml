@@ -4,9 +4,9 @@
 #
 # Pilot note (platform DECISIONS D-47): every identity below is
 # AlperCamli — solo pilot on the operator's own estate. Real
-# names/handles and OIDC group ids swap in when the KB moves to a
-# customer git server; the role keys and visibility scopes are the
-# durable part.
+# names/handles swap in when the KB moves to a customer git server; the
+# role keys, OIDC group ids (wired at CP-4), and visibility scopes are
+# the durable part.
 #
 # Visibility semantics: directory globs relative to the KB root; the
 # MCP server filters every content-tool response through the caller's
@@ -18,7 +18,7 @@ roles:
     title: Business user (non-analyst)
     profile: reporter
     identity: AlperCamli
-    oidc_group: null            # wired at CP-4 (OIDC → MCP OAuth)
+    oidc_group: reporter
     visibility:
       - index.md
       - conventions.md
@@ -31,21 +31,21 @@ roles:
     title: Data team lead — context steward (adoption decider)
     profile: steward
     identity: AlperCamli
-    oidc_group: null
+    oidc_group: steward
     visibility: ["**"]
 
   R3:
     title: Platform admin / ops owner
     profile: steward
     identity: AlperCamli
-    oidc_group: null
+    oidc_group: ops
     visibility: ["**"]
 
   R4:
     title: Security / compliance reviewer
     profile: null               # read/audit surface only; no agent profile
     identity: AlperCamli
-    oidc_group: null
+    oidc_group: security
     visibility: ["**"]
 
   R5:
