@@ -35,6 +35,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | JP-3 | Result size cap & snapshot storage | Open | 64 MB inline; Postgres storage; retain last 10 snapshots/system | First estate approaching the cap |
 | JP-4 | Webhook ingestion endpoint | Open | `/v1/hooks/{system}` + per-hook shared secret; normatively owned by the sync-orchestrator spec (not yet written — see index doc) | Sync-orchestrator spec authoring |
 | JP-5 | Runner autoscaling under K8s | Open | Manual replica count in v1 | Enterprise deployment sizing |
+| JP-6 | Runner-token scope vs producer/ops surface (review #1 P-A) | **Closed** | D-66.1: runner tokens authorize claim/start/heartbeat/complete/fail/defer only; producer/ops/read surface behind platform identity (job spec §6 amendment, built at CP-4) | — |
 
 ## KB repository (KB-A..F)
 
@@ -45,7 +46,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | KB-C | Regeneration scope per drift run | Open | Changed objects only; KB-8 guards correctness | Template changes needing estate-wide re-render |
 | KB-D | Human-doc localization | Open | Out of scope v1 | First non-English deployment |
 | KB-E | Grouped API doc splitting threshold | Open | Split at 200 objects per kind-group | First estate hitting it |
-| KB-F | Trust semantics of repo-level human docs (`index.md`, `conventions.md`, `_notes.md`) | Open | No front-matter, KB-1-exempt (KB spec §4.6); MCP serves them without a trust block | CP-4/M1 MCP server session (trust-block consumer exists) |
+| KB-F | Trust semantics of repo-level human docs (`index.md`, `conventions.md`, `_notes.md`) | **Closed** | D-68 (CP-4): default affirmed — no `status` front-matter, no trust block; repo-level docs are search-indexed and visibility-checked like every doc (MCP-R15), one-liners derive from title/first line only, and no tool serves their full body in v1 | — |
 
 ## Capability interfaces (CI-A..E)
 
@@ -65,14 +66,14 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | MC-2 | Validation-token TTL | Open | 300 s | Revalidation friction in long sessions |
 | MC-3 | Very-wide-table responses | Open | Full columns; paginate at 300 with continuation | First SAP-scale estate |
 | MC-4 | Rate limits per profile class vs per identity | Open | Global per-identity defaults, profile-overridable | Pilot telemetry |
-| MC-5 | Snapshot-vs-rendered-file authority for facts | Open | Snapshot is authority (M-5 note) | Security-review feedback |
+| MC-5 | Snapshot-vs-rendered-file authority for facts | **Closed** | D-66.4: snapshot authority affirmed by security review #1; MCP-R9 render-lag signal amended into MCP spec §4 and built at CP-4 | — |
 
 ## Skill specifications (SP-1..5)
 
 | ID | Item | Status | Default | Revisit trigger |
 |---|---|---|---|---|
 | SP-1 | Execute-without-resolution heuristic as class-1 detector | Open | Shipped log-only, disabled by default (ledger §5) | Pilot false-positive rate |
-| SP-2 | Benchmark-mode waiver leakage | Open | Waiver keyed to server-known `benchmark` profile; AS-8 guards | Security review (expected non-issue) |
+| SP-2 | Benchmark-mode waiver leakage | **Closed (conditional at M1 sign-off)** | D-66.8: non-issue — waiver keys on the server-resolved profile only (MCP-R2); closure gated on MCP-R2 + MT-1 green, satisfied by the CP-4 suite; final sign-off with the M1 live demo evidence | — |
 | SP-3 | Enrich batch size | Open | 10 objects | Steward PR-review ergonomics |
 | SP-4 | Saved/parameterized report re-runs | Open | Out of v1; re-run = re-journey | Recurring-report demand; pairs with FM-4 |
 | SP-5 | Skill language localization | Open | Session-language naturally; checkpoints language-neutral | First non-English pilot |
@@ -96,7 +97,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | FL-B | Notification channels | Open | Dashboard-only | First customer ask |
 | FL-C | `abandoned_journey` noise floor | Open | Issue opens at ≥2 occurrences | Pilot noise measurement |
 | FL-D | Causal cross-issue linking | Open | Manual `links` only | Frequent causal clusters in triage |
-| FL-E | `distinct_subjects` privacy stance | Open | Counts only; identities via audit_ref under Audit roles | Security review |
+| FL-E | `distinct_subjects` privacy stance | **Closed** | D-66.5: counts-only affirmed (LED-R7); LED-R2 scrub + LED-R5 render neutralization amended into ledger spec §3.3/§10 and built at CP-4 | — |
 
 ## Onboarding playbook (OB-1..4)
 

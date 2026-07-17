@@ -83,6 +83,8 @@ CREATE INDEX ON ledger_issues (object_fqn) WHERE object_fqn IS NOT NULL;
 
 `fingerprint = sha256(kind ‖ scope)` where `scope` is, in priority order: the attributed `object_fqn`; else the entity/metric path; else, for coverage gaps, the **normalized query terms** (lowercased, stopwords stripped, sorted — so "regional net sales" and "net sales by region" group); else the session-independent detail the rule defines. Fingerprints are stable across users and sessions by construction — the count of `distinct_subjects` is what tells triage "eleven different people hit this wall," which is the strongest prioritization signal we have.
 
+**Amendment (D-66.5 / security review #1 LED-R2, 2026-07-17) — query-term and description hygiene.** Query-term-derived scopes, the `title` generated from them, and class-2/3 `description` text **never carry data values**: the server scrubs them before storage — quoted literals, numbers and identifier-like digit runs, email addresses and similar value-shaped tokens are dropped (in addition to the skill-side K-GROUND discipline, which remains advisory only). Titles and descriptions are **length-bounded** (server-enforced caps) and are **visibility-filtered** at every read surface exactly like `object_fqn`-attributed issues (M-4): a triager sees only what their role could see at the source. The scrub is a storage rule, not merely a render rule — a value that never lands in the ledger cannot leak from it.
+
 ## 4. Kind registry (v1) and class provenance
 
 | Kind | Classes that can emit | Typical scope |
@@ -154,6 +156,8 @@ A KB PR whose body carries one or more `CL-Resolves: <issue-id>` trailers resolv
 
 Events: retained 90 days (config), then deleted; issues: indefinite (they are the estate's institutional memory of its own gaps). L-8 storage rule: no secrets, no full statements — `audit_ref` points into the restricted audit log for deep forensics under the Audit module's own access roles. Class-2/3 `description` is user-authored text shown to triagers; the flag_gap path warns skills (kernel K-GROUND discipline) to describe the *gap*, not paste data.
 
+**Amendment (D-66.5, 2026-07-17):** the K-GROUND discipline is not relied on — the §3.3 LED-R2 server-side scrub and length bounds apply to every stored `description` and query-term-derived `title`, and both are neutralized (markdown/HTML-inert) at every render point — `list_gaps` responses, the KB Health dashboard, and any PR body that cites ledger text (LED-R5, same class as review finding F4).
+
 ## 11. Conformance tests
 
 | # | Test | Implements |
@@ -187,4 +191,4 @@ Events: retained 90 days (config), then deleted; issues: indefinite (they are th
 | FL-B | Notification channels (email/Slack) on routing | Dashboard-only in v1; the queue is R2's home screen | First customer ask; would be a connector-class addition |
 | FL-C | Auto-dismiss for `abandoned_journey` singletons (noisy kind by nature) | Keep, but this kind requires ≥2 occurrences before an issue opens | Pilot noise measurement |
 | FL-D | Cross-issue linking (this `missing_join_path` blocks those 3 `coverage_gap`s) | Manual `links` field only in v1 | If triage shows frequent causal clusters |
-| FL-E | `distinct_subjects` privacy stance (counts only vs listing who) | Counts only in the tool/module; identities visible solely via audit_ref under Audit-module roles | Security review |
+| FL-E | `distinct_subjects` privacy stance (counts only vs listing who) | **Closed** (D-66.5) — counts-only affirmed by security review #1 (LED-R7); LED-R2 scrub + LED-R5 render neutralization added (§3.3/§10 amendments) as conditions of closure | — |

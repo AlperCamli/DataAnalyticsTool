@@ -14,7 +14,7 @@ import path from "node:path";
 import { afterEach, beforeAll, expect, it } from "vitest";
 import { remarkPending, triggerSystem, upsertSyncSystem } from "../src/triggers.js";
 import { WireClient } from "./fake-runner.js";
-import { cliHarnessSnapshot, sleep, startCore, TEST_TOKEN, type TestCore } from "./helpers.js";
+import { cliHarnessSnapshot, sleep, startCore, TEST_OPS_TOKEN, TEST_TOKEN, type TestCore } from "./helpers.js";
 import {
   checkoutBranch,
   cleanupDir,
@@ -50,7 +50,7 @@ async function makeRig(): Promise<Rig> {
   await seedDrillKb(kb, beforeBytes);
   const core = await startCore({});
   core.cfg.sync = syncConfig(kb, path.join(base, "workdir"));
-  const client = new WireClient(core.baseUrl, TEST_TOKEN);
+  const client = new WireClient(core.baseUrl, TEST_TOKEN, TEST_OPS_TOKEN);
   await registerDrillSystem(core);
   const rig = { base, kb, core, client };
   rigs.push(rig);

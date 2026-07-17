@@ -1,9 +1,15 @@
 /**
  * The job API (job spec §6) plus the producer/ops surface (enqueue,
- * cancel, reads, health). HTTP+JSON only — runners never touch the
- * queue's SQL (J-1); auth is per-runner bearer tokens (J-8; the enqueue
- * surface shares the same token set until SSO lands at CP-4, by the
- * CP-3a scope fence).
+ * cancel, reads, health) and, since CP-4, the MCP server (/mcp).
+ * HTTP+JSON only — runners never touch the queue's SQL (J-1).
+ *
+ * Auth split (P-A / D-66.1, job spec §6 amendment): per-runner bearer
+ * tokens authorize ONLY the runner protocol (claim/start/heartbeat/
+ * complete/fail/defer). The producer/ops/read surface requires a
+ * platform identity — a static ops service token (CORE_OPS_TOKENS,
+ * distinct set) or an OIDC identity carrying an ops role. A runner
+ * token presented to the ops surface is denied. The MCP endpoints and
+ * OAuth metadata authenticate per call in the MCP layer itself.
  *
  * JSON bodies are parsed from a retained raw buffer: snapshot deliveries
  * hand those exact bytes to the Python delivery gate, so the canonical
@@ -36,6 +42,10 @@ import {
   type ClaimDeclaration,
   type ErrorEnvelope,
 } from "./queue.js";
+import { KbReader } from "./kbread.js";
+import { registerMcp } from "./mcp.js";
+import { OidcClient } from "./oidc.js";
+import { RateLimiter } from "./ratelimit.js";
 import { getSnapshotBody, listSnapshots } from "./snapshots.js";
 import { getHookSecretHash, getSyncSystem, triggerSystem } from "./triggers.js";
 import { acceptSnapshotDelivery, ValidatorUnavailable } from "./validator.js";
@@ -96,12 +106,27 @@ export function buildServer(
     done(err, undefined);
   });
 
-  // Bearer auth on everything but the health probe (J-8).
+  // Auth (P-A split, D-66.1). Runner tokens open exactly the runner
+  // protocol; the ops/read surface takes a distinct service-token set or
+  // an OIDC identity with an ops role; hooks and /mcp self-authenticate.
   const tokenHashes = [...cfg.runnerTokens.entries()].map(
     ([token, runnerId]) => ({ hash: sha256(token), runnerId }),
   );
+  const opsTokenHashes = [...cfg.opsTokens.entries()].map(
+    ([token, name]) => ({ hash: sha256(token), name }),
+  );
+  const oidc = cfg.mcp.oidcIssuer ? new OidcClient(cfg.mcp) : null;
+  const RUNNER_PATH = /^\/v1\/jobs\/(?:claim|[^/]+\/(?:start|heartbeat|complete|fail|defer))$/;
+  const isRunnerPath = (url: string, method: string) =>
+    method === "POST" && RUNNER_PATH.test(url.split("?")[0]!);
+  const isSelfAuthPath = (url: string) => {
+    const path = url.split("?")[0]!;
+    return path === "/mcp" || path.startsWith("/.well-known/");
+  };
+
   app.addHook("onRequest", async (req, reply) => {
     if (req.url === "/healthz") return;
+    if (isSelfAuthPath(req.url)) return;
     if (isHookPath(req.url)) {
       // §4.2: hooks authenticate with their own per-hook secret, and the
       // Content-Length cap guards the socket before the body is read.
@@ -115,15 +140,46 @@ export function buildServer(
     const header = req.headers.authorization ?? "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";
     const provided = sha256(token);
-    let matched: { runnerId: string | null } | null = null;
-    for (const entry of tokenHashes) {
-      if (timingSafeEqual(provided, entry.hash)) matched = entry;
+
+    if (isRunnerPath(req.url, req.method)) {
+      let matched: { runnerId: string | null } | null = null;
+      for (const entry of tokenHashes) {
+        if (timingSafeEqual(provided, entry.hash)) matched = entry;
+      }
+      if (!token || !matched) {
+        await reply.code(401).send({ error: "unauthorized" });
+        return reply;
+      }
+      req.runnerBinding = matched.runnerId;
+      return;
     }
-    if (!token || !matched) {
-      await reply.code(401).send({ error: "unauthorized" });
+
+    // Ops/read surface: static service token (full-set scan, no early
+    // break) or OIDC identity with an ops role. A valid *runner* token
+    // here is the P-A denial: authenticated, insufficient — 403.
+    let opsMatched = false;
+    for (const entry of opsTokenHashes) {
+      if (timingSafeEqual(provided, entry.hash)) opsMatched = true;
+    }
+    if (token && opsMatched) return;
+    if (token && oidc) {
+      try {
+        const identity = await oidc.resolveIdentity(token);
+        if (identity && identity.roles.some((role) => cfg.opsRoles.includes(role))) return;
+      } catch (err) {
+        req.log.error({ err }, "ops-surface OIDC resolution failed");
+      }
+    }
+    let isRunnerToken = false;
+    for (const entry of tokenHashes) {
+      if (timingSafeEqual(provided, entry.hash)) isRunnerToken = true;
+    }
+    if (isRunnerToken) {
+      await reply.code(403).send({ error: "forbidden", detail: "runner tokens authorize the runner protocol only (P-A)" });
       return reply;
     }
-    req.runnerBinding = matched.runnerId;
+    await reply.code(401).send({ error: "unauthorized" });
+    return reply;
   });
 
   const leaseLost = (reply: FastifyReply) =>
@@ -429,6 +485,19 @@ export function buildServer(
     );
     return { warnings: rows };
   });
+
+  // -- MCP server (CP-4; self-authenticating per call) ------------------------
+
+  if (cfg.mcp.enabled) {
+    registerMcp(app, {
+      cfg,
+      pool,
+      oidc: oidc ?? new OidcClient(cfg.mcp),
+      kb: new KbReader(cfg, pool),
+      limiter: new RateLimiter(cfg.mcp.limits),
+      log: (msg, err) => (err ? app.log.error({ err }, msg) : app.log.info(msg)),
+    });
+  }
 
   // -- health probe (unauthenticated) -----------------------------------------
 

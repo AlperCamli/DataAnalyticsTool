@@ -140,11 +140,22 @@ export interface PrInfo {
   branch: string;
 }
 
+export interface MergedPr {
+  number: number;
+  url: string;
+  branch: string;
+  body: string;
+  mergedAt: string;
+}
+
 export interface PrProvider {
   openPr(args: OpenPrArgs): Promise<PrInfo>;
   /** Open PRs whose head branch is the orchestrator's own (`sync/…`). */
   listOpenSyncPrs(): Promise<PrInfo[]>;
   closePr(pr: PrInfo, comment: string): Promise<void>;
+  /** Merged PRs (any branch) newer than the cursor — the CL-Resolves
+   * loop-closure input (ledger spec §9, LED-R4). */
+  listMergedPrs(sinceIso: string | null): Promise<MergedPr[]>;
 }
 
 export function createProvider(cfg: SyncConfig): PrProvider {
@@ -220,6 +231,27 @@ class GithubProvider implements PrProvider {
     });
     if (status !== 200) throw new ProviderError(`close PR #${pr.number} failed (${status})`);
   }
+
+  async listMergedPrs(sinceIso: string | null): Promise<MergedPr[]> {
+    const { status, json } = await this.api(
+      "GET",
+      `/repos/${this.repo}/pulls?state=closed&base=${this.cfg.baseBranch}&sort=updated&direction=desc&per_page=50`,
+    );
+    if (status !== 200) {
+      throw new ProviderError(`list merged PRs failed (${status}): ${JSON.stringify(json)}`);
+    }
+    return (
+      json as { number: number; html_url: string; head: { ref: string }; body: string | null; merged_at: string | null }[]
+    )
+      .filter((pr) => pr.merged_at !== null && (sinceIso === null || pr.merged_at > sinceIso))
+      .map((pr) => ({
+        number: pr.number,
+        url: pr.html_url,
+        branch: pr.head.ref,
+        body: pr.body ?? "",
+        mergedAt: pr.merged_at!,
+      }));
+  }
 }
 
 /**
@@ -234,7 +266,8 @@ interface LocalPrRecord {
   title: string;
   body: string;
   labels: string[];
-  state: "open" | "closed";
+  state: "open" | "closed" | "merged";
+  merged_at?: string;
   comments: string[];
 }
 
@@ -289,5 +322,18 @@ class LocalProvider implements PrProvider {
     record.state = "closed";
     record.comments.push(comment);
     await this.save(data);
+  }
+
+  async listMergedPrs(sinceIso: string | null): Promise<MergedPr[]> {
+    const data = await this.load();
+    return data.prs
+      .filter((pr) => pr.state === "merged" && (sinceIso === null || (pr.merged_at ?? "") > sinceIso))
+      .map((pr) => ({
+        number: pr.number,
+        url: pr.url,
+        branch: pr.branch,
+        body: pr.body,
+        mergedAt: pr.merged_at ?? "",
+      }));
   }
 }

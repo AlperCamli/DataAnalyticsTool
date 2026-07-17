@@ -48,6 +48,8 @@ Per-call decision: `allowed(tool, args) ⇔ tool ∈ profile.tools.allow ∧ sys
 
 `agent_guidance` ∈ `use-freely | warn-user | refuse-unless-override`, computed server-side from status per KB spec §5 — the skill trust behaviors (HLR §7.3) key off this field, so the mapping lives in exactly one place. `hash_match: false` on a `verified` doc means drift landed after the last sync classification run (rare race); served as `warn-user`.
 
+**Amendment (D-66.4 / security review #1 MCP-R9, 2026-07-17) — snapshot provenance and render-lag.** The trust block of every machine doc carries `snapshot_ref` — the canonical-body hash of the snapshot the served facts come from. When those facts come from a snapshot **newer than the one pinned at the merged render** (`.contextlayer/snapshots/<system>.json` at KB HEAD — i.e. a sync PR is still unmerged), the block MUST signal it: `render_lag: true` and `agent_guidance` at least `warn-user`. Rationale: snapshot acceptance (runner + J-6) is the only gate on the facts surface and bypasses human PR review; the provenance and the lag must be visible to the consuming agent, not inferable. Additive to the §4 block; absence of `render_lag` reads as `false`.
+
 ## 5. Validation-token flow (M-2)
 
 ```
@@ -86,6 +88,8 @@ Metric doc with `implementations` per system and certification trail. Only `stat
 ### 6.5 `get_lineage(object, direction=upstream|downstream|both, depth=3)` — R
 
 Walks `lineage/graph.json` from the FQN. Returns nodes + edges with `{operation, columns?, evidence_tier}` and, per node, doc trust where docs exist. Depth capped at 10; cycles reported, not traversed. Dangling edges (capability LP-3) are served flagged. This is the "why doesn't this match the source system" tool.
+
+**Amendment (D-66.3 / security review #1 P-E, 2026-07-17) — visibility applies node-by-node.** The M-4 visibility map applies to **every node and every edge in the walk**, not just the entry object: a node the caller's roles cannot see is **omitted** from the response together with all edges touching it — never masked-but-revealed (no placeholder nodes, no redacted FQNs, no edge stubs into hidden territory). The walk does not continue *through* a hidden node. An entry object the caller cannot see returns `not_found` per M-4. The audit record carries the true filtered reason.
 
 ### 6.6 `validate_sql(system, request)` — V
 
@@ -152,4 +156,4 @@ One record per call: `{ts, subject, roles, profile, tool, args_digest, refs, dec
 | MC-2 | Validation-token TTL | 300 s | If long drafting sessions cause revalidation friction (it's one cheap call) |
 | MC-3 | `get_table` response size for very wide tables (500+ columns) | Full column table always (facts are facts); wide tables paginate columns at 300 with continuation | First SAP-scale estate |
 | MC-4 | Read-tool rate limits per profile class vs global per-identity | Global per-identity defaults, profile-overridable | Pilot telemetry |
-| MC-5 | Serving machine facts from snapshot vs rendered file when a sync PR is unmerged | Snapshot is authority for §6.3 facts (as ruled); revisit if customers expect strict "KB = merged HEAD only" semantics | Security review feedback |
+| MC-5 | Serving machine facts from snapshot vs rendered file when a sync PR is unmerged | **Closed** (D-66.4) — snapshot authority affirmed by security review #1; MCP-R9 render-lag signal added to §4 as the condition of closure | — |

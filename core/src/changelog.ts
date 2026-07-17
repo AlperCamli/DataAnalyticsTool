@@ -62,8 +62,10 @@ export interface ChangelogInput {
  * (`< > @ [ ] * |`) so any injected control sequence renders as inert
  * text. A strict no-op on ordinary identifiers/paths (they carry none of
  * these), so the deterministic changelog (SO-12) is byte-unchanged.
+ * Exported since CP-4: list_gaps renders ledger text through the same
+ * neutralization (LED-R5 — same injection class as F4).
  */
-function neutralize(value: unknown): string {
+export function neutralize(value: unknown): string {
   return String(value)
     .replace(/[\r\n]+/g, " ")
     .replace(/&/g, "&amp;")

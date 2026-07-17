@@ -1535,3 +1535,117 @@ byte-exact golden (`fixtures/drill/expected/changelog.md`) is unchanged.
 lookups) keep the raw string; only display values are neutralized. Full TS
 suite 50 passing (incl. drill golden, both JC-8 paths, SO-1 413), Python
 391 passing.
+
+---
+
+# DECISIONS — CP-4 (M1): MCP server, fault ledger, P-A split
+
+## D-68 — CP-4 build decisions, KB-F resolution, register closures
+
+Scope: the CP-4/M1 build under ruling D-66 — per-call OIDC identity,
+profile enforcement, content tools with trust blocks, validate_sql with
+signed validation tokens (issuance + verification library; enforcement
+at an executor is CP-6), fault ledger with flag_gap/list_gaps, audit,
+rate limits, and the P-A auth split. The four authorized spec
+amendments led the diff (job spec §6 + JP-6 [P-A/D-66.1], MCP spec §4
+[MCP-R9/D-66.4], MCP spec §6.5 [P-E/D-66.3], ledger spec §3.3/§10
+[LED-R2/D-66.5]); the amendment fence held otherwise.
+
+**KB-F resolved (register updated):** repo-level human docs
+(`index.md`, `conventions.md`, `_notes.md`) keep the default — no
+`status` front-matter, no trust block. They are search-indexed and
+visibility-checked exactly like every doc (MCP-R15), their search
+one-liners derive from title/first line only (matched body text is
+never echoed), and no v1 tool serves their full body — so absence of a
+trust block cannot mislead an agent about repo-level content it never
+receives wholesale. Test: `mcp-conformance.test.ts` MCP-R15 pair.
+
+**Register closures (per D-66.8):** MC-5 **closed** — MCP-R9 landed
+(trust-block `snapshot_ref` + `render_lag` + warn-user; test MCP-R9).
+FL-E **closed** — LED-R2 (storage scrub + visibility + length bounds)
+and LED-R5 (render neutralization via the F4 `neutralize()`) landed
+with named tests. SP-2 **closed conditional on the M1 live demo**: the
+benchmark waiver keys on the server-resolved profile only — MCP-R2 +
+MT-1 + the SP-2 closure test are green (client asserting `benchmark`
+without the role → connection refused, audited).
+
+**Implementation decisions (flagged):**
+
+1. **Dev IdP is an in-repo minimal OIDC provider** (`core/src/devidp.ts`,
+   compose service `devidp`, marked DEV ONLY), not Keycloak: Claude
+   Code's remote-MCP OAuth needs RFC 8414 discovery + RFC 7591 dynamic
+   client registration + PKCE, which Keycloak only allows after
+   client-registration-policy surgery, and MT-9 needs a deterministic
+   role-revocation lever (`POST /admin/roles`, introspection reads live
+   roles). The deployment shape is unchanged — a real customer IdP via
+   `CORE_OIDC_ISSUER`; the pilot has no customer IdP, so the dev
+   provider *is* the pilot IdP. Tests run it in-process.
+2. **Identity is per-call token introspection** (RFC 7662) at the IdP,
+   never local JWT verification alone — forced by MCP §3 ("revocation
+   takes effect immediately") and the MT-9 live variant. Discovery-doc
+   caching only; nothing token-derived is cached.
+3. **P-A ops surface** accepts two platform identities per D-66.1's
+   "OIDC user or service identity": OIDC roles ∩ `CORE_OPS_ROLES`
+   (default `ops,steward`), or a static service-token set
+   `CORE_OPS_TOKENS` — distinct from runner tokens, hash-compared with
+   the same no-early-break discipline. A valid runner token on the ops
+   surface is 403 (authenticated, insufficient); garbage is 401. The
+   compose CLI (`enqueue`) now authenticates with the ops token.
+4. **Profile binding** rides `?profile=` on `/mcp` (the compiled-config
+   convenience); the transport is stateless (one SDK server+transport
+   per request), so identity and the roles→profile check re-run on
+   every request — MCP-R2's "fails the connection" is the 403 on
+   initialize and on every later call alike, and MCP-R3 session
+   fixation is impossible by construction (no session state exists).
+5. **MCP-R2's "roles ⊇ profiles roles:"** is implemented as non-empty
+   intersection — platform-architecture §5 defines `roles:` as "who may
+   use it (OIDC groups)", so any listed group suffices.
+6. **KB read consistency:** merged-HEAD is re-checked at most every
+   `CORE_KB_REFRESH_MS` (default 5000; tests 0 = the §3 letter). A
+   pilot-scale concession, env-tunable to strict.
+7. **Facts serving (MC-5):** the workspace is a HEAD clone with the
+   latest accepted snapshots written over the pins and the generator
+   re-run (full render — the D-64.4 KB-C precedent). KB-8 makes the
+   workspace byte-identical to HEAD when there is no lag; render-lag is
+   pin-bytes ≠ latest accepted body, and lagging systems serve facts
+   from the new snapshot with `render_lag: true` + warn-user (MCP-R9).
+8. **Validation tokens:** HMAC-SHA256, keys in ops Postgres
+   (`signing_keys`, kid-rotating, old keys verify until expiry);
+   `core/src/vtoken.ts` is issuance *and* the verification library the
+   CP-6 gateway must call — every §5 binding check lives there once.
+9. **sqlval** is a new Python package (0.5.0): the validate_sql SQL
+   dialect as a C1/C2-pattern stage CLI (sqlglot 30.12.0, the D-38 pin;
+   AST-decided refusals, never regex). No KB-CI validation-rule
+   changes; the version bump makes the §10 wheel carry honest — the
+   next sync PR carries 0.5.0 automatically (SO-10).
+10. **Ledger mechanics:** `distinct_subjects` recomputed from events on
+    ingest; reopen preserves the prior `resolution` (LED-R6 "history"
+    on the spec's fixed DDL); flag_gap's "per session" rate limit keys
+    per identity/hour on the stateless transport; CL-Resolves detection
+    is a merged-PR poll through the PR provider (GitHub API / local
+    store; cursor in `mcp_state`) on the ledger sweep cadence — the
+    ledger spec's "webhook it already has" does not exist yet, and the
+    poll is provider-uniform. list_gaps is server-gated to the
+    steward/benchmark **server-resolved profiles** over and above the
+    profile allowlist (LED-R1 cannot be widened by a mis-authored
+    custom profile).
+11. **Rate limits** are in-memory per core process (single-process
+    deployment shape; MC-4 stays open on pilot telemetry).
+12. **Search (M-6):** tiered deterministic ranking (exact FQN/alias ≫
+    title ≫ front-matter tokens ≫ body), query stopwords dropped,
+    entity/metric routing boost, total order with path tie-break.
+
+**Conformance status:** MT-1..MT-9 green (`core/test/mcp-*.test.ts`);
+MT-3/MT-4 exercised at the verification-library level plus the
+never-executes tool path (execution is CP-6; MT-5 adapted to the
+validate-time guardrail echo); MT-10 is CP-6/CP-7 scope (publish).
+FL-4/5/6/7/10 green. Every MCP-R1..R15 and LED-R1..R7 item has a named
+test — the requirement→test map is in `PR-CP4-M1.md`. Full suites: TS
+168 (11 files + 3 MCP files), Python 406. Customer-KB profiles landed
+as PR #18 (reporter/steward + roles.yaml OIDC wiring; steward merges).
+
+**Open for the M1 gate (not code):** the live two-machine demo (OAuth
+as reporter, contamination surfacing, token issue/refusals, flag_gap /
+list_gaps split, MT-9 live revocation, render-lag live, audit review)
+— runbook in `PR-CP4-M1.md`; and P-H (the `contextlayer-sync` PAT
+least-privilege assertion, D-66.7 — recorded with the SP-2 sign-off).

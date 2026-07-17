@@ -21,6 +21,8 @@ import { migrate } from "../src/migrate.js";
 import { buildServer } from "../src/server.js";
 
 export const TEST_TOKEN = "test-token";
+/** P-A (D-66.1): the ops/read surface takes a distinct service-token set. */
+export const TEST_OPS_TOKEN = "test-ops-token";
 
 export function repoRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -79,6 +81,8 @@ export async function startCore(overrides: Partial<CoreConfig> = {}): Promise<Te
       [TEST_TOKEN, null],
       ["bound-token", "runner-bound"],
     ]),
+    opsTokens: new Map<string, string | null>([[TEST_OPS_TOKEN, "test-ops"]]),
+    opsRoles: ["ops", "steward"],
     validatorCmd: [pythonPath(), "-m", "snapshot.accept"],
     migrateOnStart: false,
     logLevel: "info",
@@ -111,6 +115,25 @@ export async function startCore(overrides: Partial<CoreConfig> = {}): Promise<Te
       wheelVersion: null,
       platformCommit: null,
       wheelBuilt: null,
+    },
+    mcp: {
+      enabled: false,
+      publicUrl: "http://127.0.0.1:0",
+      oidcIssuer: "",
+      oidcClientId: "",
+      oidcClientSecret: "",
+      rolesClaim: "roles",
+      kbRefreshMs: 0, // tests read HEAD every call (the §3 ideal)
+      vtokenTtlS: 300,
+      limits: {
+        readPerMin: 1000,
+        validatePerMin: 1000,
+        executePerMin: 1000,
+        publishPerHour: 1000,
+        flagPerSession: 1000,
+      },
+      ledgerRetentionDays: 90,
+      ledgerSweepMs: 60 * 60 * 1000, // tests sweep explicitly
     },
     ...overrides,
   };

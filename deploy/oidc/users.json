@@ -1,0 +1,4 @@
+[
+  { "username": "alper", "password": "steward-dev-pw", "roles": ["steward", "ops"], "display": "Alper (steward)" },
+  { "username": "reporter", "password": "reporter-dev-pw", "roles": ["reporter"], "display": "Pilot reporter" }
+]

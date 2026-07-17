@@ -24,6 +24,7 @@ COPY snapshot ./snapshot
 COPY connectors ./connectors
 COPY generator ./generator
 COPY lineage ./lineage
+COPY sqlval ./sqlval
 RUN pip wheel --no-deps --no-cache-dir -w /wheels .
 
 FROM node:22-slim
@@ -40,6 +41,7 @@ RUN python3 -m venv /opt/validator \
 COPY snapshot /opt/contextlayer/snapshot
 COPY generator /opt/contextlayer/generator
 COPY lineage /opt/contextlayer/lineage
+COPY sqlval /opt/contextlayer/sqlval
 COPY --from=wheelbuild /wheels /opt/contextlayer/wheels
 
 WORKDIR /app

@@ -1,7 +1,11 @@
 # CP-3a core stack (core + Postgres + runner; see core/README.md).
+# CP-4 adds the MCP surface: `make stack-mcp` arms /mcp + the dev IdP.
 
 stack-up:    ## build + start the local job-protocol stack
 	docker compose up -d --build
+
+stack-mcp:   ## stack with the MCP server + dev OIDC provider armed (CP-4)
+	CORE_MCP_ENABLED=1 docker compose up -d --build
 
 stack-demo:  ## enqueue the no-credentials demo jobs and await results
 	docker compose exec core sh -c 'node dist/cli.js enqueue --wait jobs/demo/*.json'
