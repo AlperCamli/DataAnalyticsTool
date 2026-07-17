@@ -1315,3 +1315,164 @@ objects) accepted with J-6 validation and canonical-body hashes equal
 to direct CLI pulls; dedupe, kill-reclaim, and staged-invalid →
 dead-letter+health all asserted in the committed suites (TS 28 tests,
 Python 359).
+
+## D-64 — CP-3b sync orchestrator (implementation decisions)
+
+Scope: the CP-3b pre-rulings (C2 language split, D2 git/PR mechanics,
+E2 secrets & policy, F2 drill fixture) executed as issued. Everything
+below is an implementation decision *under* those rulings, a flagged
+interpretive reading, or a register proposal. The spec set was not
+touched (amendment fence); proposals below name the diffs an authorized
+spec PR would carry.
+
+**C2 additions (flagged per the ruling):**
+
+- `lineage/severity.py` — snapshot §7 note ³ finalization as a CLI.
+  "Output column set and mappings unchanged" is implemented as: no
+  column-set-shaping sub-diffs on the object, and incoming edges
+  (F-1 identity + column mappings, evidence excluded — the ref embeds
+  the definition hash and always differs) equal across old/new graphs.
+- `lineage/scan.py` — the KB §6 scan (new implementation, authorized by
+  C2; beside the graph code). Declaration surfaces: `depends_on`,
+  entity `maps[].object`, the doc's own `object`, and the machine
+  sibling's roster (K-4 uniformity); `external: true` excluded (KB-B).
+  The §3.4 walk records min-hop edge-id paths; per (doc, breaking
+  object) one reason is kept — direct declaration outranks a walk route,
+  shorter routes outrank longer; the front-matter `contamination` value
+  is the (path-length, object)-first reason, the changelog carries all.
+- `generator/statuses.py` — front-matter-only writes as a
+  formatting-preserving line edit (only the `status:` line and the
+  `contamination:` line/block change; body and every other line
+  byte-preserved; all-or-nothing with a post-edit re-parse guard). KB-4
+  holds by construction.
+- No logic changes to `snapshot/diff.py`, `lineage/{parser,graph,
+  walk,writer}.py`, or `generator/{render,validate,frontmatter}.py`.
+
+**Interpretive rulings (flagged; spec-amendment proposals below):**
+
+1. **Diff baseline = the snapshot pinned at KB merged HEAD**
+   (`.contextlayer/snapshots/<system>.json` in the stage-1 clone), not
+   the previous ops-store acceptance. Forcing argument: SY-3 ("complete
+   currently-true picture versus merged KB HEAD") and SO-7 (a second run
+   *restates the still-true picture* while a PR is unmerged) are only
+   satisfiable against the HEAD pin — a previous-acceptance baseline
+   yields an empty diff exactly when restatement is required, and loses
+   the superseded PR's contamination writes. JP-3 retention still backs
+   recovery; a system with no pin diffs against an empty baseline
+   (first sync = all-added).
+2. **SY-3 restatement:** a run also carries, on their stored latest
+   acceptance, all configured systems whose acceptance differs from
+   their HEAD pin (no new job). Without this, supersede would close a
+   PR whose systems the new run was not triggered for and drop their
+   unmerged drift statement. SY-6 exclusion is unchanged and recorded;
+   an excluded system's *previous* acceptance may still ride as
+   restatement (the fresh acquisition failed; the last accepted state
+   is still the latest truth).
+3. **Status writes before renders** (spec §5 numbers them 8 then 9):
+   machine index rows render the human sibling's `status`, so KB-8 at
+   the PR head is only satisfiable when renders see the final statuses.
+   Both land in the same atomic PR; nothing externally observable
+   differs from the spec's numbering.
+4. **KB-C executed as full render:** D-33 Rule B makes a full render
+   byte-identical to the ideal subset render (SUBSET-RENDER-DESIGN.md's
+   own analysis: subset scoping is purely a cost optimization), so the
+   PR contains exactly the changed files either way. The example estate
+   makes the cost negligible; the design note remains the plan if it
+   ever isn't. Zero generator changes, which also keeps the vendored
+   wheel's render behavior byte-stable across 0.3.0 → 0.4.0.
+5. Pin files are updated only for systems with a non-empty diff ("sync
+   updates it in the same PR as the renders it implies", KB §3);
+   lineage re-derivation reads the full post-update pin set (matching
+   how the 1.6 bootstrap built the HEAD graph). Re-derivation is
+   "required" iff a `definition_changed` sub-diff exists, a
+   definition-bearing kind (view/materialized_view) was added/removed,
+   or an added/removed FQN is a current-graph node.
+6. **Wheel carry details (§10):** the wheel commit also repoints the
+   `kb-ci.yml` install line from the old wheel filename to the new one —
+   without it the PR's own KB CI cannot run the new wheel (SO-10);
+   recorded as within the D-46 exception boundary (wheel + manifest +
+   the CI pin). Manifest rewrite preserves the KB-owned comment header
+   and the `source`/`runtime_deps_pinned_in` values; `built` comes from
+   config or the wheel file's mtime, never the run's wall clock
+   (SY-1/SO-12 determinism). Wheel-only runs title as
+   `sync: 0 breaking, 0 additive (wheel-only update to <v>)` — a
+   deliberate, flagged deviation from the KB §9 title grammar for a PR
+   that states no drift.
+7. **Webhook mechanics (§4.2):** any content type is accepted and
+   discarded on hook paths (CI vendors vary); the JSON parser never
+   parses or retains hook bodies; secrets compare as fixed-length
+   sha256 digests via `timingSafeEqual`; Content-Length over the cap
+   is 413 before the body is read; unknown and unregistered systems
+   both 404 with an identical body (M-4 spirit).
+8. **Ops surfaces:** admin CLI works direct-DB (E2's Connections-UI
+   stand-in; same trust position as `migrate`); manual triggers record
+   the acting OS user. Single-flight is a Postgres advisory lock; a
+   deployment restart marks torso `running` runs `failed
+   (interrupted)` with a health event — exercised for real during the
+   live gate demo.
+9. **Live-demo auth:** the sync PRs on the customer KB were opened with
+   the steward's own PAT (gh keyring) because the `contextlayer-sync`
+   machine account does not exist yet; commits are authored as
+   `contextlayer-sync` regardless (KB-3/KB-4/blame read correctly).
+   Deployment shape remains D2's fine-grained machine-account PAT.
+
+**Register proposals (specs untouched; spec diff leads any
+authorized PR):**
+
+- *sync spec §3/§5.1 clarifying amendment:* define "baseline (previous
+  accepted snapshot ref)" as the acceptance pinned at merged KB HEAD
+  (ruling 1 above), and note the SY-3 restatement set (ruling 2) in §5.1.
+- *sync spec §5 stage-order note:* §5.9 front-matter writes are applied
+  to the worktree before the §5.8 renders (ruling 3); KB-8 forces it.
+- *master register, new item:* GitHub App identity for sync PR authoring
+  (parked per D2); interim = fine-grained PAT for a `contextlayer-sync`
+  machine account, which should be created before the next onboarding.
+- *SO-B note:* label emitted is `sync:additive-only`, applied whenever
+  the breaking count is zero (including metadata-only and wheel-only
+  PRs).
+
+**Stack under A1:** `yaml` (npm) added to the core for sync-policy and
+manifest parsing; everything else unchanged. Python package 0.4.0 (new
+stage modules; no validation-rule changes — KB-8 renders byte-stable).
+
+**Conformance status (sync spec §11):** SO-1..SO-12 all implemented and
+green in `core/test/sync-{triggers,run,drill}.test.ts` (SO-4/SO-8 drive
+the drill fixture through a real runner + ephemeral Postgres against a
+local scratch KB repo; SO-4's live variant is the deployment gate
+below). CP-3a JC suite and the 359-test Python suite unchanged green;
++31 Python tests for the new stage CLIs.
+
+**Exit-criteria evidence (2026-07-17, this machine):**
+
+- *SO conformance:* 12/12 green — `core` suite 45 tests (7 files) incl.
+  `sync-triggers` (SO-1/2/9 + rotation), `sync-run` (SO-3/5/6/7/10/11/
+  12), `sync-drill` (SO-4/8 through a real runner + ephemeral Postgres
+  against a local scratch KB repo, byte-exact golden changelog); Python
+  390 passed.
+- *Live gate (a) — drill:* `make drill` / `sync-drill.test.ts`: trigger
+  (§4.3 DDL re-handover) → snapshot job → real runner → diff → lineage →
+  scan → front-matter-only writes → renders → PR, producing exactly the
+  fixture's expected contamination set (incl. the depth-2 lineage path
+  to `metrics/net-sales.md`), statuses, and changelog; KB-4 asserted
+  byte-wise; `generator.validate` 0 errors on the PR tree.
+- *Live gate (b) — customer KB:* real drift (`supabase.public.imports`
+  row-estimate) flowed end-to-end through the real core + runner
+  against github.com/AlperCamli/DataAnalyticsTool: run
+  `01KXQXCX1G…` → PR #14 (ga4/gsc excluded per SY-6 — their
+  pre-restart jobs had dead-lettered — with health events and the
+  changelog's exclusion section); run `01KXQXGXGX…` → PR #15, all
+  three systems, wheel commit `0.3.0 → 0.4.0` first, superseding #14
+  with a successor comment and branch deletion; two webhook triggers
+  then produced run C (PR #16 ⊃ #15) and a coalesced follow-up run D
+  (PR #17 ⊃ #16) — live single-flight + coalescing. End state: exactly
+  one open PR (#17), KB CI **pass** on every PR running the carried
+  0.4.0 wheel unmodified; `generator.validate` on the PR tree: 0
+  errors, 0 warnings (SO-8). A mid-demo core restart marked the torso
+  run `failed (interrupted)` — the crash-recovery path exercised live.
+- *Rotation:* `sync hook set supabase` → 202; rotate → old secret 401,
+  new secret 202, unknown system 404 — same core process throughout.
+- *SO-2/SO-9 demos:* policy edits merged to a scratch KB HEAD picked up
+  on the next tick, and freshness warnings raised by a shrunk threshold
+  then cleared by the next acceptance, are the committed
+  `sync-triggers` tests; `sync freshness` against the customer KB HEAD
+  policy read 3d/3d/30d thresholds live.
