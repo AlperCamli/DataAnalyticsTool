@@ -4,6 +4,8 @@
  * default here; tests shrink the time-based ones.
  */
 
+import { readdirSync } from "node:fs";
+
 export interface CoreConfig {
   databaseUrl: string;
   host: string;
@@ -26,6 +28,43 @@ export interface CoreConfig {
   sweepIntervalMs: number;
   /** Claim long-poll re-check cadence (matured not_before jobs don't NOTIFY). */
   claimPollMs: number;
+  /** Sync orchestrator (CP-3b). Disabled unless SYNC_ENABLED; the job
+   * API runs identically either way. */
+  sync: SyncConfig;
+}
+
+export interface SyncConfig {
+  enabled: boolean;
+  /** KB repo remote: an https URL (github provider) or a local path to a
+   * bare repo (local provider — tests, drills). */
+  gitRemote: string;
+  /** Fine-grained PAT for the contextlayer-sync machine account (D2).
+   * Passed per git command via http.extraheader, never written to disk. */
+  gitToken: string;
+  gitProvider: "github" | "local";
+  gitApiBase: string;
+  baseBranch: string;
+  committerName: string;
+  committerEmail: string;
+  /** argv prefix for the Python stage CLIs (ruling C2), like validatorCmd. */
+  pythonCmd: string[];
+  workdir: string;
+  /** Scheduler tick cadence (§4.1, default hourly). */
+  tickS: number;
+  /** §5.2 acquisition budget default (SO-D; sync-policy.yaml overrides). */
+  acquisitionBudgetS: number;
+  acquirePollMs: number;
+  /** §6 PR-stage bounded retries. */
+  prRetries: number;
+  prRetryBaseMs: number;
+  /** §4.2 Content-Length cap for the webhook endpoint. */
+  hookBodyMaxBytes: number;
+  /** §10 wheel carry: the platform release's wheel, or null when this
+   * deployment does not carry one. */
+  wheelPath: string | null;
+  wheelVersion: string | null;
+  platformCommit: string | null;
+  wheelBuilt: string | null;
 }
 
 export class ConfigError extends Error {}
@@ -68,6 +107,67 @@ export function parseRunnerTokens(raw: string): Map<string, string | null> {
   return tokens;
 }
 
+/** SYNC_WHEEL_VERSION default: the version segment of a PEP-427 wheel
+ * filename (`name-VERSION-…`). */
+export function wheelVersionFromFilename(wheelPath: string): string | null {
+  const base = wheelPath.split("/").pop() ?? "";
+  const match = /^[A-Za-z0-9_.]+-([^-]+)-/.exec(base);
+  return match ? match[1]! : null;
+}
+
+/** SYNC_WHEEL_PATH may name a directory holding exactly one .whl (how
+ * the core image ships its build); resolve it to the wheel file. */
+function resolveWheelPath(raw: string): string {
+  try {
+    const entries = readdirSync(raw).filter((f) => f.endsWith(".whl"));
+    if (entries.length === 1) return `${raw.replace(/\/$/, "")}/${entries[0]!}`;
+    if (entries.length > 1) {
+      throw new ConfigError(`SYNC_WHEEL_PATH ${raw} holds ${entries.length} wheels`);
+    }
+  } catch (err) {
+    if (err instanceof ConfigError) throw err;
+    // not a directory — treat as a file path
+  }
+  return raw;
+}
+
+function loadSyncConfig(env: NodeJS.ProcessEnv): SyncConfig {
+  const enabled = env.SYNC_ENABLED === "1" || env.SYNC_ENABLED === "true";
+  const gitRemote = env.SYNC_GIT_REMOTE ?? "";
+  if (enabled && !gitRemote) {
+    throw new ConfigError("SYNC_GIT_REMOTE is required when SYNC_ENABLED");
+  }
+  const provider =
+    env.SYNC_GIT_PROVIDER ?? (/^https?:\/\//.test(gitRemote) ? "github" : "local");
+  if (provider !== "github" && provider !== "local") {
+    throw new ConfigError(`SYNC_GIT_PROVIDER must be github or local, got ${provider}`);
+  }
+  const wheelPath = env.SYNC_WHEEL_PATH ? resolveWheelPath(env.SYNC_WHEEL_PATH) : null;
+  return {
+    enabled,
+    gitRemote,
+    gitToken: env.SYNC_GIT_TOKEN ?? "",
+    gitProvider: provider,
+    gitApiBase: (env.SYNC_GIT_API_BASE ?? "https://api.github.com").replace(/\/$/, ""),
+    baseBranch: env.SYNC_GIT_BASE_BRANCH ?? "main",
+    committerName: env.SYNC_COMMITTER_NAME ?? "contextlayer-sync",
+    committerEmail: env.SYNC_COMMITTER_EMAIL ?? "sync@contextlayer.invalid",
+    pythonCmd: (env.SYNC_PYTHON ?? "python3").split(/\s+/).filter(Boolean),
+    workdir: env.SYNC_WORKDIR ?? "/tmp/cl-sync",
+    tickS: intVar(env, "SYNC_TICK_S", 3600),
+    acquisitionBudgetS: intVar(env, "SYNC_ACQUISITION_BUDGET_S", 2 * 3600),
+    acquirePollMs: intVar(env, "SYNC_ACQUIRE_POLL_MS", 1000),
+    prRetries: intVar(env, "SYNC_PR_RETRIES", 3),
+    prRetryBaseMs: intVar(env, "SYNC_PR_RETRY_BASE_MS", 2000),
+    hookBodyMaxBytes: intVar(env, "SYNC_HOOK_BODY_MAX", 64 * 1024),
+    wheelPath,
+    wheelVersion:
+      env.SYNC_WHEEL_VERSION ?? (wheelPath ? wheelVersionFromFilename(wheelPath) : null),
+    platformCommit: env.SYNC_PLATFORM_COMMIT ?? null,
+    wheelBuilt: env.SYNC_WHEEL_BUILT ?? null,
+  };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
   const databaseUrl = env.CORE_DATABASE_URL;
   if (!databaseUrl) throw new ConfigError("CORE_DATABASE_URL is required");
@@ -94,5 +194,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
     snapshotRetention: intVar(env, "CORE_SNAPSHOT_RETENTION", 10),
     sweepIntervalMs: intVar(env, "CORE_SWEEP_INTERVAL_MS", 1000),
     claimPollMs: intVar(env, "CORE_CLAIM_POLL_MS", 300),
+    sync: loadSyncConfig(env),
   };
 }

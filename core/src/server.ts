@@ -37,6 +37,7 @@ import {
   type ErrorEnvelope,
 } from "./queue.js";
 import { getSnapshotBody, listSnapshots } from "./snapshots.js";
+import { getHookSecretHash, getSyncSystem, triggerSystem } from "./triggers.js";
 import { acceptSnapshotDelivery, ValidatorUnavailable } from "./validator.js";
 
 declare module "fastify" {
@@ -65,11 +66,16 @@ export function buildServer(
     bodyLimit: cfg.resultMaxBytes + 64 * 1024,
   });
 
+  const isHookPath = (url: string) => url.startsWith("/v1/hooks/");
+
   // Parse JSON while retaining the raw bytes (see module docstring).
+  // Webhook bodies are never parsed or retained (SY-2: the hook is a
+  // trigger, not a data channel — the bytes are received and dropped).
   app.addContentTypeParser(
     "application/json",
     { parseAs: "buffer" },
     (req, body: Buffer, done) => {
+      if (isHookPath(req.url)) return done(null, undefined);
       req.rawBody = body;
       if (body.length === 0) return done(null, {});
       try {
@@ -81,12 +87,31 @@ export function buildServer(
     },
   );
 
+  // CI vendors post hook bodies with arbitrary content types; accept and
+  // discard them on hook paths, keep the 415 contract everywhere else.
+  app.addContentTypeParser("*", { parseAs: "buffer" }, (req, _body: Buffer, done) => {
+    if (isHookPath(req.url)) return done(null, undefined);
+    const err = new Error("unsupported media type") as Error & { statusCode?: number };
+    err.statusCode = 415;
+    done(err, undefined);
+  });
+
   // Bearer auth on everything but the health probe (J-8).
   const tokenHashes = [...cfg.runnerTokens.entries()].map(
     ([token, runnerId]) => ({ hash: sha256(token), runnerId }),
   );
   app.addHook("onRequest", async (req, reply) => {
     if (req.url === "/healthz") return;
+    if (isHookPath(req.url)) {
+      // §4.2: hooks authenticate with their own per-hook secret, and the
+      // Content-Length cap guards the socket before the body is read.
+      const length = Number(req.headers["content-length"] ?? 0);
+      if (Number.isFinite(length) && length > cfg.sync.hookBodyMaxBytes) {
+        await reply.code(413).send({ error: "payload_too_large" });
+        return reply;
+      }
+      return;
+    }
     const header = req.headers.authorization ?? "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";
     const provided = sha256(token);
@@ -347,6 +372,57 @@ export function buildServer(
     );
     if (!outcome) return leaseLost(reply);
     return { status: outcome };
+  });
+
+  // -- webhook trigger ingestion (sync spec §4.2, JP-4 adopted) ---------------
+  //
+  // System identity from the URL path, per-hook shared secret in
+  // X-CL-Hook-Secret compared constant-time, body ignored unread (SY-2).
+  // 202 trigger accepted / 401 bad secret, nothing enqueued / 404 unknown
+  // system — the body never distinguishes "unknown" from "not configured"
+  // (M-4 spirit). Job-protocol dedupe absorbs CI storms (SO-A).
+
+  app.post("/v1/hooks/:system", async (req, reply) => {
+    const { system } = req.params as { system: string };
+    const header = req.headers["x-cl-hook-secret"];
+    const provided = typeof header === "string" ? header : "";
+    const storedHash = await getHookSecretHash(pool, system);
+    if (storedHash === null) {
+      return reply.code(404).send({ error: "not_found" });
+    }
+    const stored = Buffer.from(storedHash, "hex");
+    const digest = sha256(provided);
+    if (stored.length !== digest.length || !timingSafeEqual(digest, stored)) {
+      return reply.code(401).send({ error: "unauthorized" });
+    }
+    const registered = await getSyncSystem(pool, system);
+    if (!registered) {
+      return reply.code(404).send({ error: "not_found" });
+    }
+    await triggerSystem(pool, cfg, registered, { kind: "webhook" });
+    return reply.code(202).send({ status: "accepted" });
+  });
+
+  // -- sync ops reads ---------------------------------------------------------
+
+  app.get("/v1/runs", async (req) => {
+    const q = req.query as { limit?: string };
+    const { rows } = await pool.query(
+      `SELECT run_id, triggers, systems, kb_ref, snapshot_refs,
+              classification_counts, contaminated_docs, outcome, pr_url,
+              detail, started_at, finished_at, duration_ms
+         FROM runs ORDER BY started_at DESC LIMIT $1`,
+      [Math.min(Number(q.limit ?? 50) || 50, 200)],
+    );
+    return { runs: rows };
+  });
+
+  app.get("/v1/freshness-warnings", async () => {
+    const { rows } = await pool.query(
+      `SELECT system, raised_at, age_s, threshold_s, detail
+         FROM freshness_warnings ORDER BY system`,
+    );
+    return { warnings: rows };
   });
 
   // -- health probe (unauthenticated) -----------------------------------------

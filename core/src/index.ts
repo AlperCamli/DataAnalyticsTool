@@ -5,8 +5,11 @@
  */
 
 import { loadConfig } from "./config.js";
-import { createPool, JobsNotifier } from "./db.js";
+import { createPool, JobsNotifier, SYNC_CHANNEL } from "./db.js";
+import { createProvider } from "./gitkb.js";
 import { defaultMigrationsDir, migrate } from "./migrate.js";
+import { failStaleRunningRuns, runPendingRuns } from "./pipeline.js";
+import { startScheduler } from "./scheduler.js";
 import { buildServer, startSweeper } from "./server.js";
 
 async function main(): Promise<void> {
@@ -21,13 +24,38 @@ async function main(): Promise<void> {
   await notifier.start();
 
   const app = buildServer(cfg, pool, notifier);
-  const stopSweeper = startSweeper(pool, cfg, (msg, err) =>
-    err ? app.log.error({ err }, msg) : app.log.info(msg),
-  );
+  const log = (msg: string, err?: unknown) =>
+    err ? app.log.error({ err }, msg) : app.log.info(msg);
+  const stopSweeper = startSweeper(pool, cfg, log);
+
+  // Sync orchestrator (CP-3b): scheduler tick + NOTIFY-woken run loop.
+  let stopScheduler = () => {};
+  let syncNotifier: JobsNotifier | null = null;
+  let syncLoopStopped = false;
+  if (cfg.sync.enabled) {
+    await failStaleRunningRuns(pool);
+    stopScheduler = startScheduler(pool, cfg, log);
+    syncNotifier = new JobsNotifier(cfg.databaseUrl, SYNC_CHANNEL);
+    await syncNotifier.start();
+    const deps = { pool, cfg, provider: createProvider(cfg.sync), log };
+    void (async () => {
+      while (!syncLoopStopped) {
+        try {
+          await runPendingRuns(deps);
+        } catch (err) {
+          log("sync run loop error", err);
+        }
+        await syncNotifier!.wait(60_000);
+      }
+    })();
+  }
 
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, "shutting down");
     stopSweeper();
+    stopScheduler();
+    syncLoopStopped = true;
+    await syncNotifier?.stop();
     await app.close();
     await notifier.stop();
     await pool.end();

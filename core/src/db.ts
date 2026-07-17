@@ -10,6 +10,7 @@ import { EventEmitter } from "node:events";
 import pg from "pg";
 
 export const JOBS_CHANNEL = "cl_jobs";
+export const SYNC_CHANNEL = "cl_sync";
 
 export function createPool(databaseUrl: string): pg.Pool {
   return new pg.Pool({ connectionString: databaseUrl, max: 20 });
@@ -41,8 +42,10 @@ export class JobsNotifier {
   readonly events = new EventEmitter();
   private client: pg.Client | null = null;
   private stopped = false;
+  private readonly channel: string;
 
-  constructor(private readonly databaseUrl: string) {
+  constructor(private readonly databaseUrl: string, channel: string = JOBS_CHANNEL) {
+    this.channel = channel;
     this.events.setMaxListeners(0);
   }
 
@@ -54,7 +57,7 @@ export class JobsNotifier {
       // Connection dropped: claims degrade to their poll interval.
       if (!this.stopped) this.events.emit("wake");
     });
-    await client.query(`LISTEN ${JOBS_CHANNEL}`);
+    await client.query(`LISTEN ${this.channel}`);
     this.client = client;
   }
 
@@ -86,4 +89,10 @@ export async function notifyJobs(
   queryable: pg.Pool | pg.PoolClient,
 ): Promise<void> {
   await queryable.query(`NOTIFY ${JOBS_CHANNEL}`);
+}
+
+export async function notifySync(
+  queryable: pg.Pool | pg.PoolClient,
+): Promise<void> {
+  await queryable.query(`NOTIFY ${SYNC_CHANNEL}`);
 }
