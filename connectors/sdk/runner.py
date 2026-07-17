@@ -22,6 +22,7 @@ from connectors.sdk.connector import Connector
 from connectors.sdk.emission import EmittedSnapshot, config_problems, emit_snapshot
 from connectors.sdk.errors import ConnectorError, QuotaExceeded
 from connectors.sdk.providers import IntrospectionResult
+from connectors.sdk.redact import redact_deep, redact_text
 
 logger = logging.getLogger("connectors.sdk.runner")
 
@@ -67,10 +68,18 @@ class JobOutcome:
     retry_after_s: int | None = None
 
 
+def _job_error(code: str, message: str, retryable: bool, detail: dict | None = None) -> JobError:
+    """Build a JobError with credential-shaped strings scrubbed from the
+    message and detail (job §7 / review F3 / D-66 point 2): a driver
+    exception that echoes a resolved DSN must not travel the `fail` wire
+    call into `jobs.error` / `health_events.detail`."""
+    return JobError(code, redact_text(message), retryable, redact_deep(dict(detail or {})))
+
+
 def _failed(exc: ConnectorError) -> JobOutcome:
     return JobOutcome(
         status="failed",
-        error=JobError(exc.code, str(exc), exc.retryable, dict(exc.detail)),
+        error=_job_error(exc.code, str(exc), exc.retryable, dict(exc.detail)),
     )
 
 
@@ -83,7 +92,7 @@ def run_job(connector: Connector, job: Job, *, captured_at: str | None = None) -
     if "metadata" not in connector.handlers:
         return JobOutcome(
             status="failed",
-            error=JobError(
+            error=_job_error(
                 "config_error",
                 f"connector {manifest.name!r} does not declare the metadata capability",
                 retryable=False,
@@ -93,7 +102,7 @@ def run_job(connector: Connector, job: Job, *, captured_at: str | None = None) -
     if problems:
         return JobOutcome(
             status="failed",
-            error=JobError(
+            error=_job_error(
                 "config_error",
                 "config rejected: " + "; ".join(problems),
                 retryable=False,
@@ -120,17 +129,18 @@ def run_job(connector: Connector, job: Job, *, captured_at: str | None = None) -
         logger.info("job %s: deferred %ss (%s)", job.job_id, exc.retry_after_s, exc)
         return JobOutcome(
             status="deferred",
-            error=JobError(exc.code, str(exc), retryable=True, detail=dict(exc.detail)),
+            error=_job_error(exc.code, str(exc), retryable=True, detail=dict(exc.detail)),
             retry_after_s=exc.retry_after_s,
         )
     except ConnectorError as exc:
-        logger.warning("job %s: failed %s (%s)", job.job_id, exc.code, exc)
+        # scrub the log line too: a driver error can echo the resolved DSN (F3)
+        logger.warning("job %s: failed %s (%s)", job.job_id, exc.code, redact_text(str(exc)))
         return _failed(exc)
     except Exception as exc:  # bare crash → `internal` (job spec §6.7)
-        logger.warning("job %s: failed internal (%r)", job.job_id, exc)
+        logger.warning("job %s: failed internal (%s)", job.job_id, redact_text(repr(exc)))
         return JobOutcome(
             status="failed",
-            error=JobError(
+            error=_job_error(
                 "internal",
                 f"{type(exc).__name__}: {exc}",
                 retryable=True,

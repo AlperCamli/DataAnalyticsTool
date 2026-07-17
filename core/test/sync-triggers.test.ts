@@ -6,6 +6,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, writeFile } from "node:fs/promises";
+import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
@@ -140,6 +141,66 @@ it("SO-1: webhook — valid secret 202 + enqueued webhook trigger; bad secret 40
     `SELECT coalesce(string_agg(jobs::text, ''), '') AS blob FROM jobs`,
   );
   expect(rows[0].blob).not.toContain(CANARY);
+});
+
+/**
+ * Post to a hook with a chunked body (no Content-Length) larger than the
+ * cap, no secret. Returns the response status/body or, if the server
+ * aborted the socket mid-stream, `aborted: true`.
+ */
+function chunkedOversizedHook(
+  system: string,
+  totalBytes: number,
+): Promise<{ status?: number; body: string; aborted: boolean }> {
+  return new Promise((resolve) => {
+    const url = new URL(`${core.baseUrl}/v1/hooks/${system}`);
+    const req = http.request(
+      {
+        hostname: url.hostname,
+        port: Number(url.port),
+        path: url.pathname,
+        method: "POST",
+        headers: { "content-type": "application/json" }, // no content-length, no secret
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (d) => (body += d.toString()));
+        res.on("end", () => resolve({ status: res.statusCode, body, aborted: false }));
+      },
+    );
+    req.on("error", () => resolve({ body: "", aborted: true }));
+    // Writing without a Content-Length makes Node use chunked transfer-encoding.
+    const chunk = "x".repeat(16 * 1024);
+    try {
+      for (let sent = 0; sent < totalBytes; sent += chunk.length) req.write(chunk);
+      req.end();
+    } catch {
+      // server closed the socket mid-write — the cap doing its job
+    }
+  });
+}
+
+it("F2: chunked body with no Content-Length is capped during read, unauthenticated", async () => {
+  // ~640 KB, ten times the 64 KB cap, no secret — the onRequest
+  // Content-Length pre-check can't see it (chunked), so the route-level
+  // bodyLimit must reject it while reading, before the handler/secret check.
+  const result = await chunkedOversizedHook("chunk-cap-demo", 640 * 1024);
+
+  // rejected at the cap: either a clean 413 or a mid-stream socket abort
+  expect(result.aborted || result.status === 413).toBe(true);
+  if (result.status !== undefined) {
+    expect(result.status).toBe(413);
+    // Fastify's read-time limit, not the onRequest header pre-check
+    // (which sends {error:"payload_too_large"}).
+    expect(result.body).not.toContain("payload_too_large");
+  }
+
+  // unauthenticated + rejected before the handler → nothing enqueued
+  expect((await queuedJobs("chunk-cap-demo")).length).toBe(0);
+
+  // a small honest body to the same unknown system still reaches the
+  // handler and 404s — the cap didn't break normal hook handling
+  expect(await postHook("chunk-cap-demo", "any-secret", `{"ok":1}`)).toBe(404);
 });
 
 it("rotation: a new hook secret takes effect without restart", async () => {

@@ -52,8 +52,33 @@ export interface ChangelogInput {
   excluded: { system: string; reason: string }[];
 }
 
+/**
+ * Neutralize a snapshot-derived string before it is interpolated into the
+ * PR markdown (review F4 / D-66 point 2). Object/column names and
+ * view-diff detail are attacker-influenceable, yet the reviewer trusts
+ * this PR — a crafted name must not break out of its code span, forge a
+ * heading, or fire an @mention. Collapse newlines, defuse code-span
+ * backticks, and HTML-encode the inline-markdown metacharacters
+ * (`< > @ [ ] * |`) so any injected control sequence renders as inert
+ * text. A strict no-op on ordinary identifiers/paths (they carry none of
+ * these), so the deterministic changelog (SO-12) is byte-unchanged.
+ */
+function neutralize(value: unknown): string {
+  return String(value)
+    .replace(/[\r\n]+/g, " ")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/`/g, "'")
+    .replace(/@/g, "&#64;")
+    .replace(/\[/g, "&#91;")
+    .replace(/\]/g, "&#93;")
+    .replace(/\*/g, "&#42;")
+    .replace(/\|/g, "&#124;");
+}
+
 const fqnOf = (system: string, o: DiffObject) =>
-  `${system}.${o.identity.schema}.${o.identity.name}`;
+  neutralize(`${system}.${o.identity.schema}.${o.identity.name}`);
 
 export function countBreaking(input: ChangelogInput): number {
   return input.scan ? Object.keys(input.scan.breaking).length : 0;
@@ -74,9 +99,9 @@ export function buildTitle(input: ChangelogInput): string {
     .map((d) => d.system)
     .sort();
   if (systems.length === 0 && input.wheel) {
-    return `sync: 0 breaking, 0 additive (wheel-only update to ${input.wheel.toVersion})`;
+    return `sync: 0 breaking, 0 additive (wheel-only update to ${neutralize(input.wheel.toVersion)})`;
   }
-  return `sync: ${countBreaking(input)} breaking, ${countAdditive(input)} additive across ${systems.join(", ")}`;
+  return `sync: ${countBreaking(input)} breaking, ${countAdditive(input)} additive across ${systems.map(neutralize).join(", ")}`;
 }
 
 export function buildLabels(input: ChangelogInput): string[] {
@@ -91,7 +116,7 @@ export function buildBody(input: ChangelogInput): string {
   if (input.wheel) {
     lines.push(
       `> Leads with a vendored validation wheel update ` +
-        `${input.wheel.fromVersion ?? "(none)"} → ${input.wheel.toVersion} (sync spec §10); ` +
+        `${neutralize(input.wheel.fromVersion ?? "(none)")} → ${neutralize(input.wheel.toVersion)} (sync spec §10); ` +
         `this PR's KB CI already runs the new wheel.`,
       "",
     );
@@ -115,15 +140,15 @@ export function buildBody(input: ChangelogInput): string {
     lines.push("## Breaking", "");
     for (const fqn of breakingFqns) {
       const { detail } = scan.breaking[fqn]!;
-      lines.push(`- \`${fqn}\` — ${detail}`);
+      lines.push(`- \`${neutralize(fqn)}\` — ${neutralize(detail)}`);
       const docs = (contaminatedByObject.get(fqn) ?? []).sort((a, b) =>
         a.doc < b.doc ? -1 : 1,
       );
       for (const hit of docs) {
         lines.push(
           hit.path
-            ? `  - contaminates \`${hit.doc}\` (lineage path: ${hit.path.map((p) => `\`${p.slice(0, 19)}…\``).join(" → ")})`
-            : `  - contaminates \`${hit.doc}\` (declared dependency)`,
+            ? `  - contaminates \`${neutralize(hit.doc)}\` (lineage path: ${hit.path.map((p) => `\`${neutralize(p.slice(0, 19))}…\``).join(" → ")})`
+            : `  - contaminates \`${neutralize(hit.doc)}\` (declared dependency)`,
         );
       }
     }
@@ -135,9 +160,9 @@ export function buildBody(input: ChangelogInput): string {
     for (const obj of diff.changed_structural) {
       for (const candidate of obj.rename_candidates ?? []) {
         renames.push(
-          `- \`${fqnOf(diff.system, obj)}\`: \`${candidate.from_column}\` → ` +
-            `\`${candidate.to_column}\` (type ${candidate.type}, ordinal ${candidate.ordinal}) — ` +
-            `either **${candidate.interpretations[0]}** or **${candidate.interpretations[1]}**; ` +
+          `- \`${fqnOf(diff.system, obj)}\`: \`${neutralize(candidate.from_column)}\` → ` +
+            `\`${neutralize(candidate.to_column)}\` (type ${neutralize(candidate.type)}, ordinal ${candidate.ordinal}) — ` +
+            `either **${neutralize(candidate.interpretations[0])}** or **${neutralize(candidate.interpretations[1])}**; ` +
             `the removal is breaking under both readings`,
         );
       }
@@ -152,7 +177,7 @@ export function buildBody(input: ChangelogInput): string {
   const metadataOnly: string[] = [];
   for (const diff of [...input.diffs].sort((a, b) => (a.system < b.system ? -1 : 1))) {
     for (const obj of diff.added) {
-      additive.push(`- \`${fqnOf(diff.system, obj)}\` — added (${obj.identity.kind})`);
+      additive.push(`- \`${fqnOf(diff.system, obj)}\` — added (${neutralize(obj.identity.kind)})`);
     }
     for (const obj of diff.changed_structural) {
       if (obj.severity === "breaking") continue;
@@ -161,7 +186,7 @@ export function buildBody(input: ChangelogInput): string {
         .map((s) => {
           const target = s.detail.column ?? s.detail.key ?? s.detail.stat ?? "";
           const note = s.downgraded ? " (downgraded per §7 note ³: output columns and mappings unchanged)" : "";
-          return `${s.change}${target ? `: ${String(target)}` : ""}${note}`;
+          return `${neutralize(s.change)}${target ? `: ${neutralize(target)}` : ""}${note}`;
         })
         .join("; ");
       if (obj.severity === "additive-with-note") withNote.push(`- \`${fqn}\` — ${subs}`);
@@ -169,7 +194,7 @@ export function buildBody(input: ChangelogInput): string {
     }
     for (const obj of diff.changed_metadata_only) {
       metadataOnly.push(
-        `- \`${fqnOf(diff.system, obj)}\` — ${(obj.metadata_changes ?? []).join(", ")}`,
+        `- \`${fqnOf(diff.system, obj)}\` — ${(obj.metadata_changes ?? []).map(neutralize).join(", ")}`,
       );
     }
   }
@@ -182,7 +207,7 @@ export function buildBody(input: ChangelogInput): string {
   if (scan.stale.length > 0) {
     lines.push("## Docs marked stale", "");
     for (const s of [...scan.stale].sort((a, b) => (a.doc < b.doc ? -1 : 1))) {
-      lines.push(`- \`${s.doc}\` (additive drift on ${s.objects.map((o) => `\`${o}\``).join(", ")})`);
+      lines.push(`- \`${neutralize(s.doc)}\` (additive drift on ${s.objects.map((o) => `\`${neutralize(o)}\``).join(", ")})`);
     }
     lines.push("");
   }
@@ -190,7 +215,7 @@ export function buildBody(input: ChangelogInput): string {
   if (input.excluded.length > 0) {
     lines.push("## Systems excluded from this run (SY-6)", "");
     for (const e of [...input.excluded].sort((a, b) => (a.system < b.system ? -1 : 1))) {
-      lines.push(`- \`${e.system}\` — ${e.reason}`);
+      lines.push(`- \`${neutralize(e.system)}\` — ${neutralize(e.reason)}`);
     }
     lines.push("");
   }
@@ -204,7 +229,7 @@ export function buildBody(input: ChangelogInput): string {
       "",
     );
     for (const u of scan.undeclared_references) {
-      lines.push(`- \`${u.doc}\` mentions \`${u.object}\``);
+      lines.push(`- \`${neutralize(u.doc)}\` mentions \`${neutralize(u.object)}\``);
     }
     lines.push("");
   }

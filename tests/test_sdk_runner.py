@@ -126,6 +126,27 @@ def test_bare_exception_maps_to_internal_with_traceback():
     assert outcome.snapshot is None
 
 
+def test_error_message_and_traceback_redact_credentials(tmp_path):
+    # F3 / D-66 point 2: a driver exception that echoes the resolved DSN must
+    # not carry the secret into JobError — the scrub runs before it is built.
+    from connectors.sdk.redact import REDACTION_MARKER
+
+    canary = "cl-canary-run-4d2a9f"
+    dsn = f"postgres://svc:{canary}@db.internal:5432/appdb"
+
+    def boom(config):
+        raise RuntimeError(f"could not connect to {dsn}")
+
+    outcome = run_job(make_connector(tmp_path, boom), Job.local(dict(DEMO_CONFIG)))
+    assert outcome.status == "failed"
+    assert outcome.error.code == "internal"
+    assert canary not in outcome.error.message
+    assert REDACTION_MARKER in outcome.error.message
+    traceback_text = outcome.error.detail["traceback"]
+    assert canary not in traceback_text
+    assert REDACTION_MARKER in traceback_text
+
+
 def test_j5_quota_is_deferral_not_failure():
     outcome = run_demo({**DEMO_CONFIG, "inject_failure": "quota"})
     assert outcome.status == "deferred"

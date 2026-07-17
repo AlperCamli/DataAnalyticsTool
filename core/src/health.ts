@@ -4,6 +4,7 @@
  */
 
 import pg from "pg";
+import { redactDeep } from "./redact.js";
 
 export interface HealthEvent {
   kind: string;
@@ -25,7 +26,9 @@ export async function recordHealthEvent(
       event.severity,
       event.system ?? null,
       event.jobId ?? null,
-      JSON.stringify(event.detail ?? {}),
+      // §7 defense in depth: scrub credential-shaped strings before this
+      // widely-readable row is stored (review F3 / D-66 §2).
+      JSON.stringify(redactDeep(event.detail ?? {})),
     ],
   );
 }

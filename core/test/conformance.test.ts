@@ -437,6 +437,39 @@ describe("JC-9: dedupe — one running + at most one queued per (system, type)",
   });
 });
 
+describe("JC-8: credential redaction in stored error detail (job §7 / review F3)", () => {
+  it("scrubs a DSN from a runner-supplied error before storing and surfacing it", async () => {
+    const CANARY = "cl-canary-fail-7b3e91d";
+    const dsn = `postgres://svc:${CANARY}@db.internal:5432/appdb`;
+    await client.enqueue(snapshotJob("jc8-redact"));
+    const claimed = await client.claim(claimBody());
+    const jobId = claimed.json.job_id as string;
+    const token = (claimed.json.lease as { token: string }).token;
+    await client.start(jobId, token);
+
+    // a connector that leaked its resolved DSN into the fail envelope
+    const failed = await client.fail(jobId, token, {
+      code: "auth_error",
+      message: `could not connect: ${dsn}`,
+      retryable: false,
+      detail: { dsn, note: `password=${CANARY} rejected` },
+    });
+    expect(failed.json.status).toBe("dead_lettered");
+
+    // stored jobs.error (served by GET /v1/jobs/:id) carries the marker, not the value
+    const errBlob = JSON.stringify((await client.job(jobId)).json.error);
+    expect(errBlob).not.toContain(CANARY);
+    expect(errBlob).toContain("[redacted:credential]");
+
+    // /v1/health-events detail is scrubbed too
+    const evBlob = JSON.stringify(
+      (await client.get(`/v1/health-events?job_id=${jobId}`)).json.events,
+    );
+    expect(evBlob).not.toContain(CANARY);
+    expect(evBlob).toContain("[redacted:credential]");
+  });
+});
+
 describe("snapshot acceptance (J-6 pass path)", () => {
   it("stores canonical bytes verbatim and records result_meta", async () => {
     await client.enqueue(snapshotJob("accept-ok"));

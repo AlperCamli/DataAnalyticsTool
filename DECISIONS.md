@@ -1476,3 +1476,62 @@ below). CP-3a JC suite and the 359-test Python suite unchanged green;
   then cleared by the next acceptance, are the committed
   `sync-triggers` tests; `sync freshness` against the customer KB HEAD
   policy read 3d/3d/30d thresholds live.
+
+---
+
+# DECISIONS — pre-CP-4 hardening (task 4.0)
+
+## D-67 — Security review #1 findings F2/F3/F4 landed **[closes D-66 point 2]**
+
+Ruling **D-66** accepted security review #1 (P-B/P-C/P-D as code fixes,
+landing pre-CP-4 as the live-pilot-facing hardening task 4.0). This
+record closes **D-66 point 2** — findings **F2, F3, F4** — with tests as
+the definition of done. No spec change; the amendment fence held. P-A
+(auth split) is CP-4 and is untouched here.
+
+**F2 — webhook socket cap enforced during read.** The hook route now
+carries a route-level `bodyLimit = cfg.sync.hookBodyMaxBytes`
+(`server.ts`), so Fastify enforces the 64 KB cap while reading the body,
+chunked or not — an absent/understated `Content-Length` can no longer
+stream past it to the global result limit before the (unauthenticated)
+secret check. The `onRequest` header pre-check stays as a fast reject for
+an honest oversized `Content-Length`. *Test:* a ~640 KB chunked body with
+no `Content-Length` and no secret is rejected at the cap (Fastify
+`FST_ERR_CTP_BODY_TOO_LARGE`, distinct from the pre-check), nothing
+enqueued (`sync-triggers.test.ts` F2).
+
+**F3 — job-spec §7 redaction implemented, both sides.** A new
+pattern-based scrub (connection URIs with userinfo, `password=…` keyword
+secrets, bearer tokens → `[redacted:credential]`) exists as
+`core/src/redact.ts` and `connectors/sdk/redact.py`. Runner side: every
+`JobError` is built through `_job_error`, scrubbing the exception message
++ detail (incl. the traceback) before it can travel the `fail` wire call;
+the `warning` log lines that echo the exception are scrubbed too
+(`runner.py`). Core side (defense in depth, since the core holds only
+references — J-4 — not values): `failJob`/`deferJob` scrub the
+runner-supplied envelope and `recordHealthEvent` scrubs every detail
+before storage in `jobs.error` / `health_events.detail`, the rows any
+bearer-token holder can read. *Tests:* a live-shaped DSN in a staged
+connector exception → the marker, never the value, in
+`outcome.error.message`/traceback (`test_sdk_runner.py`) and in
+`GET /v1/jobs/:id` + `GET /v1/health-events`
+(`conformance.test.ts` JC-8 redaction). The existing happy-path JC-8
+(`e2e.test.ts`) still passes; references (`env://…`) are never redacted.
+
+**F4 — sync PR title/body neutralize interpolated snapshot text.**
+`changelog.ts` gains `neutralize()`, applied to every snapshot-derived
+interpolation (FQNs, view-diff detail, rename interpretations, contaminated
+docs, lineage-path elements, excluded reasons, system names, wheel
+versions): newlines collapse, code-span backticks are defused, and inline
+markdown metacharacters (`< > @ [ ] * |`) are HTML-encoded, so a crafted
+object name cannot break out of its code span, forge a heading, or fire an
+`@mention` in the PR a human reviewer trusts. It is a **strict no-op on
+ordinary identifiers**, so the deterministic changelog holds: SO-4's
+byte-exact golden (`fixtures/drill/expected/changelog.md`) is unchanged.
+*Test:* a backtick + `@mention` + newline-heading object name renders inert
+(`changelog.test.ts` F4), plus a golden-determinism no-op assertion.
+
+**Scope note.** Map-lookup keys (`contaminatedByObject`, breaking-fqn
+lookups) keep the raw string; only display values are neutralized. Full TS
+suite 50 passing (incl. drill golden, both JC-8 paths, SO-1 413), Python
+391 passing.

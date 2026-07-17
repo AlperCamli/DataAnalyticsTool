@@ -22,6 +22,7 @@ import semver from "semver";
 import type { CoreConfig } from "./config.js";
 import { notifyJobs, withTransaction } from "./db.js";
 import { recordHealthEvent } from "./health.js";
+import { redactDeep, redactError } from "./redact.js";
 import { CLASS_DEFAULTS, JOB_TYPES, TRIGGER_KINDS } from "./registry.js";
 import { ulid } from "./ulid.js";
 
@@ -476,6 +477,10 @@ export async function failJob(
   leaseToken: string,
   error: ErrorEnvelope,
 ): Promise<FailOutcome> {
+  // §7 defense in depth: scrub credential-shaped strings from the
+  // runner-supplied envelope before it reaches jobs.error / health detail
+  // (review F3 / D-66 §2). The runner scrubs first (redact.py); this is core-side.
+  error = redactError(error);
   const outcome = await withTransaction(pool, async (client) => {
     const row = await lockLeased(client, jobId, leaseToken);
     if (!row) return null;
@@ -508,6 +513,7 @@ export async function deferJob(
   retryAfterS: number,
   reason: { code?: string; message?: string },
 ): Promise<"deferred" | "requeued" | "dead_lettered" | "cancelled" | null> {
+  reason = redactDeep(reason); // §7 defense in depth (review F3 / D-66 §2)
   const outcome = await withTransaction(pool, async (client) => {
     const row = await lockLeased(client, jobId, leaseToken);
     if (!row) return null;

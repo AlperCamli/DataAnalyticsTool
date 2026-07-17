@@ -382,7 +382,12 @@ export function buildServer(
   // system — the body never distinguishes "unknown" from "not configured"
   // (M-4 spirit). Job-protocol dedupe absorbs CI storms (SO-A).
 
-  app.post("/v1/hooks/:system", async (req, reply) => {
+  // Route-level bodyLimit (F3 review / D-66 §2): Fastify enforces the cap
+  // while reading the body, chunked or not, so an absent/understated
+  // Content-Length can no longer stream past it into memory before the
+  // (unauthenticated) secret check. The onRequest header pre-check above
+  // stays as a fast reject for an honest oversized Content-Length.
+  app.post("/v1/hooks/:system", { bodyLimit: cfg.sync.hookBodyMaxBytes }, async (req, reply) => {
     const { system } = req.params as { system: string };
     const header = req.headers["x-cl-hook-secret"];
     const provided = typeof header === "string" ? header : "";
