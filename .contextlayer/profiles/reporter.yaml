@@ -1,0 +1,19 @@
+# Reporter profile (CP-4 / M1) — platform-architecture §5 shape.
+# The v1 pilot-user surface: read + resolve + validate; no execution
+# until the CP-6 gateway, no publish until CP-7, no steward tools.
+# Enforcement is server-side on every call: the MCP server evaluates
+# (OIDC roles ∩ this allowlist) and injects `limits` itself — client
+# config can never widen access (M-3, MCP-R2/R4/R8).
+name: Reporter
+description: Read the context estate and produce validated SQL / API requests
+roles: [reporter]              # OIDC groups permitted to bind this profile
+skills: [report]               # ships at CP-5; recorded now for the compile step
+tools:
+  allow: [search_context, get_entity, get_table, get_metric, get_lineage,
+          validate_sql, report_freshness, flag_gap]
+context:
+  claude_md_fragment: |
+    Prefer certified metrics from metrics/. Warn on stale or draft docs;
+    refuse to build on contaminated docs unless the user overrides.
+# Matches conventions.md query guardrails (direct-on-OLTP mandate).
+limits: { row_cap: 50000, timeout_s: 60 }
