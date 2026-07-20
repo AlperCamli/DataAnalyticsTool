@@ -23,11 +23,11 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `signup_month` | `date` | true | — | — | — |
-| 2 | `locale` | `text` | true | — | — | — |
-| 3 | `default_cv_language` | `text` | true | — | — | — |
-| 4 | `user_count` | `bigint` | true | — | — | — |
-| 5 | `onboarded_count` | `bigint` | true | — | — | — |
+| 1 | `signup_month` | `date` | true | — | — | Calendar month the user record was created. |
+| 2 | `locale` | `text` | true | — | — | User's locale setting. |
+| 3 | `default_cv_language` | `text` | true | — | — | User's default CV language. |
+| 4 | `user_count` | `bigint` | true | — | — | Users in this cohort. |
+| 5 | `onboarded_count` | `bigint` | true | — | — | How many completed onboarding. |
 
 ## Keys & indexes
 

@@ -23,11 +23,11 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `month` | `date` | true | — | — | — |
-| 2 | `language` | `text` | true | — | — | — |
-| 3 | `tailored_cv_count` | `bigint` | true | — | — | — |
-| 4 | `distinct_users` | `bigint` | true | — | — | — |
-| 5 | `deleted_count` | `bigint` | true | — | — | — |
+| 1 | `month` | `date` | true | — | — | Calendar month the tailored CV was created. |
+| 2 | `language` | `text` | true | — | — | Language of the tailored CV, verbatim from the row. |
+| 3 | `tailored_cv_count` | `bigint` | true | — | — | Tailored CVs created in that month/language, including soft-deleted ones. |
+| 4 | `distinct_users` | `bigint` | true | — | — | Users who created at least one tailored CV in that month/language. |
+| 5 | `deleted_count` | `bigint` | true | — | — | How many of those are now flagged `is_deleted`. |
 
 ## Keys & indexes
 

@@ -23,16 +23,16 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `flow_type` | `text` | true | — | — | — |
-| 2 | `provider` | `text` | true | — | — | — |
-| 3 | `model_name` | `text` | true | — | — | — |
-| 4 | `status` | `text` | true | — | — | — |
-| 5 | `run_count` | `bigint` | true | — | — | — |
-| 6 | `distinct_users` | `bigint` | true | — | — | — |
-| 7 | `input_tokens` | `bigint` | true | — | — | — |
-| 8 | `output_tokens` | `bigint` | true | — | — | — |
-| 9 | `total_tokens` | `bigint` | true | — | — | — |
-| 10 | `avg_seconds` | `numeric` | true | — | — | — |
+| 1 | `flow_type` | `text` | true | — | — | Logical AI flow executed; the same enum as `public.ai_runs.flow_type`. |
+| 2 | `provider` | `text` | true | — | — | AI provider that served the run. |
+| 3 | `model_name` | `text` | true | — | — | Specific model used. |
+| 4 | `status` | `text` | true | — | — | Terminal status of the run (`pending` \| `completed` \| `failed`). |
+| 5 | `run_count` | `bigint` | true | — | — | Runs matching this combination. |
+| 6 | `distinct_users` | `bigint` | true | — | — | Users who triggered at least one such run. |
+| 7 | `input_tokens` | `bigint` | true | — | — | Sum of input tokens; null-valued rows contribute nothing. |
+| 8 | `output_tokens` | `bigint` | true | — | — | Sum of output tokens. |
+| 9 | `total_tokens` | `bigint` | true | — | — | Sum of billed tokens — the figure to use for cost. |
+| 10 | `avg_seconds` | `numeric` | true | — | — | Mean wall-clock seconds from `started_at` to `completed_at`, to 2dp. |
 
 ## Keys & indexes
 

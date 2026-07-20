@@ -23,10 +23,10 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `parser_name` | `text` | true | — | — | — |
-| 2 | `status` | `text` | true | — | — | — |
-| 3 | `import_count` | `bigint` | true | — | — | — |
-| 4 | `distinct_users` | `bigint` | true | — | — | — |
+| 1 | `parser_name` | `text` | true | — | — | Parser that handled the import. |
+| 2 | `status` | `text` | true | — | — | Import outcome status. |
+| 3 | `import_count` | `bigint` | true | — | — | Imports matching this parser/status. |
+| 4 | `distinct_users` | `bigint` | true | — | — | Users with at least one such import. |
 
 ## Keys & indexes
 

@@ -23,11 +23,11 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `day` | `date` | true | — | — | — |
-| 2 | `jobs_created` | `bigint` | true | — | — | — |
-| 3 | `cvs_tailored` | `bigint` | true | — | — | — |
-| 4 | `exports_created` | `bigint` | true | — | — | — |
-| 5 | `ai_runs_started` | `bigint` | true | — | — | — |
+| 1 | `day` | `date` | true | — | — | Calendar day. |
+| 2 | `jobs_created` | `bigint` | true | — | — | Jobs created that day. |
+| 3 | `cvs_tailored` | `bigint` | true | — | — | Tailored CVs created that day. |
+| 4 | `exports_created` | `bigint` | true | — | — | Exports created that day. |
+| 5 | `ai_runs_started` | `bigint` | true | — | — | AI runs started that day. |
 
 ## Keys & indexes
 

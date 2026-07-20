@@ -23,11 +23,11 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `status` | `text` | true | — | — | — |
-| 2 | `job_count` | `bigint` | true | — | — | — |
-| 3 | `distinct_users` | `bigint` | true | — | — | — |
-| 4 | `first_created` | `date` | true | — | — | — |
-| 5 | `last_created` | `date` | true | — | — | — |
+| 1 | `status` | `text` | true | — | — | Application stage of the tracked job, verbatim from `public.jobs.status`. |
+| 2 | `job_count` | `bigint` | true | — | — | Tracked job postings in this status. |
+| 3 | `distinct_users` | `bigint` | true | — | — | Users with at least one job in this status (a count, not a list). |
+| 4 | `first_created` | `date` | true | — | — | Earliest `created_at` among jobs in this status. |
+| 5 | `last_created` | `date` | true | — | — | Latest `created_at` among jobs in this status. |
 
 ## Keys & indexes
 

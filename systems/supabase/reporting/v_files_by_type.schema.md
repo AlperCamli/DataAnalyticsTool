@@ -23,12 +23,12 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `file_type` | `text` | true | — | — | — |
-| 2 | `mime_type` | `text` | true | — | — | — |
-| 3 | `file_count` | `bigint` | true | — | — | — |
-| 4 | `distinct_users` | `bigint` | true | — | — | — |
-| 5 | `total_bytes` | `numeric` | true | — | — | — |
-| 6 | `avg_bytes` | `numeric` | true | — | — | — |
+| 1 | `file_type` | `text` | true | — | — | Application-level file classification. |
+| 2 | `mime_type` | `text` | true | — | — | MIME type recorded at upload. |
+| 3 | `file_count` | `bigint` | true | — | — | Active (not soft-deleted) files. |
+| 4 | `distinct_users` | `bigint` | true | — | — | Users owning at least one such file. |
+| 5 | `total_bytes` | `numeric` | true | — | — | Sum of `size_bytes` across those files. |
+| 6 | `avg_bytes` | `numeric` | true | — | — | Mean file size, rounded. |
 
 ## Keys & indexes
 
