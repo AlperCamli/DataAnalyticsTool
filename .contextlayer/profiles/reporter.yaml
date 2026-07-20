@@ -1,6 +1,6 @@
-# Reporter profile (CP-4 / M1) — platform-architecture §5 shape.
-# The v1 pilot-user surface: read + resolve + validate; no execution
-# until the CP-6 gateway, no publish until CP-7, no steward tools.
+# Reporter profile (CP-4 / M1; execution added CP-6 / M2) —
+# platform-architecture §5 shape. The v1 pilot-user surface: read +
+# resolve + validate + execute; no publish until CP-7, no steward tools.
 # Enforcement is server-side on every call: the MCP server evaluates
 # (OIDC roles ∩ this allowlist) and injects `limits` itself — client
 # config can never widen access (M-3, MCP-R2/R4/R8).
@@ -9,11 +9,19 @@ description: Read the context estate and produce validated SQL / API requests
 roles: [reporter]              # OIDC groups permitted to bind this profile
 skills: [report]               # ships at CP-5; recorded now for the compile step
 tools:
+  # `execute_sql:supabase` is system-qualified (MCP-R4): this profile may
+  # execute against supabase and nothing else — a call naming ga4 or gsc is
+  # denied even though the tool is listed. Execution additionally requires a
+  # validation token from validate_sql, and runs under a database role that
+  # is read-only at the DATABASE level (deploy/execution-role.sql, G3), not
+  # merely a role we ask nicely to read.
   allow: [search_context, get_entity, get_table, get_metric, get_lineage,
-          validate_sql, report_freshness, flag_gap]
+          validate_sql, execute_sql:supabase, report_freshness, flag_gap]
 context:
   claude_md_fragment: |
     Prefer certified metrics from metrics/. Warn on stale or draft docs;
     refuse to build on contaminated docs unless the user overrides.
 # Matches conventions.md query guardrails (direct-on-OLTP mandate).
+# These are injected server-side into every execute (MCP-R8): the client
+# never supplies guardrails, and anything it sends is discarded.
 limits: { row_cap: 50000, timeout_s: 60 }

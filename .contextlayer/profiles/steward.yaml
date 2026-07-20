@@ -8,7 +8,7 @@ roles: [steward, ops]
 skills: [enrich, review-sync]
 tools:
   allow: [search_context, get_entity, get_table, get_metric, get_lineage,
-          validate_sql, report_freshness, flag_gap, list_gaps]
+          validate_sql, execute_sql:supabase, report_freshness, flag_gap, list_gaps]
 context:
   claude_md_fragment: |
     You triage the fault ledger: read list_gaps, prioritize by
