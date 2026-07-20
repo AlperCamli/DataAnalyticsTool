@@ -218,6 +218,34 @@ describe("execute_sql end to end (§6.7, capability §6)", () => {
     expect(rows[0]!.result_meta.job_id).toBeTruthy();
   }, 60_000);
 
+  it("the audit captures parameter values, not just the statement shape", async () => {
+    // Security review #2: a parameterized execute audited without its
+    // params records `WHERE region = $1` and loses which region was
+    // read — an audit that looks complete and answers nothing.
+    // (psycopg3's placeholder is %s; $1 validates but fails at execute.)
+    const statement = "SELECT count(*) AS n FROM shop.orders WHERE status = %s";
+    const validated = await validate(statement);
+    expect(validated.payload.verdict).toBe("pass");
+
+    const result = await callTool(rig, rig.token("steward"), "steward", "execute_sql", {
+      system: "drill",
+      request: { dialect: "sql", statement, params: ["new"] },
+      validation_token: validated.payload.validation_token,
+    });
+    expect(result.isError, JSON.stringify(result.payload)).toBe(false);
+    expect(result.payload.rows).toEqual([[400]]);
+
+    const { rows } = await rig.core.pool.query<{ statement_text: string }>(
+      `SELECT statement_text FROM audit_records
+        WHERE tool = 'execute_sql' AND statement_text LIKE $1
+        ORDER BY ts DESC LIMIT 1`,
+      ["%shop.orders WHERE status%"],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.statement_text).toContain(statement);
+    expect(rows[0]!.statement_text).toContain('"new"'); // the value that ran
+  }, 60_000);
+
   it("the executed statement carries the QE-2 identity comment tag", async () => {
     await validateAndExecute("SELECT 1 AS tagged", { intent: "tag check" });
     // The runner logs the execute; the tag itself was asserted against

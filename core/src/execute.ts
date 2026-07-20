@@ -79,12 +79,37 @@ export function statementBinding(request: Record<string, unknown>): {
 } {
   if (typeof request.statement === "string") {
     return {
+      // The token binds the statement bytes exactly as §5 specifies —
+      // `params` are deliberately outside the hash, so one validated
+      // statement may be executed with different values. That is sound
+      // (values cannot change which objects the statement touches, and
+      // the driver binds them rather than interpolating), but it does
+      // mean the statement alone is NOT a record of what ran — hence the
+      // audit text below.
       sha256: createHash("sha256").update(request.statement).digest("hex"),
-      text: request.statement,
+      text: auditText(request),
     };
   }
   const canonical = canonicalJson({ operation: request.operation, body: request.body });
   return { sha256: createHash("sha256").update(canonical).digest("hex"), text: canonical };
+}
+
+/**
+ * What §8 stores for an execute: enough to reconstruct the execution,
+ * not just its shape.
+ *
+ * A parameterized statement audited without its parameters records
+ * `WHERE tenant_id = $1` and loses which tenant was read — the audit
+ * would look complete while answering none of the questions an audit
+ * exists to answer. Parameters are appended when present. They may
+ * contain customer values, which is consistent with the statement text
+ * itself already carrying literals for unparameterized queries.
+ */
+export function auditText(request: Record<string, unknown>): string {
+  const statement = typeof request.statement === "string" ? request.statement : "";
+  const params = request.params;
+  if (!Array.isArray(params) || params.length === 0) return statement;
+  return `${statement}\n-- params: ${canonicalJson(params)}`;
 }
 
 export interface ExecuteDeps {
