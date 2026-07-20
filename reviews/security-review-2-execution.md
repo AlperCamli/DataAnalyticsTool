@@ -162,6 +162,41 @@ terminal error surfaced to the caller, not a bypass. Worth a line in the skill g
 
 ---
 
+## F7 — The wheel carry forces workflow-write on the sync PAT (Medium, **amend**)
+
+**Found during the M2 live demo**, not in the code read: the sync engine's
+push was rejected by GitHub with *"refusing to allow a Personal Access Token to
+create or update workflow `.github/workflows/kb-ci.yml` without `workflow`
+scope"*.
+
+The cause is D-46 working as designed. The KB validates its docs with a
+vendored wheel of our validation library, and when the library version moves the
+sync PR must carry the new wheel **together with** its manifest and the CI pin —
+otherwise CI silently validates against old rules. Updating that pin means
+editing a workflow file, so the sync PAT must hold `Workflows: Read and write`.
+
+**Why that is more than a scope annoyance.** Workflow-write is the right to
+change what code executes in CI on the KB repo. The sync token already holds
+Contents and Pull-requests write, which is bounded: the worst a compromised sync
+path can do is propose bad content that a human reviews. Add workflow-write and
+it can alter the reviewer — rewriting `kb-ci.yml` to weaken or skip the very
+validation that guards the KB, on a repo where CI is a merge gate. The blast
+radius changes in kind, not degree.
+
+Adopted for the pilot (operator decision, 2026-07-20) because the alternatives
+are worse: a stale wheel is the drift D-46 exists to prevent, and carrying the
+wheel by hand makes correctness depend on remembering.
+
+**Proposal (register motion).** The coupling deserves a ruling rather than a
+default. Options: (a) split the wheel carry onto a separate token/identity used
+only for that path, so routine doc syncs never hold workflow-write; (b) move the
+CI pin out of the workflow file into a non-workflow config the workflow reads, so
+carrying the wheel stops requiring workflow-write at all; (c) accept the coupling
+and require CODEOWNERS review on `.github/**` so a workflow edit cannot merge
+unreviewed. **(b) is the structural fix** — the pin is data, not CI logic, and it
+is only in the workflow file by convenience. (c) is the cheap mitigation to apply
+meanwhile.
+
 ## Register motions this review raises
 
 | # | Motion | Home spec | Recommendation |
@@ -169,3 +204,4 @@ terminal error surfaced to the caller, not a bypass. Worth a line in the skill g
 | F2 | Does visibility govern validate/execute, or only content tools? | MCP §3 | Amend — decide before CP-7 builds the Reporter execution journey |
 | F3 | Least-privilege introspection role | onboarding playbook / deploy | Accept — build before CP-7 |
 | F4 | Byte budget alongside the row cap | capability §6 (CI-A neighbourhood) | Defer — trigger-watched |
+| F7 | Wheel carry forces workflow-write on the sync PAT | sync spec §10 / D-46 | Amend — move the CI pin out of the workflow file; CODEOWNERS on `.github/**` meanwhile |
