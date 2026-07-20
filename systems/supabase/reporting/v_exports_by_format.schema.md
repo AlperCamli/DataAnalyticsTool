@@ -23,10 +23,10 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `format` | `text` | true | — | — | — |
-| 2 | `status` | `text` | true | — | — | — |
-| 3 | `export_count` | `bigint` | true | — | — | — |
-| 4 | `distinct_users` | `bigint` | true | — | — | — |
+| 1 | `format` | `text` | true | — | — | Export output format (e.g. pdf, docx). |
+| 2 | `status` | `text` | true | — | — | Export outcome status. |
+| 3 | `export_count` | `bigint` | true | — | — | Exports matching this format/status. |
+| 4 | `distinct_users` | `bigint` | true | — | — | Users with at least one such export. |
 
 ## Keys & indexes
 

@@ -23,11 +23,11 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `month` | `date` | true | — | — | — |
-| 2 | `provider` | `text` | true | — | — | — |
-| 3 | `total_tokens` | `bigint` | true | — | — | — |
-| 4 | `run_count` | `bigint` | true | — | — | — |
-| 5 | `non_completed_count` | `bigint` | true | — | — | — |
+| 1 | `month` | `date` | true | — | — | Calendar month of `started_at`. |
+| 2 | `provider` | `text` | true | — | — | AI provider that served the runs. |
+| 3 | `total_tokens` | `bigint` | true | — | — | Sum of billed tokens for the month/provider. |
+| 4 | `run_count` | `bigint` | true | — | — | Runs started in that month. |
+| 5 | `non_completed_count` | `bigint` | true | — | — | Runs whose status is anything other than `completed`. |
 
 ## Keys & indexes
 

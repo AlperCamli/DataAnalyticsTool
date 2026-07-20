@@ -23,10 +23,10 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `month` | `date` | true | — | — | — |
-| 2 | `job_count` | `bigint` | true | — | — | — |
-| 3 | `distinct_users` | `bigint` | true | — | — | — |
-| 4 | `applied_count` | `bigint` | true | — | — | — |
+| 1 | `month` | `date` | true | — | — | Calendar month of `created_at`, truncated to the first day. |
+| 2 | `job_count` | `bigint` | true | — | — | Job postings created in the month. |
+| 3 | `distinct_users` | `bigint` | true | — | — | Users who created at least one job that month. |
+| 4 | `applied_count` | `bigint` | true | — | — | Jobs created that month with a non-null `applied_at`. |
 
 ## Keys & indexes
 

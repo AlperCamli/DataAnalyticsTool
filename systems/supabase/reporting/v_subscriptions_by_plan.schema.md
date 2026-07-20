@@ -23,10 +23,10 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `plan_code` | `text` | true | — | — | — |
-| 2 | `status` | `text` | true | — | — | — |
-| 3 | `subscription_count` | `bigint` | true | — | — | — |
-| 4 | `cancelling_count` | `bigint` | true | — | — | — |
+| 1 | `plan_code` | `text` | true | — | — | Plan identifier. |
+| 2 | `status` | `text` | true | — | — | Subscription status. |
+| 3 | `subscription_count` | `bigint` | true | — | — | Subscriptions matching this plan/status. |
+| 4 | `cancelling_count` | `bigint` | true | — | — | How many are flagged to cancel at period end. |
 
 ## Keys & indexes
 

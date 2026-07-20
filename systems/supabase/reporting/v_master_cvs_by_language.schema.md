@@ -23,10 +23,10 @@ status: machine
 
 | # | Column | Type | Nullable | Default | Description | Purpose |
 |---|---|---|---|---|---|---|
-| 1 | `language` | `text` | true | — | — | — |
-| 2 | `source_type` | `text` | true | — | — | — |
-| 3 | `master_cv_count` | `bigint` | true | — | — | — |
-| 4 | `distinct_users` | `bigint` | true | — | — | — |
+| 1 | `language` | `text` | true | — | — | Language of the master CV. |
+| 2 | `source_type` | `text` | true | — | — | How the master CV originated, verbatim from the row. |
+| 3 | `master_cv_count` | `bigint` | true | — | — | Active (not soft-deleted) master CVs. |
+| 4 | `distinct_users` | `bigint` | true | — | — | Users holding at least one such master CV. |
 
 ## Keys & indexes
 
