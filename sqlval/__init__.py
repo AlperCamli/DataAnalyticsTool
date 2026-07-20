@@ -97,27 +97,25 @@ def _cte_names(tree: exp.Expression) -> set[str]:
     return names
 
 
-def validate_statement(request: dict[str, Any]) -> dict[str, Any]:
-    """Validate one SQL statement against a snapshot-derived schema.
+def check_statement_class(
+    statement: str,
+    *,
+    engine: str = "postgres",
+    denied_functions: Any = (),
+) -> tuple[exp.Expression | None, list[dict[str, Any]]]:
+    """The parse + refusal-set half of validation (steps 1-6), with no
+    snapshot needed.
 
-    Request keys: ``statement`` (str), ``engine`` (sqlglot dialect,
-    default ``postgres``), ``system`` (name used in finding refs),
-    ``default_schema`` (default ``public``), ``objects`` (list of
-    ``{schema, name, kind, columns: [str]}``), ``denied_functions``
-    (extra names, merged with the shipped denylist).
+    Split out so the *executor* can re-run the identical refusal set
+    locally without a snapshot in hand (capability QE-1/CC-3): the
+    gateway's verdict is authority, but the executor must not depend on
+    it having happened. One parser, one refusal set, two call sites —
+    a second implementation is exactly the drift this avoids.
+
+    Returns `(tree, findings)`; `tree` is None when parsing failed.
     """
-    statement = request.get("statement")
-    if not isinstance(statement, str) or not statement.strip():
-        return {
-            "verdict": "fail",
-            "findings": [_finding("error", "invalid_argument", None, "statement (non-empty string) required")],
-        }
-    engine = request.get("engine") or "postgres"
-    system = request.get("system") or ""
-    default_schema = request.get("default_schema") or "public"
-    objects = request.get("objects") or []
     denied = set(DENIED_FUNCTIONS)
-    for name in request.get("denied_functions") or []:
+    for name in denied_functions or []:
         denied.add(str(name).lower())
 
     findings: list[dict[str, Any]] = []
@@ -126,25 +124,19 @@ def validate_statement(request: dict[str, Any]) -> dict[str, Any]:
     try:
         statements = sqlglot.parse(statement, read=engine)
     except ParseError as e:
-        return {
-            "verdict": "fail",
-            "findings": [_finding("error", "parse_error", None, str(e).split("\n")[0])],
-        }
+        return None, [_finding("error", "parse_error", None, str(e).split("\n")[0])]
     statements = [s for s in statements if s is not None]
 
     # 2. Exactly one statement (MCP-R6).
     if len(statements) != 1:
-        return {
-            "verdict": "fail",
-            "findings": [
-                _finding(
-                    "error",
-                    "multi_statement",
-                    None,
-                    f"{len(statements)} statements found; validate_sql binds exactly one",
-                )
-            ],
-        }
+        return None, [
+            _finding(
+                "error",
+                "multi_statement",
+                None,
+                f"{len(statements)} statements found; validate_sql binds exactly one",
+            )
+        ]
     tree = statements[0]
 
     # 3. Root must be a query.
@@ -188,7 +180,35 @@ def validate_statement(request: dict[str, Any]) -> dict[str, Any]:
                 _finding("error", "denied_function", name, f"function {name}() is refused on the read surface")
             )
 
-    if findings:
+    return tree, findings
+
+
+def validate_statement(request: dict[str, Any]) -> dict[str, Any]:
+    """Validate one SQL statement against a snapshot-derived schema.
+
+    Request keys: ``statement`` (str), ``engine`` (sqlglot dialect,
+    default ``postgres``), ``system`` (name used in finding refs),
+    ``default_schema`` (default ``public``), ``objects`` (list of
+    ``{schema, name, kind, columns: [str]}``), ``denied_functions``
+    (extra names, merged with the shipped denylist).
+    """
+    statement = request.get("statement")
+    if not isinstance(statement, str) or not statement.strip():
+        return {
+            "verdict": "fail",
+            "findings": [_finding("error", "invalid_argument", None, "statement (non-empty string) required")],
+        }
+    engine = request.get("engine") or "postgres"
+    system = request.get("system") or ""
+    default_schema = request.get("default_schema") or "public"
+    objects = request.get("objects") or []
+
+    # Steps 1-6: parse and the refusal set, shared with the executor's
+    # local enforcement path (QE-1).
+    tree, findings = check_statement_class(
+        statement, engine=engine, denied_functions=request.get("denied_functions") or []
+    )
+    if tree is None or findings:
         return {"verdict": "fail", "findings": findings}
 
     # 7. Object resolution against the snapshot surface.

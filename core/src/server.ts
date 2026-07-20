@@ -21,7 +21,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { createHash, timingSafeEqual } from "node:crypto";
 import pg from "pg";
 import type { CoreConfig } from "./config.js";
-import { JobsNotifier } from "./db.js";
+import { JOB_DONE_CHANNEL, JobsNotifier } from "./db.js";
 import { listHealthEvents, recordHealthEvent } from "./health.js";
 import {
   cancelJob,
@@ -334,7 +334,8 @@ export function buildServer(
     }
 
     if (row.type !== "snapshot") {
-      // Registered-but-unimplemented types (§4.2): result stored inline.
+      // Non-snapshot types deliver their capability result envelope
+      // inline (§6.4); the gateway is woken by succeedInline.
       const done = await succeedInline(pool, jobId, token, parsed.result);
       if (!done) return leaseLost(reply);
       return { status: "succeeded" };
@@ -489,12 +490,24 @@ export function buildServer(
   // -- MCP server (CP-4; self-authenticating per call) ------------------------
 
   if (cfg.mcp.enabled) {
+    // The execution gateway blocks on interactive results, which arrive
+    // on their own channel (JOB_DONE) — a second listener connection,
+    // started with the server and closed with it.
+    const doneNotifier = new JobsNotifier(cfg.databaseUrl, JOB_DONE_CHANNEL);
+    app.addHook("onReady", async () => {
+      await doneNotifier.start();
+    });
+    app.addHook("onClose", async () => {
+      await doneNotifier.stop();
+    });
+
     registerMcp(app, {
       cfg,
       pool,
       oidc: oidc ?? new OidcClient(cfg.mcp),
       kb: new KbReader(cfg, pool),
       limiter: new RateLimiter(cfg.mcp.limits),
+      doneNotifier,
       log: (msg, err) => (err ? app.log.error({ err }, msg) : app.log.info(msg)),
     });
   }

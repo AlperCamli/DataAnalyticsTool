@@ -30,6 +30,7 @@ from connectors.sdk import (
 )
 from connectors.postgres.catalog import introspect_connection
 from connectors.postgres.ephemeral import apply_ddl, ephemeral_postgres
+from connectors.postgres.executor import PostgresExecutor
 
 
 def _connect(dsn: str) -> psycopg.Connection:
@@ -89,5 +90,5 @@ class PostgresMetadata(MetadataProvider):
 
 connector = Connector(
     manifest=Path(__file__).parent / "connector.yaml",
-    handlers={"metadata": PostgresMetadata()},
+    handlers={"metadata": PostgresMetadata(), "query": PostgresExecutor()},
 )

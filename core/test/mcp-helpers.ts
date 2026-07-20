@@ -27,6 +27,8 @@ export const USERS = {
   /** Steward-profile access with shop-only visibility — the LED-R2/FL-5
    * "issues attributed to objects the caller cannot see are omitted" case. */
   auditlite: { username: "aud-lite", password: "pw", roles: ["auditlite"], display: "Audit Lite" },
+  /** Execute grant with a row_cap of 5 — the CI-7 truncation evidence. */
+  capped: { username: "cap-user", password: "pw", roles: ["capped"], display: "Capped User" },
 };
 
 const ROLES_YAML = `# Scratch-KB role map (KB-A per-directory globs).
@@ -66,6 +68,10 @@ roles:
     profile: benchmark
     oidc_group: benchmark
     visibility: ["**"]
+  R7:
+    profile: capped
+    oidc_group: capped
+    visibility: ["**"]
 `;
 
 const REPORTER_PROFILE = `name: Reporter
@@ -96,6 +102,16 @@ tools:
   allow: [search_context, get_entity, get_table, get_metric, get_lineage,
           validate_sql, report_freshness, flag_gap, list_gaps]
 limits: { row_cap: 50000, timeout_s: 60 }
+`;
+
+const CAPPED_PROFILE = `name: Capped
+description: Execution with a deliberately tiny row cap (CI-7 truncation evidence)
+roles: [capped]
+skills: [report]
+tools:
+  allow: [search_context, get_entity, get_table, get_metric, get_lineage,
+          validate_sql, execute_sql:drill, report_freshness, flag_gap]
+limits: { row_cap: 5, timeout_s: 30 }
 `;
 
 const CONVENTIONS = `# Conventions (scratch)
@@ -206,6 +222,7 @@ export async function setupMcpRig(
   await writeFile(path.join(kb.seedClone, ".contextlayer", "profiles", "reporter.yaml"), REPORTER_PROFILE);
   await writeFile(path.join(kb.seedClone, ".contextlayer", "profiles", "steward.yaml"), STEWARD_PROFILE);
   await writeFile(path.join(kb.seedClone, ".contextlayer", "profiles", "benchmark.yaml"), BENCHMARK_PROFILE);
+  await writeFile(path.join(kb.seedClone, ".contextlayer", "profiles", "capped.yaml"), CAPPED_PROFILE);
 
   // The contaminated fixture doc the M1 demo surfaces (KB §5 semantics).
   const legacyPath = path.join(kb.seedClone, "systems", "drill", "shop", "legacy_sessions.md");

@@ -1,9 +1,11 @@
 name: ga4
-version: 0.1.0
+version: 0.2.0
 protocol_version: 1
 snapshot_version: "1"
 capabilities:
   metadata: { modes: [api] }
+  # Data API runReport, the one documented operation (capability §6).
+  query: { dialect: api }
 config_schema: ./config.schema.json
 credentials:
   - key: service_account

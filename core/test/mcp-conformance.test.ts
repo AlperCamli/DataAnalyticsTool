@@ -67,8 +67,11 @@ describe("MT-1 / MCP-R4 — tools/list is the profile allow-set; hidden tools de
       request: {},
       validation_token: "x",
     });
-    // In-qualifier call passes the gate; execution itself is the CP-6 stub.
-    expect(allowed.payload.code).toBe("upstream_error");
+    // In-qualifier call passes the profile gate and reaches the gateway,
+    // which then refuses it on its own terms — the bogus token fails §5
+    // verification (MCP-R5). Reaching that refusal *is* the evidence the
+    // qualifier gate allowed the call through.
+    expect(allowed.payload.code).toBe("revalidate_required");
   });
 });
 

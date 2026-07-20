@@ -1649,3 +1649,194 @@ as reporter, contamination surfacing, token issue/refusals, flag_gap /
 list_gaps split, MT-9 live revocation, render-lag live, audit review)
 — runbook in `PR-CP4-M1.md`; and P-H (the `contextlayer-sync` PAT
 least-privilege assertion, D-66.7 — recorded with the SP-2 sign-off).
+
+## D-69 — CP-6/M2 governed execution: build decisions, JP-1/JP-2 closure
+
+**Context.** M2 is the direct-on-OLTP checkpoint the plan classes as the
+pilot-ending risk (plan §6.2). The pre-rulings adopted for the build were
+G1 (contract path first — `execute` jobs through the queue), G2 (defense
+in depth at gateway *and* executor), G3 (OLTP protection by database
+role), G4 (full MCP-R5 token enforcement). All four are implemented as
+stated; no relaxation was needed anywhere, and no scope-fence item was
+touched.
+
+### Closures
+
+1. **JP-2 — closed, measured, passes.** Budget: ≤500 ms p95 claim-to-start
+   on a warm runner. Measured over 100 warm validated executes against a
+   real Postgres through the real Python runner
+   (`core/test/execute-e2e.test.ts`, which asserts the budget so a
+   regression fails CI):
+
+   | metric | p50 | p95 | max |
+   |---|---|---|---|
+   | claim-to-start (normative JP-2) | 7.2 ms | **10.9 ms** | 23.1 ms |
+   | end-to-end `execute_sql` (non-normative) | 220 ms | 288 ms | — |
+
+   Both numbers are recorded because they measure different things and
+   only the first is the committed budget: JP-2 is defined (job spec §11,
+   plan §6.5) as *claim-to-start overhead excluding query time*, which is
+   `jobs.created_at → jobs.started_at`. End-to-end wall time additionally
+   includes the `validate_sql` call (which spawns the `sqlval` stage CLI —
+   the dominant term), HTTP, and the query itself. Reporting only the
+   end-to-end figure against a claim-to-start budget would have been a
+   category error in our favor, which is why it is labelled.
+
+2. **JP-1 — closed: runner routing stands; no short-circuit built.** The
+   pre-ruling pre-authorized the core-native Postgres short-circuit *if*
+   the queue path missed budget. It does not miss: 10.9 ms against a
+   500 ms budget is a 46× margin, and the LISTEN/NOTIFY claim path (CP-3a)
+   plus the new JOB_DONE producer wake are what make it so. Building the
+   alternative transport would have added a second execution path, a
+   second audit shape, and a second thing to security-review, to buy
+   latency headroom already there by two orders of magnitude. One path.
+
+### Implementation decisions
+
+3. **Producer wake is LISTEN/NOTIFY (`cl_job_done`), not an in-process
+   emitter.** §6.4 says the core "relays the result to the blocked
+   producer via internal notification" without specifying the mechanism.
+   An `EventEmitter` would be simpler and would work today, on one core
+   replica — and would silently stall the moment a second replica exists,
+   because the runner delivers to whichever replica it claimed against,
+   not necessarily the one holding the waiting MCP request.
+   `awaitJobResult` waits on the notification but re-reads job state on
+   every wake *and* on a 250 ms poll, so a dropped or coalesced
+   notification costs latency, never correctness.
+
+4. **Interactive `deadline_s` derived, per §4.2** (`interactiveDeadlineS`
+   = guardrail `timeout_s` + 30 s margin). The margin covers claim,
+   connect, and delivery — everything the statement timeout does not
+   bound. Without it a query using its full budget would race its own job
+   deadline and surface as a lease expiry rather than the honest
+   `timeout` guardrail.
+
+5. **G2 in practice: `Guardrails.parse` floors, never trusts.** The
+   executor's guardrail parsing treats an absent, partial, or oversized
+   payload envelope as a request for the *conservative default*
+   (row_cap 1000, timeout 30 s), with hard ceilings above. `statement_class`
+   is never read from the payload as a widening signal — select-only is
+   the only class this SDK executes, so a forged value cannot unlock DML.
+   This is what makes CC-3 pass rather than being a comment claiming it
+   would.
+
+6. **One parser, two call sites.** `sqlval.check_statement_class` was
+   extracted from `validate_statement` so the executor re-runs the
+   *identical* refusal set locally (QE-1) without needing a snapshot. A
+   second implementation in the executor would have been the obvious
+   place for the two layers to drift apart.
+
+7. **G3 role wall, checked twice.** `check_role_is_readonly` verifies role
+   attributes (SUPERUSER/CREATEDB/CREATEROLE/BYPASSRLS), every table write
+   grant reachable through role membership, and schema CREATE. It runs at
+   runner startup (`execution_preflight` in the runner config) *and*
+   before every query — grants can change under a long-lived runner, and
+   the per-query check is the one that cannot be stale. On startup failure
+   the runner **withholds `execute` from its claim declaration**: it does
+   not offer to do the work at all, while metadata sync for the same
+   connector continues. Provisioning SQL + verification queries:
+   `deploy/execution-role.sql` (applied by the operator, not by us).
+
+8. **Row cap enforced during streaming.** A named (server-side) cursor
+   fetches in batches to `row_cap + 1`; the extra row is how truncation is
+   *detected* without pulling the remainder, and it is dropped rather than
+   returned. A post-hoc trim would have satisfied CC-4's assertion while
+   leaving memory unbounded — the property worth having is the bounded
+   fetch, not the trimmed list.
+
+9. **API dialect: two different honest guarantees.** GSC's vocabulary is a
+   fixed constant table (D-30), so its executor does the full MT-8 check
+   locally and an undocumented dimension never reaches the wire. GA4's
+   surface is property-specific and lives in the snapshot, which the
+   executor does not hold; there the local check is the documented
+   *operation* allowlist, and GA4's own rejection of an unknown field is
+   mapped to `schema_mismatch` rather than surfacing as an opaque 400.
+   Between gateway and source, an undocumented GA4 dimension is refused
+   twice; it is not claimed to be refused locally when it is not.
+
+10. **Connectors 0.1.0 → 0.2.0** (postgres, ga4, gsc) for the additive
+    `query` capability. Canonical snapshot bodies exclude `connector`
+    (S-3), so C-2/C-4 hashes and every fixture are unaffected — the bump
+    is invisible to determinism by design. Job version constraints in
+    `deploy/jobs/*` updated to `>=0.2 <0.3`.
+
+11. **GA4/GSC `api.py` extraction.** Both connectors' shared manifest,
+    endpoints, credentials, and status mapping moved out of `connector.py`
+    so the executor can import them without a cycle (the connector module
+    registers the executor). `connector.py` re-exports every moved name;
+    no caller changed.
+
+### Interpretive rulings (flagged, not silent)
+
+12. **Fault-ledger §5 contradicts itself on `schema_mismatch_at_execute`**,
+    calling it a "shipped-but-disabled rule" and then, in the same
+    sentence, "enabled by default actually — it is deterministic and
+    severe." Taken as **enabled**, following the parenthetical and its
+    stated rationale. This is not a new choice: migration 0006 already
+    seeded it `enabled = true` at M1, so the ruling confirms the shipped
+    reading rather than changing behavior. The gateway honors the row's
+    flag, so an operator can still disable it. **Recommend the spec
+    sentence be amended to say one thing** — filed as a proposal, not
+    fixed here (amendment fence).
+
+13. **`statement_class` used as a capability code.** Capability §6
+    enumerates `syntax_error, permission_denied_at_source, timeout,
+    row_cap, quota_exhausted, schema_mismatch`. A local statement-class
+    refusal (the CC-3 canary) is none of these: calling it `syntax_error`
+    would misreport a policy refusal as malformed SQL. Emitted as
+    `capability_code: statement_class` under the unchanged outer
+    `guardrail` code, consistent with CI-8 (outer taxonomy fixed,
+    capability precision underneath) and the additive-growth norm.
+    **Proposed as an additive entry to the §6 capability-code list.**
+
+### Bug found and fixed in M1 code
+
+14. **Audit dropped the statement text for execute.** `mcp.ts` wrote
+    `statementText` only when `tool === "validate_sql"`, but spec §8
+    requires full statement/intent text for **validate, execute, and
+    publish** (reads carry `args_digest` only). Correct while execute was
+    stubbed, wrong the moment it landed — and it would have produced an
+    audit trail that looked complete while omitting exactly the calls that
+    touch customer data. Now keyed on a named `STATEMENT_TEXT_TOOLS` set.
+
+15. **Credential scoping for execute jobs (found in self-review).** The
+    connection registry (`sync_systems`) is shared with snapshot jobs and
+    therefore holds the *introspection* credential. The gateway initially
+    passed the registration's credential list through verbatim, which
+    handed the introspection DSN to every execute job. Nothing read it —
+    the postgres executor resolves `execute_dsn` only — but it widened
+    what a compromised execute job could reach for no benefit, and it is
+    exactly the kind of latent hole G3's role wall exists to close.
+    The gateway now passes only credentials the registration marks
+    `required_for: ["query"]` (the manifest's own vocabulary, capability
+    §3), and **fails closed** with an actionable message when none is
+    marked — rather than silently falling back to the broader credential.
+    Regression test in `core/test/mcp-execute.test.ts`.
+
+### Conformance status
+
+MT-3/MT-4 upgraded from issuance-only to **enforcement**: no token,
+tampered statement, forged signature, re-signed payload, expired token,
+foreign subject, and superseded snapshot each return
+`revalidate_required` *and* are asserted to enqueue no job
+(`core/test/mcp-execute.test.ts`). MT-5 asserts client-supplied guardrails
+are dropped and the profile's appear in the job payload. CC-3 (canary
+DML/DDL/CTE-write/multi-statement/locking refused with guardrails stripped
+from the payload), CC-4 (streaming cap + `truncated`), CC-5 (QE-2 comment
+tag observed in Postgres' own statement log), CC-6 (interactive quota
+terminal, never deferred) green in `tests/test_postgres_executor.py` and
+`tests/test_api_executors.py`. The staged-bypass test drives the driver
+directly, past every parser, and the role still refuses the write.
+
+Full suites: Python 446 + 13 skipped, TypeScript 127 (13 files).
+
+**Live evidence captured.** GA4 `runReport` and GSC `searchAnalytics.query`
+execute against the real example estate for documented fields, and an
+undocumented dimension is refused on both
+(`tests/test_live_execute.py`, env-gated).
+
+**Open for the M2 gate (not code):** the two-machine reporter demo against
+the customer Supabase, which needs `deploy/execution-role.sql` applied to
+the example estate first (operator action, by ruling — we do not run DDL
+against the customer database); the live startup-refusal demonstration
+against a write-capable role; and security review #2 (plan task 6.6).

@@ -20,11 +20,28 @@ export const CLASS_DEFAULTS: Record<
   { priority: number; deadlineS: number; maxAttempts: number }
 > = {
   batch: { priority: 50, deadlineS: 3600, maxAttempts: 5 },
-  // Interactive deadline is normatively derived from the gateway
-  // guardrail (§4.2); no gateway exists until CP-6, so a conservative
-  // fixed default stands in.
+  // §4.2: interactive `deadline_s` is derived from the gateway
+  // guardrail (statement timeout + margin) — see `interactiveDeadlineS`.
+  // This value applies only when a producer enqueues without one.
   interactive: { priority: 10, deadlineS: 120, maxAttempts: 1 },
 };
+
+/**
+ * §4.2's "deadline_s derived from the gateway guardrail (statement
+ * timeout + margin)". The margin covers claim, connect, and delivery —
+ * everything around the statement that the statement timeout itself
+ * does not bound. Without it, a query using its full timeout budget
+ * would race its own job deadline and surface as a lease expiry rather
+ * than the honest `timeout` guardrail.
+ */
+export const INTERACTIVE_DEADLINE_MARGIN_S = 30;
+
+export function interactiveDeadlineS(timeoutS: number | undefined): number {
+  if (typeof timeoutS !== "number" || !Number.isFinite(timeoutS) || timeoutS <= 0) {
+    return CLASS_DEFAULTS.interactive.deadlineS;
+  }
+  return Math.ceil(timeoutS) + INTERACTIVE_DEADLINE_MARGIN_S;
+}
 
 export const JOB_TYPES: ReadonlyMap<string, JobTypeSpec> = new Map(
   (
@@ -34,7 +51,9 @@ export const JOB_TYPES: ReadonlyMap<string, JobTypeSpec> = new Map(
       { type: "lineage", class: "batch", implemented: false },
       { type: "usage", class: "batch", implemented: false },
       { type: "test_connection", class: "interactive", implemented: false },
-      { type: "execute", class: "interactive", implemented: false },
+      // CP-6: the execution gateway is the producer; results are relayed
+      // inline to the blocked caller (§6.4).
+      { type: "execute", class: "interactive", implemented: true },
       { type: "publish", class: "interactive", implemented: false },
     ] as JobTypeSpec[]
   ).map((spec) => [spec.type, spec]),

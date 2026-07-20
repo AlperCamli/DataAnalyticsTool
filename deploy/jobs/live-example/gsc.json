@@ -1,7 +1,7 @@
 {
   "type": "snapshot",
   "system": "gsc",
-  "connector": { "name": "gsc", "version_constraint": ">=0.1 <0.2" },
+  "connector": { "name": "gsc", "version_constraint": ">=0.2 <0.3" },
   "payload": {
     "config": { "system": "gsc", "mode": "api", "site_url": "sc-domain:example.com" },
     "credentials": [{ "ref": "env://GOOGLE_SA_KEY_JSON", "key": "service_account" }]

@@ -28,66 +28,27 @@ Documented source_properties keys (MP-2, additive only):
 README and D-27.
 """
 
-import json
-import os
 import time
-from pathlib import Path
-
-from google.oauth2 import service_account
 
 from connectors.sdk import (
-    ConfigError,
     Connector,
     IntrospectionResult,
     MetadataProvider,
     QuotaPolicy,
-    load_manifest,
 )
-from connectors.ga4.client import AuthorizedTransport, GA4Client, Transport
+from connectors.ga4.client import GA4Client
 from connectors.ga4.mapping import build_objects, source_properties
 
-MANIFEST = load_manifest(Path(__file__).parent / "connector.yaml")
-
-DATA_API = "https://analyticsdata.googleapis.com"
-ADMIN_API = "https://analyticsadmin.googleapis.com"
-READONLY_SCOPE = "https://www.googleapis.com/auth/analytics.readonly"
-
-
-def _credentials(config: dict) -> service_account.Credentials:
-    if "credentials_file" in config:
-        path = Path(config["credentials_file"])
-        if not path.is_file():
-            raise ConfigError(f"service-account key file not found: {path}")
-        try:
-            return service_account.Credentials.from_service_account_file(
-                str(path), scopes=[READONLY_SCOPE]
-            )
-        except (ValueError, KeyError) as exc:
-            raise ConfigError(
-                f"service-account key file {path} could not be parsed "
-                "(contents not echoed; check the key)"
-            ) from exc
-    env_var = config["credentials_env"]
-    blob = os.environ.get(env_var)
-    if not blob:
-        raise ConfigError(
-            f"environment variable {env_var!r} (config.credentials_env) is unset or empty"
-        )
-    try:
-        return service_account.Credentials.from_service_account_info(
-            json.loads(blob), scopes=[READONLY_SCOPE]
-        )
-    except (ValueError, KeyError) as exc:
-        raise ConfigError(
-            f"service-account key in ${env_var} could not be parsed "
-            "(contents not echoed; check the key)"
-        ) from exc
-
-
-def _authorized_transport(config: dict) -> Transport:
-    from google.auth.transport.requests import AuthorizedSession
-
-    return AuthorizedTransport(AuthorizedSession(_credentials(config)))
+# Shared with the QueryExecutor (executor.py); re-exported here so
+# existing importers of these names keep working.
+from connectors.ga4.api import (  # noqa: F401
+    ADMIN_API,
+    DATA_API,
+    MANIFEST,
+    READONLY_SCOPE,
+    _authorized_transport,
+    _credentials,
+)
 
 
 class GA4Metadata(MetadataProvider):
@@ -123,4 +84,8 @@ class GA4Metadata(MetadataProvider):
         )
 
 
-connector = Connector(manifest=MANIFEST, handlers={"metadata": GA4Metadata()})
+from connectors.ga4.executor import GA4Executor  # noqa: E402  (avoids a cycle via api.py)
+
+connector = Connector(
+    manifest=MANIFEST, handlers={"metadata": GA4Metadata(), "query": GA4Executor()}
+)

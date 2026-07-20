@@ -14,7 +14,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 from connectors.sdk.manifest import CAPABILITY_JOB_TYPES, Manifest, load_manifest
-from connectors.sdk.providers import MetadataProvider
+from connectors.sdk.providers import MetadataProvider, QueryExecutor
 
 
 class RegistrationError(Exception):
@@ -45,6 +45,8 @@ class Connector:
             problems.append(
                 "metadata handler must implement MetadataProvider.introspect"
             )
+        if "query" in provided and not isinstance(handlers["query"], QueryExecutor):
+            problems.append("query handler must implement QueryExecutor.execute")
         if problems:
             raise RegistrationError(
                 f"connector {self.manifest.name!r}: " + "; ".join(problems)

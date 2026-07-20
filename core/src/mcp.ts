@@ -37,6 +37,7 @@ import {
 import { writeAudit } from "./audit.js";
 import { neutralize } from "./changelog.js";
 import type { CoreConfig } from "./config.js";
+import { executeRequest } from "./execute.js";
 import { createProvider } from "./gitkb.js";
 import type { KbReader, KbState } from "./kbread.js";
 import {
@@ -60,6 +61,10 @@ export interface McpDeps {
   oidc: OidcClient;
   kb: KbReader;
   limiter: RateLimiter;
+  /** JOB_DONE listener the execution gateway blocks on (§6.4). */
+  doneNotifier: {
+    waitFor(match: (payload: string | undefined) => boolean, ms: number): Promise<void>;
+  };
   log: (msg: string, err?: unknown) => void;
 }
 
@@ -146,13 +151,19 @@ const TOOL_DEFS: { name: string; description: string; inputSchema: Record<string
   },
   {
     name: "execute_sql",
-    description: "Execute a validated query (requires a validation token). Arrives with the CP-6 execution gateway.",
+    description:
+      "Execute a query already validated by validate_sql, using the validation token it issued. Guardrails (row cap, statement timeout) are applied server-side from your profile; results carry `truncated` when the row cap was reached. An expired or stale token returns revalidate_required — re-run validate_sql.",
     inputSchema: {
       type: "object",
       properties: {
         system: { type: "string" },
         request: { type: "object" },
         validation_token: { type: "string" },
+        intent: {
+          type: "string",
+          description:
+            "The user's plain-language request. Recorded in the audit trail and tagged (hashed) onto the executed statement.",
+        },
       },
       required: ["system", "request", "validation_token"],
     },
@@ -206,6 +217,14 @@ function qualifierArg(tool: string, args: Record<string, unknown>): string | und
   if (tool === "publish_report") return typeof args.target === "string" ? args.target : undefined;
   return undefined;
 }
+
+/**
+ * §8: the tools whose full statement/intent text is retained in the
+ * audit record. Reads are represented by `args_digest` alone — storing
+ * their arguments would turn the audit table into a second copy of the
+ * KB's access patterns without adding accountability.
+ */
+const STATEMENT_TEXT_TOOLS = new Set(["validate_sql", "execute_sql", "publish_report"]);
 
 /** list_gaps is S-gated (L-7/LED-R1): server-resolved profile only. */
 const STEWARD_GATED = new Set(["list_gaps"]);
@@ -539,11 +558,55 @@ async function toolValidateSql(ctx: CallContext, args: Record<string, unknown>):
   };
 }
 
-async function toolExecuteStub(_ctx: CallContext, _args: Record<string, unknown>): Promise<ToolOutcome> {
-  return err(
-    "upstream_error",
-    "execute_sql arrives with the CP-6 execution gateway (M2); validation tokens issued now are verifiable by the same library the gateway will use",
+/**
+ * §6.7: verify the token (§5), inject profile guardrails, enqueue an
+ * interactive `execute` job, await the result. Everything load-bearing
+ * lives in execute.ts; this is the tool-surface adapter.
+ */
+async function toolExecuteSql(ctx: CallContext, args: Record<string, unknown>): Promise<ToolOutcome> {
+  const system = typeof args.system === "string" ? args.system : "";
+  if (!system) return err("invalid_argument", "system (string) required");
+  const request = (args.request as Record<string, unknown> | undefined) ?? {};
+  const validationToken = typeof args.validation_token === "string" ? args.validation_token : "";
+
+  const outcome = await executeRequest(
+    {
+      pool: ctx.deps.pool,
+      cfg: ctx.deps.cfg,
+      notifier: ctx.deps.doneNotifier,
+      ws: ctx.ws,
+      identity: {
+        subject: ctx.identity.subject,
+        roles: ctx.identity.roles,
+        display: ctx.identity.display,
+      },
+      profile: ctx.profile,
+      sessionId: ctx.sessionId,
+      auditId: ctx.auditId,
+      intent: typeof args.intent === "string" ? args.intent : null,
+    },
+    { system, request, validationToken },
   );
+
+  if (!outcome.ok) {
+    return {
+      payload: {
+        code: outcome.code,
+        message: outcome.message,
+        ...(outcome.detail ? { detail: outcome.detail } : {}),
+        refs: refsEnvelope(ctx.ws),
+      },
+      isError: true,
+      resultMeta: outcome.meta,
+      statementText: outcome.statementText,
+    };
+  }
+  return {
+    // CI-7: `truncated` is passed through untouched.
+    payload: { ...outcome.result, refs: refsEnvelope(ctx.ws) },
+    resultMeta: outcome.meta,
+    statementText: outcome.statementText,
+  };
 }
 
 async function toolPublishStub(_ctx: CallContext, _args: Record<string, unknown>): Promise<ToolOutcome> {
@@ -691,7 +754,7 @@ const TOOL_IMPLS: Record<string, (ctx: CallContext, args: Record<string, unknown
   get_metric: toolGetMetric,
   get_lineage: toolGetLineage,
   validate_sql: toolValidateSql,
-  execute_sql: toolExecuteStub,
+  execute_sql: toolExecuteSql,
   publish_report: toolPublishStub,
   report_freshness: toolReportFreshness,
   flag_gap: toolFlagGap,
@@ -861,7 +924,9 @@ export function registerMcp(app: FastifyInstance, deps: McpDeps): void {
         decisionReason: reason,
         durationMs: Date.now() - started,
         resultMeta: outcome.resultMeta ?? {},
-        statementText: tool === "validate_sql" ? outcome.statementText ?? null : null,
+        // §8: full statement/intent text is stored for validate, execute,
+        // and publish — never for reads, where args_digest is the record.
+        statementText: STATEMENT_TEXT_TOOLS.has(tool) ? outcome.statementText ?? null : null,
       }).catch((e) => deps.log("audit write failed", e));
 
       return {

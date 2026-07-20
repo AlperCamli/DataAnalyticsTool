@@ -175,6 +175,20 @@ class JobApiClient:
             timeout_s=max(self.timeout_s, 120.0),
         )
 
+    def complete(self, job_id: str, lease_token: str, result: object) -> dict:
+        """§6.4 for the interactive capabilities, whose `result` is the
+        capability's own envelope (a dict), not canonical snapshot bytes.
+
+        The core relays it to the blocked producer verbatim, so the
+        serialization here is ordinary JSON — the byte-fidelity concern
+        that shapes `complete_snapshot` applies to snapshot hashing only.
+        """
+        body = json.dumps({"lease_token": lease_token, "result": result}).encode("utf-8")
+        return self._deliver(
+            f"/v1/jobs/{job_id}/complete", body, "complete",
+            timeout_s=max(self.timeout_s, 120.0),
+        )
+
     def fail(self, job_id: str, lease_token: str, error: dict) -> dict:
         body = json.dumps({"lease_token": lease_token, "error": error}).encode("utf-8")
         return self._deliver(f"/v1/jobs/{job_id}/fail", body, "fail",

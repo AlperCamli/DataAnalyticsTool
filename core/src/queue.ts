@@ -20,7 +20,7 @@
 import pg from "pg";
 import semver from "semver";
 import type { CoreConfig } from "./config.js";
-import { notifyJobs, withTransaction } from "./db.js";
+import { notifyJobDone, notifyJobs, withTransaction } from "./db.js";
 import { recordHealthEvent } from "./health.js";
 import { redactDeep, redactError } from "./redact.js";
 import { CLASS_DEFAULTS, JOB_TYPES, TRIGGER_KINDS } from "./registry.js";
@@ -502,6 +502,12 @@ export async function failJob(
     return requeueOrDeadLetter(client, cfg, row, error, "attempts_exhausted");
   });
   if (outcome === "requeued") await notifyJobs(pool);
+  // Terminal for this job: wake any producer blocked on it, so an
+  // interactive caller gets the failure immediately rather than at the
+  // poll interval (interactive max_attempts is 1, so a fail is final).
+  if (outcome === "dead_lettered" || outcome === "cancelled") {
+    await notifyJobDone(pool, jobId);
+  }
   return outcome;
 }
 
@@ -667,7 +673,10 @@ export async function rejectDelivery(
     );
     return true;
   });
-  if (done) await notifyJobs(pool);
+  if (done) {
+    await notifyJobs(pool);
+    await notifyJobDone(pool, jobId);
+  }
   return done;
 }
 
@@ -690,7 +699,12 @@ export async function succeedInline(
     );
     return true;
   });
-  if (done) await notifyJobs(pool);
+  if (done) {
+    await notifyJobs(pool);
+    // Wake the blocked producer (the execution gateway) — §6.4's
+    // "relays it to the blocked producer via internal notification".
+    await notifyJobDone(pool, jobId);
+  }
   return done;
 }
 
@@ -758,6 +772,50 @@ export async function listJobs(
 }
 
 // ---------------------------------------------------------------------------
+// Interactive result await (§6.4 "relays it to the blocked producer")
+
+export type AwaitedJob =
+  | { status: "succeeded"; result: unknown; row: JobRow }
+  | { status: "failed"; error: Record<string, unknown> | null; row: JobRow }
+  | { status: "timeout"; row: JobRow | null };
+
+/**
+ * Block until an interactive job reaches a terminal state, or until
+ * `timeoutMs` elapses.
+ *
+ * Waits on the JOB_DONE notification (sub-second, and correct across
+ * core replicas) but re-reads state on every wake and on a poll
+ * interval, so a missed or coalesced notification costs latency, never
+ * correctness. A `timeout` return does not cancel the job — the caller
+ * decides, because for `execute` the statement is already running under
+ * its own statement_timeout.
+ */
+export async function awaitJobResult(
+  pool: pg.Pool,
+  notifier: { waitFor(match: (p: string | undefined) => boolean, ms: number): Promise<void> },
+  jobId: string,
+  timeoutMs: number,
+  pollMs = 250,
+): Promise<AwaitedJob> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const { rows } = await pool.query<JobRow>(`SELECT * FROM jobs WHERE job_id = $1`, [jobId]);
+    const row = rows[0] ?? null;
+    if (row) {
+      if (row.state === "succeeded") return { status: "succeeded", result: row.result, row };
+      // NB: the stored state is `dead_lettered` (0001_jobs.sql CHECK);
+      // the spec's §4.3 diagram spells it "dead-lettered".
+      if (row.state === "dead_lettered" || row.state === "cancelled") {
+        return { status: "failed", error: row.error, row };
+      }
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return { status: "timeout", row };
+    await notifier.waitFor((payload) => payload === jobId, Math.min(pollMs, remaining));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Lease-expiry sweep (§4.3 core-side event)
 
 export async function sweepExpiredLeases(
@@ -770,6 +828,7 @@ export async function sweepExpiredLeases(
         WHERE state IN ('leased', 'running') AND lease_expires_at < now()
         FOR UPDATE SKIP LOCKED`,
     );
+    const terminal: string[] = [];
     for (const row of rows) {
       await recordHealthEvent(client, {
         kind: "lease_expired",
@@ -778,7 +837,7 @@ export async function sweepExpiredLeases(
         jobId: row.job_id,
         detail: { runner_id: row.runner_id, attempt: row.attempt, type: row.type },
       });
-      await requeueOrDeadLetter(
+      const outcome = await requeueOrDeadLetter(
         client,
         cfg,
         row,
@@ -789,9 +848,14 @@ export async function sweepExpiredLeases(
         },
         "attempts_exhausted",
       );
+      // Interactive jobs have max_attempts 1, so a dead runner
+      // dead-letters here — the blocked caller should hear about it now,
+      // not when its own deadline lapses.
+      if (outcome === "dead_lettered") terminal.push(row.job_id);
     }
-    return rows.length;
+    return { count: rows.length, terminal };
   });
-  if (swept > 0) await notifyJobs(pool);
-  return swept;
+  if (swept.count > 0) await notifyJobs(pool);
+  for (const jobId of swept.terminal) await notifyJobDone(pool, jobId);
+  return swept.count;
 }

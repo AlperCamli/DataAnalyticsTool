@@ -33,6 +33,16 @@
       "type": "string",
       "minLength": 1,
       "description": "live mode: name of an environment variable holding the DSN."
+    },
+    "execute_dsn": {
+      "type": "string",
+      "minLength": 1,
+      "description": "query capability: connection string for the dedicated execution role. MUST be a role that is read-only at the database level and distinct from the introspection role (G3); the executor verifies this at startup and per query and refuses to serve execution otherwise. Prefer execute_dsn_env. Provisioning SQL: deploy/execution-role.sql."
+    },
+    "execute_dsn_env": {
+      "type": "string",
+      "minLength": 1,
+      "description": "query capability: name of an environment variable holding the execution-role DSN."
     }
   },
   "allOf": [

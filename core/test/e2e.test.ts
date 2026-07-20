@@ -185,7 +185,7 @@ it("JC-8: canary secret appears in no protocol message, log, or stored row", asy
   const { status, json } = await client.enqueue({
     type: "snapshot",
     system: "supabase-canary",
-    connector: { name: "postgres", version_constraint: ">=0.1 <0.2" },
+    connector: { name: "postgres", version_constraint: ">=0.2 <0.3" },
     payload: {
       config: { system: "supabase-canary", mode: "live" },
       credentials: [{ ref: "env://CANARY_DSN", key: "dsn" }],

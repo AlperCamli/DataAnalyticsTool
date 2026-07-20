@@ -11,6 +11,19 @@ import pg from "pg";
 
 export const JOBS_CHANNEL = "cl_jobs";
 export const SYNC_CHANNEL = "cl_sync";
+/**
+ * Terminal-transition wake channel (CP-6). The claim side has had
+ * LISTEN/NOTIFY since CP-3a; this is its mirror for the *producer*
+ * side, so the execution gateway blocked on an interactive job learns
+ * of `complete`/`fail` in sub-second time instead of polling.
+ *
+ * It has to be LISTEN/NOTIFY rather than an in-process EventEmitter:
+ * the runner delivers its result to whichever core replica it claimed
+ * against, which is not necessarily the replica holding the waiting
+ * MCP request. An emitter would work on one node and silently stall on
+ * two.
+ */
+export const JOB_DONE_CHANNEL = "cl_job_done";
 
 export function createPool(databaseUrl: string): pg.Pool {
   return new pg.Pool({ connectionString: databaseUrl, max: 20 });
@@ -52,7 +65,7 @@ export class JobsNotifier {
   async start(): Promise<void> {
     const client = new pg.Client({ connectionString: this.databaseUrl });
     await client.connect();
-    client.on("notification", () => this.events.emit("wake"));
+    client.on("notification", (msg) => this.events.emit("wake", msg.payload));
     client.on("error", () => {
       // Connection dropped: claims degrade to their poll interval.
       if (!this.stopped) this.events.emit("wake");
@@ -63,16 +76,30 @@ export class JobsNotifier {
 
   /** Resolves on the next notification or after `timeoutMs`. */
   wait(timeoutMs: number): Promise<void> {
+    return this.waitFor(() => true, timeoutMs);
+  }
+
+  /**
+   * Resolves on the next notification whose payload satisfies `match`,
+   * or after `timeoutMs`. Used by the execution gateway to wake on
+   * *its* job finishing rather than on any queue activity.
+   */
+  waitFor(match: (payload: string | undefined) => boolean, timeoutMs: number): Promise<void> {
     return new Promise((resolve) => {
-      const onWake = () => {
-        clearTimeout(timer);
+      const onWake = (payload?: string) => {
+        if (!match(payload)) return; // someone else's job; keep waiting
+        cleanup();
         resolve();
+      };
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.events.removeListener("wake", onWake);
       };
       const timer = setTimeout(() => {
         this.events.removeListener("wake", onWake);
         resolve();
       }, timeoutMs);
-      this.events.once("wake", onWake);
+      this.events.on("wake", onWake);
     });
   }
 
@@ -95,4 +122,12 @@ export async function notifySync(
   queryable: pg.Pool | pg.PoolClient,
 ): Promise<void> {
   await queryable.query(`NOTIFY ${SYNC_CHANNEL}`);
+}
+
+/** Wakes producers blocked on a specific interactive job (§6.4/§6.5). */
+export async function notifyJobDone(
+  queryable: pg.Pool | pg.PoolClient,
+  jobId: string,
+): Promise<void> {
+  await queryable.query(`SELECT pg_notify($1, $2)`, [JOB_DONE_CHANNEL, jobId]);
 }

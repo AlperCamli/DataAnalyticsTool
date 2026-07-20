@@ -1,7 +1,7 @@
 {
   "type": "snapshot",
   "system": "ga4",
-  "connector": { "name": "ga4", "version_constraint": ">=0.1 <0.2" },
+  "connector": { "name": "ga4", "version_constraint": ">=0.2 <0.3" },
   "payload": {
     "config": { "system": "ga4", "mode": "api", "property_id": "000000000" },
     "credentials": [{ "ref": "env://GOOGLE_SA_KEY_JSON", "key": "service_account" }]
