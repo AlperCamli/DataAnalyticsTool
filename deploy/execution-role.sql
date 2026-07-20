@@ -35,8 +35,17 @@ BEGIN;
 CREATE ROLE contextlayer_exec LOGIN PASSWORD '<PASSWORD>'
     NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;
 
--- 2. Connect, but nothing implied by it.
-GRANT CONNECT ON DATABASE current_database() TO contextlayer_exec;
+-- 2. Connect, but nothing implied by it. GRANT needs a literal database
+--    identifier, so the name is interpolated rather than called inline
+--    (`GRANT ... ON DATABASE current_database()` is a syntax error).
+--    This form works whatever the database is called — on Supabase it is
+--    `postgres`.
+DO $$
+BEGIN
+    EXECUTE format(
+        'GRANT CONNECT ON DATABASE %I TO contextlayer_exec', current_database());
+END
+$$;
 
 -- 3. Read access, schema by schema. Repeat this block per schema you
 --    intend to expose; do not loop over every schema in the database.
@@ -46,14 +55,32 @@ GRANT CONNECT ON DATABASE current_database() TO contextlayer_exec;
 -- --- schema: public ---------------------------------------------------
 GRANT USAGE ON SCHEMA public TO contextlayer_exec;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO contextlayer_exec;
--- New tables created later are readable too, so a migration does not
--- silently make the agent blind. Still SELECT-only.
+-- Tables created *later* by the role running this script are readable
+-- too, so a migration does not silently make the agent blind. Still
+-- SELECT-only.
+--
+-- Caveat worth knowing: default privileges are recorded per creating
+-- role, not per schema. This covers objects created by the role you are
+-- running as (on Supabase, `postgres` — which is what the dashboard and
+-- most migrations use). If some other role creates tables here, add a
+-- matching line for it:
+--   ALTER DEFAULT PRIVILEGES FOR ROLE <creator> IN SCHEMA public
+--       GRANT SELECT ON TABLES TO contextlayer_exec;
+-- Otherwise new tables from that creator simply will not be readable —
+-- which fails closed (the agent sees less), not open.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT SELECT ON TABLES TO contextlayer_exec;
 -- CREATE on a schema would let the role make objects it could then write.
 REVOKE CREATE ON SCHEMA public FROM contextlayer_exec;
 
 -- --- add further schemas here, same four statements ------------------
+--
+-- On Supabase, do NOT add `auth` or `vault`: `auth.users` holds email
+-- addresses, password hashes, and refresh tokens, and `vault` holds
+-- decrypted secrets. Neither is reporting context, and both would be
+-- readable by any agent query the moment they are granted. `storage`
+-- likewise exposes object metadata for every uploaded file. Grant the
+-- schemas that hold business data and nothing else.
 
 -- 4. Belt and braces: PUBLIC's default CREATE on `public` predates this
 --    role and would otherwise apply to it. (No-op on PG15+, where this
@@ -62,6 +89,13 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
 -- 5. Make read-only the role's default posture even for a session that
 --    somehow escapes the executor's own transaction settings.
+--
+--    Note what this is and is not: the role can `SET
+--    default_transaction_read_only = off` on its own session, so this is
+--    a convenience backstop, NOT the wall. The wall is the absence of
+--    write GRANTs in step 3 — with this flag switched off, writes still
+--    fail with InsufficientPrivilege. If you are ever tempted to rely on
+--    this line instead of the grants, don't.
 ALTER ROLE contextlayer_exec SET default_transaction_read_only = on;
 -- A per-query timeout is set by the executor from the profile guardrail;
 -- this is the backstop for any connection it does not set.

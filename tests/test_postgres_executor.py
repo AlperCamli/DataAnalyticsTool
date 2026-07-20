@@ -16,6 +16,7 @@ import psycopg
 import pytest
 
 from connectors.postgres.executor import (
+    WRITE_PRIVILEGES,
     PostgresExecutor,
     RoleCheckFailed,
     check_role_is_readonly,
@@ -316,6 +317,89 @@ def test_missing_object_surfaces_as_schema_mismatch(config):
         )
     assert excinfo.value.capability_code == "schema_mismatch"
     assert excinfo.value.detail["validated_against"] == "sha256:stale"
+
+
+# --- the shipped provisioning script ----------------------------------------
+
+
+def test_deploy_execution_role_sql_provisions_a_role_that_cannot_write():
+    """`deploy/execution-role.sql` is executable, tested SQL — not
+    documentation that happens to look like SQL.
+
+    It shipped once with a syntax error precisely because it had never
+    been run, so this test runs the real file against a real Postgres and
+    then verifies the two barriers *independently*:
+
+      - the session default (`default_transaction_read_only`), which the
+        role can switch off itself, and
+      - the GRANTs, which it cannot.
+
+    The second is the one G3 actually rests on, so the test defeats the
+    first before asserting the second. A role that only fails writes
+    because of a session setting would pass a naive check while leaving a
+    write path one `SET` away.
+    """
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent.parent / "deploy" / "execution-role.sql"
+    sql = script.read_text(encoding="utf-8").replace("<PASSWORD>", "provision-test-pw")
+
+    with ephemeral_postgres(PG_IMAGE) as (_container, admin_dsn):
+        with psycopg.connect(admin_dsn, autocommit=True) as conn:
+            conn.execute("CREATE TABLE public.orders (id int, net numeric)")
+            conn.execute("INSERT INTO public.orders VALUES (1, 10)")
+            conn.execute(sql)  # the file, verbatim
+            # A table created after provisioning: ALTER DEFAULT PRIVILEGES
+            # must have made it readable without a second GRANT.
+            conn.execute("CREATE TABLE public.created_later (id int)")
+            conn.execute("INSERT INTO public.created_later VALUES (7)")
+
+            # The file's own VERIFY block, as assertions.
+            assert conn.execute(
+                """SELECT 1 FROM information_schema.role_table_grants
+                    WHERE grantee IN (SELECT rolname FROM pg_roles
+                                       WHERE pg_has_role('contextlayer_exec', oid, 'USAGE'))
+                      AND privilege_type = ANY(%s)""",
+                (list(WRITE_PRIVILEGES),),
+            ).fetchall() == []
+            assert conn.execute(
+                """SELECT 1 FROM pg_namespace
+                    WHERE has_schema_privilege('contextlayer_exec', nspname, 'CREATE')
+                      AND nspname NOT LIKE 'pg_%%' AND nspname <> 'information_schema'"""
+            ).fetchall() == []
+            assert conn.execute(
+                "SELECT rolsuper, rolcreatedb, rolcreaterole, rolbypassrls "
+                "FROM pg_roles WHERE rolname = 'contextlayer_exec'"
+            ).fetchone() == (False, False, False, False)
+
+        exec_dsn = role_dsn(admin_dsn, "contextlayer_exec", "provision-test-pw")
+
+        with psycopg.connect(exec_dsn, autocommit=True) as conn:
+            assert conn.execute("SELECT count(*) FROM public.orders").fetchone() == (1,)
+            assert conn.execute("SELECT count(*) FROM public.created_later").fetchone() == (1,)
+
+            # Defeat the softer barrier, exactly as an attacker would.
+            conn.execute("SET default_transaction_read_only = off")
+            assert conn.execute("SHOW default_transaction_read_only").fetchone() == ("off",)
+
+            for statement in [
+                "INSERT INTO public.orders VALUES (2, 20)",
+                "UPDATE public.orders SET net = 0",
+                "DELETE FROM public.orders",
+                "CREATE TABLE public.evil (id int)",
+                "DROP TABLE public.orders",
+                "CREATE SCHEMA sneaky",
+            ]:
+                with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                    conn.execute(statement)
+
+            assert conn.execute("SELECT count(*) FROM public.orders").fetchone() == (1,)
+
+        # And the executor's own startup check accepts what the file built.
+        facts = PostgresExecutor().preflight(
+            {"system": "demo", "mode": "live", "execute_dsn": exec_dsn}
+        )
+        assert facts["role"] == "contextlayer_exec"
 
 
 # --- CC-5: comment tagging --------------------------------------------------

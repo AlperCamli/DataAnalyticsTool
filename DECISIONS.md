@@ -1813,6 +1813,29 @@ touched.
     marked — rather than silently falling back to the broader credential.
     Regression test in `core/test/mcp-execute.test.ts`.
 
+16. **`deploy/execution-role.sql` shipped with a syntax error**
+    (`GRANT CONNECT ON DATABASE current_database()` — GRANT needs a
+    literal identifier), caught by the operator in the Supabase SQL
+    editor. Root cause: the file had never been executed. Fixed with a
+    `DO`/`format(%I)` block that works whatever the database is called,
+    and the file is now **run as a test**
+    (`test_deploy_execution_role_sql_provisions_a_role_that_cannot_write`)
+    rather than being documentation that resembles SQL.
+
+    Running it surfaced a second, more interesting point: with the script
+    applied, *every* write was refused by `ReadOnlySqlTransaction` — the
+    `default_transaction_read_only` session setting — which is the
+    barrier the role can switch off itself. The test now defeats that
+    flag first and then asserts the GRANTs refuse writes with
+    `InsufficientPrivilege`, because the grants are what G3 actually
+    rests on. A check that stopped at the first refusal would have passed
+    while leaving a write path one `SET` away. The file now says so in
+    the comment at step 5. Also corrected there: the
+    `ALTER DEFAULT PRIVILEGES` note (default privileges are recorded per
+    *creating role*, not per schema — the original comment overclaimed),
+    and an explicit warning not to grant Supabase's `auth`, `vault`, or
+    `storage` schemas.
+
 ### Conformance status
 
 MT-3/MT-4 upgraded from issuance-only to **enforcement**: no token,
@@ -1828,7 +1851,7 @@ terminal, never deferred) green in `tests/test_postgres_executor.py` and
 `tests/test_api_executors.py`. The staged-bypass test drives the driver
 directly, past every parser, and the role still refuses the write.
 
-Full suites: Python 446 + 13 skipped, TypeScript 127 (13 files).
+Full suites: Python 447 + 13 skipped, TypeScript 127 (13 files).
 
 **Live evidence captured.** GA4 `runReport` and GSC `searchAnalytics.query`
 execute against the real example estate for documented fields, and an
