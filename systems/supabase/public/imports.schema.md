@@ -3,7 +3,7 @@ doc_class: machine-object
 object: supabase.public.imports
 kind: table
 schema_hash: "sha256:637c57a9477ce54183d6f23df56a09c439bdf16333457573c081240d565ac026"
-generated_at: 2026-07-17
+generated_at: 2026-07-20
 source_mode: live
 snapshot_version: "1"
 status: machine
@@ -58,7 +58,7 @@ Indexes:
 
 ## Row estimate & freshness
 
-Row estimate: 95
+Row estimate: 102
 
 Freshness: facts reflect the snapshot recorded in `generated_at` (front-matter).
 
