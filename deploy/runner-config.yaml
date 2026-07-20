@@ -10,7 +10,20 @@ connectors:
   - connectors.postgres.connector:connector
   - connectors.ga4.connector:connector
   - connectors.gsc.connector:connector
-classes: [batch]
+# `interactive` is the execute/publish lane (CP-6). Without it this
+# runner claims snapshot work only and execute_sql has nobody to serve it.
+classes: [batch, interactive]
 wait_s: 25
 resolver:
   kind: process-env
+
+# G3 startup gate: prove the execution role cannot write before this
+# runner offers to claim `execute` jobs. If CL_EXEC_DSN is unset or
+# points at a role with write grants, the runner logs why and withholds
+# `execute` from its claim declaration — snapshot sync keeps running.
+# Provision the role with deploy/execution-role.sql.
+execution_preflight:
+  - connector: postgres
+    config:
+      system: supabase
+      execute_dsn_env: CL_EXEC_DSN

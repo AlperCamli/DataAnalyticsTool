@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "Connection registration for the pilot Supabase, consumed by:",
+    "  node dist/cli.js systems set jobs/live/supabase-connection.json",
+    "",
+    "This is what the execution gateway resolves when execute_sql runs.",
+    "Two credentials, deliberately distinct roles (G3):",
+    "  - `dsn`         : introspection, used by snapshot jobs",
+    "  - `execute_dsn` : the SELECT-only execution role, and the ONLY one",
+    "                    the gateway forwards, because it is the only one",
+    "                    marked required_for: [query].",
+    "An execute job with no query-marked credential fails closed rather",
+    "than falling back to the broader introspection role."
+  ],
+  "system": "supabase",
+  "connector": { "name": "postgres", "version_constraint": ">=0.2 <0.3" },
+  "payload": {
+    "config": { "system": "supabase", "mode": "live" },
+    "credentials": [
+      { "ref": "env://SUPABASE_DSN", "key": "dsn", "required_for": ["live"] },
+      { "ref": "env://CL_EXEC_DSN", "key": "execute_dsn", "required_for": ["query"] }
+    ]
+  }
+}
