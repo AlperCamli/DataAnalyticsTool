@@ -3,7 +3,7 @@ doc_class: machine-object
 object: supabase.public.ai_runs
 kind: table
 schema_hash: "sha256:1371cc0551146b3167888b67d16ddbf8c054f90222a4cb07b3312d9a18a89497"
-generated_at: 2026-07-12
+generated_at: 2026-07-20
 source_mode: live
 snapshot_version: "1"
 status: machine
@@ -68,7 +68,7 @@ Indexes:
 
 ## Row estimate & freshness
 
-Row estimate: 518
+Row estimate: 521
 
 Freshness: facts reflect the snapshot recorded in `generated_at` (front-matter).
 

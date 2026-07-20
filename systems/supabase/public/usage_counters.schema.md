@@ -3,7 +3,7 @@ doc_class: machine-object
 object: supabase.public.usage_counters
 kind: table
 schema_hash: "sha256:a4d5722f8765986984bc078fbbc2c86f5d61231eed158555f8036067509b7eee"
-generated_at: 2026-07-12
+generated_at: 2026-07-20
 source_mode: live
 snapshot_version: "1"
 status: machine
@@ -53,7 +53,7 @@ Indexes:
 
 ## Row estimate & freshness
 
-Row estimate: 33
+Row estimate: 34
 
 Freshness: facts reflect the snapshot recorded in `generated_at` (front-matter).
 
