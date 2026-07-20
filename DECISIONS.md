@@ -1858,8 +1858,94 @@ execute against the real example estate for documented fields, and an
 undocumented dimension is refused on both
 (`tests/test_live_execute.py`, env-gated).
 
-**Open for the M2 gate (not code):** the two-machine reporter demo against
-the customer Supabase, which needs `deploy/execution-role.sql` applied to
-the example estate first (operator action, by ruling — we do not run DDL
-against the customer database); the live startup-refusal demonstration
-against a write-capable role; and security review #2 (plan task 6.6).
+### Live evidence against the example estate (2026-07-20)
+
+`deploy/execution-role.sql` was applied to the pilot Supabase by the
+operator (with a syntax fix — see D-70). Verified live:
+
+- **G3 startup check passes**: role `contextlayer_exec`, engine 17.6.
+- **Role posture confirmed through the introspection connection**: zero
+  write grants reachable through role membership; `public` is the only
+  schema with USAGE — `auth`, `vault`, `storage`, `realtime`, and
+  `extensions` are all closed, so the Supabase schemas holding password
+  hashes, refresh tokens, and decrypted secrets are unreachable by any
+  agent query; role holds none of SUPERUSER/CREATEDB/CREATEROLE/BYPASSRLS;
+  all three session defaults applied.
+- **Real SELECT over live customer data**: 17 rows from
+  `pg_stat_user_tables`, executed under the execution role, 1021 ms.
+- **Write refused at the role** driven straight at the driver, past every
+  parser we own; **row cap truncates** on an over-cap query.
+- **Startup refusal demonstrated live**: pointing execution at the
+  introspection DSN is refused — *"execution role 'postgres' holds
+  CREATEDB, CREATEROLE, BYPASSRLS; execution requires a role with none of
+  these (G3). Refusing to serve execution."* — at startup **and** per
+  query. At the runner level the effect is the declaration itself: with
+  the execution role it offers `['execute', 'snapshot']`; with the
+  write-capable role it offers `['snapshot']` only. Execution is withheld
+  while metadata sync continues, as designed.
+- **GA4 `runReport` and GSC `searchAnalytics.query`** return live data for
+  documented fields; undocumented dimensions refused on both.
+
+**Finding raised, not fixed here (out of M2 scope).** The *introspection*
+connection runs as `postgres`, which holds CREATEDB, CREATEROLE, and
+BYPASSRLS. Snapshot introspection reads catalogs and needs none of those.
+G3 scoped the execution role because that is the path an agent drives,
+but the same least-privilege argument applies to introspection — and
+BYPASSRLS in particular means the introspection role sees through row
+level security. **Proposed as a register item**: a dedicated
+least-privilege introspection role, with the same provisioning-file
+treatment. Not changed under the M2 fence.
+
+**Open for the M2 gate (not code):** the two-machine reporter demo
+against the customer Supabase (needs the second machine; M1's live demo
+is still open too and shares the setup), and security review #2 (plan
+task 6.6).
+
+## D-70 — `deploy/execution-role.sql` shipped broken; the artifact is now executed by tests
+
+**What happened.** The first version of the execution-role provisioning
+script contained `GRANT CONNECT ON DATABASE current_database()`, which is
+not valid SQL — `GRANT ... ON DATABASE` takes a literal identifier. The
+file was written, reviewed, committed, and handed to the operator without
+ever being run. The operator hit the error in the Supabase SQL editor and
+fixed it with a `DO` block using `format(%I, current_database())`.
+
+**Why the M2 suite did not catch it.** Every other execution test
+provisions its roles with inline SQL written in the test — precise, fast,
+and completely disconnected from the artifact a human actually runs. The
+tests proved the *executor* enforces G3; nothing proved the *file that
+creates the role G3 depends on* would execute. The shipped artifact was
+the one piece of the checkpoint with no coverage, and it was also the
+piece with the highest blast radius, since it runs as a superuser against
+the customer's production database.
+
+**Fix (`tests/test_execution_role_sql.py`).** The real file is applied to
+a real Postgres through `psql`, with only the documented `<PASSWORD>`
+placeholder substituted, and the resulting role is then held to the
+executor's own check: it can read business data; it cannot write by any
+of five routes driven straight at the driver; its session defaults are
+set; later tables created by the provisioning role stay readable; and the
+three VERIFY queries the file instructs the operator to run are parsed
+back **out of the file** and asserted empty — so the instructions are
+tested, not just the statements. Confirmed as a genuine regression test
+by restoring the broken `GRANT`: 13 errors before the fix, 13 passes
+after.
+
+**The general lesson, recorded because it will recur.** Operator-run
+artifacts — provisioning SQL, runbooks, migration scripts, compose files
+— are code, and shipping them untested is shipping untested code. The
+convenience of writing setup inline in a test is exactly what leaves the
+real artifact uncovered. Where a file is meant to be run by a human
+against something that matters, a test should run that file.
+
+**Secondary defect, same class (mine).** The `.secrets/wire-exec-dsn.sh`
+helper built the DSN by re-encoding an already-encoded password, so a
+literal `%` became `%25` and the stored credential silently did not match
+the role; it also wrote the value without testing it, so the failure
+surfaced two layers later as an opaque `AuthError`. Both are fixed: the
+helper now carries the Supabase pooler's tenant suffix (which lives in
+the username as `<role>.<project_ref>` and is required by the pooler),
+tests the connection *before* writing, and a companion
+`reset-exec-password.sh` generates a URL-safe password and writes both
+sides from that one value — the two-sided secret is never hand-carried,
+which removes the encoding-mismatch class rather than documenting it.
