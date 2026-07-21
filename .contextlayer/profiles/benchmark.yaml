@@ -1,0 +1,31 @@
+# Benchmark profile (CP-5) — the dedicated, non-user harness profile
+# (skill-spec §10 amendment #2, SK-4). Golden-suite journeys run under
+# this profile so their traffic is audit-tagged and excluded from the
+# adoption metrics (Pilot Metric 2 must be unpollutable by our own test
+# runs), and publish is suppressed by its absence from the allowlist.
+#
+# Not role-assignable to humans by default: the `benchmark` OIDC group
+# exists only for the harness. The benchmark-mode checkpoint waivers
+# (no CP-R1/CP-R4 confirmations) key on THIS server-known profile name
+# (SP-2), never on a session that merely looks automated.
+name: Benchmark
+description: Golden-suite harness profile (SK-4) — read + validate + execute, no publish
+roles: [benchmark]             # OIDC group; harness-only, not a human persona
+skills: [benchmark]
+tools:
+  # Read the full estate + validate + execute across all three pilot
+  # systems (the seed suite has supabase, ga4 and gsc cases). Execution is
+  # system-qualified (MCP-R4) and still requires a validation token; it
+  # runs under the same G3 read-only database role as every other execute.
+  # publish_report is deliberately absent — suppression by profile (SK-4),
+  # enforced server-side regardless of client config.
+  allow: [search_context, get_entity, get_table, get_metric, get_lineage,
+          validate_sql, execute_sql:supabase, execute_sql:ga4, execute_sql:gsc,
+          report_freshness, flag_gap]
+context:
+  claude_md_fragment: |
+    You are running the benchmark harness. Answer each golden-suite request
+    exactly as the report skill would; never tune your approach to how much
+    context you can see. There is no user: resolve ambiguity with a stated
+    assumption, never a question, and score nothing yourself.
+limits: { row_cap: 50000, timeout_s: 60 }

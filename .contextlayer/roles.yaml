@@ -54,3 +54,16 @@ roles:
     identity: AlperCamli
     oidc_group: null
     visibility: ["**"]
+
+  # Harness-only (CP-5, SK-4). Not a human persona. Full visibility so the
+  # enriched benchmark condition sees the whole estate; without this entry
+  # the benchmark run would be default-hidden and every statement refused
+  # as "no such object" — silently destroying the condition (platform
+  # DECISIONS D-74.4b). The no-kb condition, by contrast, is served by a
+  # scratch repo with no roles.yaml at all.
+  RB:
+    title: Benchmark harness (non-user)
+    profile: benchmark
+    identity: AlperCamli
+    oidc_group: benchmark
+    visibility: ["**"]
