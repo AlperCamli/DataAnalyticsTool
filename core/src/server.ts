@@ -489,6 +489,9 @@ export function buildServer(
 
   // -- MCP server (CP-4; self-authenticating per call) ------------------------
 
+  // Held for /healthz so an instance can state which KB it is serving.
+  let mcpKb: KbReader | null = null;
+
   if (cfg.mcp.enabled) {
     // The execution gateway blocks on interactive results, which arrive
     // on their own channel (JOB_DONE) — a second listener connection,
@@ -501,11 +504,12 @@ export function buildServer(
       await doneNotifier.stop();
     });
 
+    mcpKb = new KbReader(cfg, pool);
     registerMcp(app, {
       cfg,
       pool,
       oidc: oidc ?? new OidcClient(cfg.mcp),
-      kb: new KbReader(cfg, pool),
+      kb: mcpKb,
       limiter: new RateLimiter(cfg.mcp.limits),
       doneNotifier,
       log: (msg, err) => (err ? app.log.error({ err }, msg) : app.log.info(msg)),
@@ -521,7 +525,33 @@ export function buildServer(
       );
       const jobs: Record<string, number> = {};
       for (const row of rows) jobs[row.state] = Number(row.n);
-      return { status: "ok", protocol_version: PROTOCOL_VERSION, jobs };
+
+      // Instance identity (CP-5 / D-75.4). Several cores may share one
+      // ops database during a benchmark baseline; the packet has to state
+      // which KB each is serving and that its sync triggers are off, and
+      // an operator should be able to check that mechanically rather than
+      // trust a runbook step was followed.
+      let kbRef: string | null = null;
+      if (mcpKb) {
+        try {
+          kbRef = (await mcpKb.current()).headSha;
+        } catch {
+          // KB unreachable — the rest of the probe is still useful.
+        }
+      }
+
+      return {
+        status: "ok",
+        protocol_version: PROTOCOL_VERSION,
+        jobs,
+        instance: {
+          public_url: cfg.mcp.publicUrl,
+          mcp_enabled: cfg.mcp.enabled,
+          sync_enabled: cfg.sync.enabled,
+          kb_remote: cfg.sync.gitRemote || null,
+          kb_ref: kbRef,
+        },
+      };
     } catch (err) {
       _req.log.error({ err }, "healthz db check failed");
       return reply.code(503).send({ status: "degraded" });

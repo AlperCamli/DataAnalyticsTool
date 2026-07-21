@@ -1,0 +1,86 @@
+# Baseline v1 condition overlay (CP-5 deliverable 5, ruling D-74.4 /
+# D-75.4). Adds two more core instances beside the stack's own, so the
+# three benchmark conditions are served by three cores that differ in
+# exactly one thing: the KB each one is pointed at.
+#
+#   docker compose -f docker-compose.yml -f deploy/compose.baseline.yml up -d --build
+#
+# | Condition    | Instance      | Port | KB served                        |
+# |--------------|---------------|------|----------------------------------|
+# | enriched-kb  | core          | 8100 | customer KB clone at pinned ref  |
+# | machine-kb   | core-machine  | 8101 | benchmark.conditions render      |
+# | no-kb        | core-nokb     | 8102 | scratch repo: profiles only      |
+#
+# Why three cores and not three profiles: the KB remote is per-instance
+# config (SYNC_GIT_REMOTE), not a profile field. Three profiles against
+# one core would all resolve against the same KB and the conditions would
+# be indistinguishable — the run would report a difference it never
+# created (D-74.4).
+#
+# R2 fairness: identical journey prompt, identical execution access
+# (all three share the ops DB, so all three validate and execute against
+# the same accepted snapshots). Only context access differs.
+#
+# SYNC IS OFF ON EVERY CONDITION INSTANCE (D-75.4). These serve MCP and
+# the gateway, nothing else. `SYNC_ENABLED` is unset here and must stay
+# unset: three schedulers sharing one queue and pushing sync PRs at
+# scratch repos is the failure mode the ruling names. The production core
+# remains the sole sync writer for the whole baseline. Do not expose the
+# `/v1/hooks/*` endpoints of these instances; they have no hook secrets
+# configured, but the run rows a trigger would enqueue land in the SHARED
+# queue, where the production core's run loop would pick them up.
+
+services:
+  core-machine:
+    build:
+      context: .
+      dockerfile: core/Dockerfile
+    environment:
+      CORE_DATABASE_URL: postgres://postgres:contextlayer@postgres:5432/cl_ops
+      CORE_OPS_TOKENS: ops-machine=${CL_OPS_TOKEN:-dev-ops-token}
+      CORE_RUNNER_TOKENS: runner-machine=${CL_RUNNER_TOKEN:-dev-runner-token}
+      # Migrations are the production core's job; a second instance
+      # racing them on the shared DB is a needless failure mode.
+      CORE_MIGRATE_ON_START: "0"
+      CORE_MCP_ENABLED: "1"
+      CORE_OIDC_ISSUER: http://${CL_HOST_ADDR:-host.docker.internal}:8180
+      CORE_PUBLIC_URL: http://${CL_HOST_ADDR:-localhost}:8101
+      CORE_OIDC_CLIENT_ID: core
+      CORE_OIDC_CLIENT_SECRET: dev-introspect-secret
+      # The condition's KB: the deterministic machine-only render pushed
+      # to a scratch repo. SYNC_ENABLED deliberately absent.
+      SYNC_GIT_REMOTE: ${CL_MACHINE_KB_REMOTE:?set CL_MACHINE_KB_REMOTE to the machine-kb scratch repo}
+      SYNC_GIT_PROVIDER: ${CL_MACHINE_KB_PROVIDER:-local}
+    ports:
+      - "127.0.0.1:8101:8100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  core-nokb:
+    build:
+      context: .
+      dockerfile: core/Dockerfile
+    environment:
+      CORE_DATABASE_URL: postgres://postgres:contextlayer@postgres:5432/cl_ops
+      CORE_OPS_TOKENS: ops-nokb=${CL_OPS_TOKEN:-dev-ops-token}
+      CORE_RUNNER_TOKENS: runner-nokb=${CL_RUNNER_TOKEN:-dev-runner-token}
+      CORE_MIGRATE_ON_START: "0"
+      CORE_MCP_ENABLED: "1"
+      CORE_OIDC_ISSUER: http://${CL_HOST_ADDR:-host.docker.internal}:8180
+      CORE_PUBLIC_URL: http://${CL_HOST_ADDR:-localhost}:8102
+      CORE_OIDC_CLIENT_ID: core
+      CORE_OIDC_CLIENT_SECRET: dev-introspect-secret
+      # Profile files and nothing else (D-74.4c). The tool surface
+      # already withholds content tools; pointing this instance at
+      # content it must not serve would be a second thing that has to
+      # stay true. Note the absence of roles.yaml is load-bearing: with
+      # no visibility map the full surface is visible, which is what lets
+      # validate_sql work at all here (D-74.4b).
+      SYNC_GIT_REMOTE: ${CL_NOKB_KB_REMOTE:?set CL_NOKB_KB_REMOTE to the profiles-only scratch repo}
+      SYNC_GIT_PROVIDER: ${CL_NOKB_KB_PROVIDER:-local}
+    ports:
+      - "127.0.0.1:8102:8100"
+    depends_on:
+      postgres:
+        condition: service_healthy
