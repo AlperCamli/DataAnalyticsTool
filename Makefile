@@ -45,5 +45,24 @@ status:      ## coverage of the cases x conditions x reps grid
 score:       ## validate + score records -> results/<run-id>/ (R8 + report)
 	$(PY) -m benchmark.manual score --root $(RUNS) --out results
 
+# CP-5 skill conformance scenarios (D-78 layer (b), the AS-9/10/12 gate
+# evidence). Re-run on any skill edit — the fixture deployment needs no
+# example estate. Requires a postgres admin URL (a throwaway container is
+# fine) and the `claude` CLI on PATH.
+#
+#   ADMIN_DB defaults to the local compose postgres; override for a
+#   throwaway container. FIXTURE is the connection file the launcher writes.
+ADMIN_DB ?= postgres://postgres:contextlayer@127.0.0.1:5433/postgres
+FIXTURE  ?= /tmp/cl-fixture.json
+SCEN_MODEL ?= claude-opus-4-8
+
+fixture-up:  ## stand up the fixture deployment (keeps running; Ctrl-C to stop)
+	cd core && CORE_TEST_DATABASE_URL="$(ADMIN_DB)" CORE_TEST_PYTHON="$(abspath $(PY))" \
+	  node_modules/.bin/vite-node test/fixture-deployment.ts -- --out "$(FIXTURE)" --with-execution
+
+scenarios:   ## run AS-9/10/12 against a running fixture -> results/cp5-scenarios/
+	$(PY) -m tools.skill_scenarios --connection "$(FIXTURE)" \
+	  --model $(SCEN_MODEL) --out results/cp5-scenarios
+
 .PHONY: stack-up stack-mcp stack-demo stack-live stack-down drill \
-        conditions preflight ingest status score
+        conditions preflight ingest status score fixture-up scenarios

@@ -14,7 +14,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { inject } from "vitest";
+
+// `inject` reads the admin DB URL that vitest's global-setup provides.
+// It is imported lazily (top-level await, gated on the standalone escape
+// hatch below) because importing `vitest` at module scope crashes
+// vite-node — and the standalone fixture-deployment launcher (D-78 layer
+// (b)) runs this module *outside* vitest. That launcher always supplies
+// CORE_TEST_DATABASE_URL, so it never needs `inject` and never loads it.
+let injectFn: ((key: string) => string) | null = null;
+if (!process.env.CORE_TEST_DATABASE_URL) {
+  ({ inject: injectFn } = await import("vitest"));
+}
 import type { CoreConfig } from "../src/config.js";
 import { createPool, JobsNotifier } from "../src/db.js";
 import { migrate } from "../src/migrate.js";
@@ -35,7 +45,9 @@ export function pythonPath(): string {
 }
 
 export function adminUrl(): string {
-  return process.env.CORE_TEST_DATABASE_URL ?? inject("adminUrl");
+  if (process.env.CORE_TEST_DATABASE_URL) return process.env.CORE_TEST_DATABASE_URL;
+  if (!injectFn) throw new Error("adminUrl: no CORE_TEST_DATABASE_URL and vitest inject unavailable");
+  return injectFn("adminUrl");
 }
 
 function withDatabase(url: string, database: string): string {

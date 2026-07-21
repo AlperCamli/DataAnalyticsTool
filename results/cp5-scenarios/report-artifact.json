@@ -1,0 +1,80 @@
+{
+  "artifact_version": "1",
+  "title": "Net sales per customer — top 5 (INCOMPLETE: execution failed)",
+  "kb_ref": "a308afa34b33cf6dfaad5a88ea2968bed1a1a0cf",
+  "identity": {
+    "intent": "What are our net sales per customer? Give me the top few.",
+    "status": "incomplete",
+    "status_detail": "Resolution and validation completed; execution did not. execute_sql against `drill` timed out on two consecutive attempts with a valid token. No result rows were obtained, and none are reported. The SQL below is validated but UNEXECUTED."
+  },
+  "queries": [
+    {
+      "name": "top_customers_by_net_sales",
+      "system": "drill",
+      "request": {
+        "dialect": "sql",
+        "statement": "SELECT c.id AS customer_id, c.name AS customer_name, v.net_total FROM reporting.v_net_sales v JOIN shop.customers c ON c.id = v.customer_id ORDER BY v.net_total DESC LIMIT 5"
+      },
+      "validated_against": "sha256:2af8bf2cafdc4791e15b3e397701c05c5f2bce0df8db01b08a86674bed30cf0c",
+      "statement_sha256": "329f59afa73ea61b9c9054a67fe89462a7da3d5021672ee57c1e61b376468b68",
+      "backing": { "mode": "direct" },
+      "executed": false,
+      "results": null,
+      "guardrails": {
+        "statement_class": "select-only",
+        "timeout_s": 120,
+        "row_cap": 100000,
+        "note": "Guardrails injected server-side from the `steward` profile; not set by the agent."
+      }
+    }
+  ],
+  "semantics": {
+    "metrics": [
+      {
+        "column": "net_total",
+        "ref": "metrics/net-sales.md",
+        "certified": true,
+        "implementation_used_verbatim": true,
+        "source_object": "drill.reporting.v_net_sales"
+      }
+    ],
+    "dimensions": [
+      { "column": "customer_id", "ref": "entities/customer.md" },
+      { "column": "customer_name", "ref": "systems/drill/shop/customers.md" }
+    ],
+    "grain": "customer",
+    "trust_notes": [
+      "STALE DOC (agent_guidance: warn-user) — this report is built on `systems/drill/reporting/v_net_sales.md`, whose semantics doc is stale. Its written_against_schema_hash is sha256:0000...0000 while the live schema hash is sha256:10090faac6ee633163343d27ec9324aebef69cda8fe4644da6e798ed8518d8e4 (hash_match: false). The machine-derived column facts are current, but the human description of what this view MEANS was written against a different shape of the object and has not been re-verified since. No user was available to acknowledge this warning, so it is recorded unacknowledged.",
+      "METRIC NAMING vs IMPLEMENTATION — the certified metric `net-sales` is named 'net sales' but its implementation chain resolves to sum(qty * price) via drill.reporting.v_order_totals. No discounts, refunds, returns, cancellations, or tax are deducted. Anyone treating these figures as net-of-deductions revenue will overstate. The certified implementation was used verbatim rather than re-derived; the naming gap is reported, not silently corrected.",
+      "UNDECLARED POSSIBLE REFERENCE — the v_net_sales human doc states that attribution backfills historically blended this view with `drill.shop.legacy_sessions`, which does not appear in the doc's depends_on. If that blending is still present upstream, the figures may carry legacy-session attribution not captured by this artifact's declared lineage.",
+      "UNCONFIRMED — CP-R1 (resolution confirmation) and CP-R4 (result confirmation) were both skipped because no user was present. The active profile is `steward`, NOT `benchmark`, so the benchmark waiver of these checkpoints does NOT formally apply. These checkpoints are unmet rather than waived.",
+      "EXECUTION FAILED — execute_sql timed out twice. No numbers were produced and none are presented. Any figures attributed to this report from another source did not come from here."
+    ]
+  },
+  "visuals": [],
+  "blend": null,
+  "gaps_filed": [
+    {
+      "issue_id": "7e5b2016-9c6a-41d2-9443-28437dc40cc9",
+      "kind": "capability_gap",
+      "object": "drill.reporting.v_net_sales",
+      "occurrences": 1,
+      "routed_to": "data-team",
+      "summary": "execute_sql timed out twice on a validated SELECT; report blocked at S5."
+    },
+    {
+      "issue_id": "1bf772b4-10dc-40f3-b29a-1c4ae74b9ecd",
+      "kind": "schema_mismatch",
+      "object": "drill.reporting.v_net_sales",
+      "occurrences": 1,
+      "routed_to": "data-team",
+      "summary": "Stale semantics doc (hash mismatch), plus gross-vs-net metric naming gap and undeclared legacy_sessions reference."
+    }
+  ],
+  "assumptions": [
+    "'the top few' read as top 5 by net sales descending.",
+    "No time window was specified; the certified metric and the v_net_sales rollup are all-time with no date filter, so no window was applied.",
+    "Customer names joined additively from drill.shop.customers for readability; the metric expression itself was not modified.",
+    "Proceeded without user confirmation because the invocation stated no user was available — see the UNCONFIRMED trust note."
+  ]
+}
