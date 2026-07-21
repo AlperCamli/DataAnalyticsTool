@@ -1,0 +1,560 @@
+# benchmark-seed-v0 — CVBuilder golden-benchmark seed packet
+# STATUS: DRAFT (execution-deferred). Customer declined live DB access and chose to
+# wire the GA4/GSC connector later, so NO golden has been executed this session.
+# Every `verified_result` is a stub (status: pending-execution-deferred). The goldens,
+# windows, expected_objects and resolution_notes ARE final and customer-intent-confirmed.
+# See the handoff notes for the resume checklist and per-case scoring caveats.
+
+suite_version: "0"
+customer: cvbuilder
+authored_at: "2026-07-15"
+execution_status: draft-pending-execution   # no source was reachable this session
+cases:
+  - id: RB-01
+    request: "How many new users are signing up? I want to watch new users over time."
+    origin: "customer-stated, 2026-07-15"
+    recurring: true
+    visual_kind: line
+    systems: [supabase]
+    expected_objects:
+      - supabase.public.users
+    resolution_notes: >
+      Grain/window resolved with customer: DAILY buckets over the last full month,
+      June 2026 (2026-06-01..2026-06-30, UTC). "New user" = one users row by created_at
+      (immutable; users has no soft-delete, so a closed past window is fully deterministic).
+      No test/internal-account flag exists on users, so no exclusion filter applied.
+      Days with zero signups are omitted by GROUP BY (fill client-side for a continuous axis).
+      PII columns (email, full_name) intentionally not selected.
+    window: { phrasing: "last full month (June 2026)", from: "2026-06-01", to: "2026-06-30", grain: day, tz: UTC }
+    golden:
+      - system: supabase
+        request:
+          dialect: sql
+          statement: |
+            SET statement_timeout = '30s';
+            SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS signup_day,
+                   count(*) AS new_users
+            FROM public.users
+            WHERE created_at >= '2026-06-01T00:00:00Z'
+              AND created_at <  '2026-07-01T00:00:00Z'
+            GROUP BY 1
+            ORDER BY 1;
+    blend: null
+    verified_result:
+      status: pending-execution-deferred
+      row_count: null
+      rows: null
+      summary: null
+      checksum: null
+      executed_at: null
+      note: "Run golden via read-only DSN (psql); expect <=30 rows (one per day with signups)."
+    verified_by: "design/intent confirmed by customer 2026-07-15; numeric result pending execution"
+    notes: "Byte-stable golden (immutable created_at, closed window) — safe for byte-comparison once executed."
+
+  - id: RB-02
+    request: "Show me the subscriptions — who's currently paying, broken down by plan."
+    origin: "customer-stated, 2026-07-15"
+    recurring: true
+    visual_kind: pivot
+    systems: [supabase]
+    expected_objects:
+      - supabase.public.subscriptions
+    resolution_notes: >
+      "Paying base" resolved with customer to status IN ('active','trialing') — both live
+      states, matching subscriptions_one_active_per_user_idx (<=1 such row per user, so no
+      double-count). Pivoted plan_code x status so trials vs paid are separable. status is
+      NOT a DB enum (open, provider-driven vocabulary) — the two values counted are pinned
+      here explicitly. Revenue is intentionally absent: subscriptions has no amount column
+      (see entities/conversion.md); this is a subscriber COUNT, not MRR.
+    window: { phrasing: "current (as of execution)", from: null, to: null, as_of: "execution time", note: "live snapshot" }
+    golden:
+      - system: supabase
+        request:
+          dialect: sql
+          statement: |
+            SET statement_timeout = '30s';
+            SELECT plan_code, status, count(*) AS subscribers
+            FROM public.subscriptions
+            WHERE status IN ('active','trialing')
+            GROUP BY plan_code, status
+            ORDER BY plan_code, status;
+    blend: null
+    verified_result:
+      status: pending-execution-deferred
+      row_count: null
+      rows: null
+      summary: null
+      checksum: null
+      executed_at: null
+      note: "Snapshot of mutable status; capture executed_at precisely at run time."
+    verified_by: "design/intent confirmed by customer 2026-07-15; numeric result pending execution"
+    notes: >
+      TIME-UNSTABLE at source: subscriptions.status mutates in place and there is NO
+      subscription-history table, so the same query re-run later returns different numbers.
+      Score STRUCTURALLY (shape: plan_code x {active,trialing} with integer counts), not by
+      byte/checksum.
+
+  - id: RB-03
+    request: "I check the search results regularly — what are our top search queries?"
+    origin: "customer-stated, 2026-07-15"
+    recurring: true
+    visual_kind: table
+    systems: [gsc]
+    expected_objects:
+      - gsc.standard.query
+      - gsc.standard.clicks
+      - gsc.standard.impressions
+      - gsc.standard.ctr
+      - gsc.standard.position
+    resolution_notes: >
+      Window/ranking/N resolved with customer: June 2026 (2026-06-01..2026-06-30), ranked by
+      clicks (the API's native descending sort), top 20 rows. dataState=final per conventions
+      (recurring/certified reporting uses finalized rows). All four metrics return together.
+      Grouping by query forces per-query rows and UNDER-COUNTS property totals (Google
+      anonymizes rare queries) — treat as query shape, not an exact property total. CTR/position
+      must not be averaged across rows (weighted/topmost semantics — see systems/gsc/metrics.md).
+    window: { phrasing: "last full month (June 2026)", from: "2026-06-01", to: "2026-06-30", data_state: final }
+    golden:
+      - system: gsc
+        request:
+          dialect: api
+          operation: searchanalytics.query
+          property: "sc-domain:example-estate.com"
+          body:
+            startDate: "2026-06-01"
+            endDate: "2026-06-30"
+            dimensions: ["query"]
+            rowLimit: 20
+            dataState: "final"
+    blend: null
+    verified_result:
+      status: pending-execution-deferred
+      row_count: null
+      rows: null
+      summary: null
+      checksum: null
+      executed_at: null
+      note: "Requires GA4/GSC connector (deferred). Canonical CSV must sort rows lexicographically to neutralize API tie-order among equal-click rows."
+    verified_by: "design/intent confirmed by customer 2026-07-15; numeric result pending execution"
+    notes: >
+      TIME-UNSTABLE at source (GSC matures retroactively); June is finalized by mid-July so
+      'final' rows are near-stable, but score STRUCTURALLY (20 rows, columns query+clicks+
+      impressions+ctr+position, clicks-descending) rather than byte-comparing.
+
+  - id: RB-04
+    request: "Give me an audience/demographics report from our web analytics — where are visitors from, and who are they?"
+    origin: "customer-stated, 2026-07-15 (GA4-only demographic coverage, customer-selected)"
+    recurring: true
+    visual_kind: pivot
+    systems: [ga4]
+    expected_objects:
+      - ga4.standard.country
+      - ga4.standard.userAgeBracket
+      - ga4.standard.userGender
+      - ga4.standard.activeUsers
+      - ga4.standard.newUsers
+    resolution_notes: >
+      Lens resolved with customer: country breakdown PLUS age/gender best-effort. Single runReport
+      (one quota unit) over June 2026 — dimensions country + userAgeBracket + userGender, metrics
+      activeUsers + newUsers, ordered by activeUsers desc. GA4 is anonymous/aggregate: no user
+      identity, not attributable to a Supabase account (entities/user.md). age/gender populate ONLY
+      if Google Signals is enabled AND rows clear GA4 thresholds — whether Signals is on for this
+      property is UNGROUNDED; otherwise those columns return (not set). Treat (not set) as 'not
+      reported', not a demographic bucket. All referenced dim/metric names verified present in the
+      property metadata snapshot (.contextlayer/snapshots/ga4.json).
+    window: { phrasing: "last full month (June 2026)", from: "2026-06-01", to: "2026-06-30" }
+    golden:
+      - system: ga4
+        request:
+          dialect: api
+          operation: runReport
+          property: "properties/000000000"
+          body:
+            dateRanges: [{ startDate: "2026-06-01", endDate: "2026-06-30" }]
+            dimensions: [{ name: "country" }, { name: "userAgeBracket" }, { name: "userGender" }]
+            metrics: [{ name: "activeUsers" }, { name: "newUsers" }]
+            orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }]
+            limit: 250
+    blend: null
+    verified_result:
+      status: pending-execution-deferred
+      row_count: null
+      rows: null
+      summary: null
+      checksum: null
+      executed_at: null
+      note: "Requires GA4 connector (deferred). If age/gender come back (not set), THAT is the finding (Google Signals off)."
+    verified_by: "design/intent confirmed by customer 2026-07-15; numeric result pending execution"
+    notes: >
+      TIME-UNSTABLE (GA4 matures ~24-48h; June mature by mid-July) AND population-conditional
+      (age/gender depend on Google Signals + thresholding). Score STRUCTURALLY, not byte-compared.
+
+  - id: RB-05
+    request: "I want a funnel report — how does our Google search traffic turn into signups?"
+    origin: "customer-stated, 2026-07-15"
+    recurring: true
+    visual_kind: bar                 # ordered-bar funnel
+    systems: [gsc, ga4, supabase]
+    expected_objects:
+      - gsc.standard.clicks
+      - ga4.standard.sessionDefaultChannelGroup
+      - ga4.standard.sessions
+      - ga4.standard.newUsers
+      - supabase.public.users
+    resolution_notes: >
+      Stages resolved with customer: organic-aligned 4-stage over June 2026 —
+      (1) GSC organic clicks (property-level total, dataState=final; GSC is Google-organic by
+      nature), (2) GA4 Organic-Search sessions, (3) GA4 new users on Organic Search, (4) Supabase
+      signups (users.created_at in June). GA4 leg split by sessionDefaultChannelGroup; read the
+      'Organic Search' row for stages 2-3 so GA4 magnitudes line up with the GSC search leg.
+      CRITICAL: AGGREGATE RECONCILIATION, not a joined funnel — NO row-level key exists between
+      GA4/GSC and Supabase (User-ID off; entities/user.md cross-source rule). Stages are computed
+      independently and compared by magnitude; between-system 'rates' are directional, not
+      user-traced. newUsers attributed by session channel (acquisition-channel proxy).
+    window: { phrasing: "June 2026", from: "2026-06-01", to: "2026-06-30", data_state: final }
+    golden:
+      - system: gsc
+        request:
+          dialect: api
+          operation: searchanalytics.query
+          property: "sc-domain:example-estate.com"
+          body:
+            startDate: "2026-06-01"
+            endDate: "2026-06-30"
+            dimensions: []
+            dataState: "final"
+        note: "Stage 1 — property-level total clicks (byProperty), all Google-organic."
+      - system: ga4
+        request:
+          dialect: api
+          operation: runReport
+          property: "properties/000000000"
+          body:
+            dateRanges: [{ startDate: "2026-06-01", endDate: "2026-06-30" }]
+            dimensions: [{ name: "sessionDefaultChannelGroup" }]
+            metrics: [{ name: "sessions" }, { name: "newUsers" }, { name: "activeUsers" }]
+            limit: 50
+        note: "Stages 2-3 — read the 'Organic Search' row (sessions, newUsers)."
+      - system: supabase
+        request:
+          dialect: sql
+          statement: |
+            SET statement_timeout = '30s';
+            SELECT count(*) AS signups
+            FROM public.users
+            WHERE created_at >= '2026-06-01T00:00:00Z'
+              AND created_at <  '2026-07-01T00:00:00Z';
+        note: "Stage 4 — Supabase signups (equals RB-01's June total)."
+    blend:
+      kind: aggregate-reconciliation
+      keys: none
+      doc: entities/user.md
+      note: "No shared identity key across GA4/GSC/Supabase; magnitude comparison only, never a row join."
+    verified_result:
+      status: pending-execution-deferred
+      row_count: null
+      rows: null
+      summary: null
+      checksum: null
+      executed_at: null
+      note: "Requires GSC + GA4 connectors (deferred) plus Supabase DSN; 3 legs, then assemble the 4 magnitudes."
+    verified_by: "design/intent confirmed by customer 2026-07-15; numeric result pending execution"
+    notes: >
+      TIME-UNSTABLE (GA4/GSC legs mature retroactively; Supabase leg stable). Score STRUCTURALLY as
+      an ordered 4-stage magnitude funnel; do NOT expect stage-to-stage row conservation.
+
+  - id: RB-06
+    request: "I want to see the journeys of users — how their job applications move through the stages."
+    origin: "customer-stated, 2026-07-15"
+    recurring: true
+    visual_kind: pivot               # from_status x to_status transition matrix
+    systems: [supabase]
+    expected_objects:
+      - supabase.public.job_status_history
+    resolution_notes: >
+      Shape resolved with customer: transition matrix — count of every from_status -> to_status
+      move over 2026-04-01..2026-06-30 (by changed_at). Initial entries (from_status = null) shown
+      as '(initial)'. from_status/to_status DB-constrained to saved/applied/interview/offer/
+      rejected/archived (current post-phase-4A vocabulary; legacy interviewing/offered were
+      rewritten in place, so live data carries only the current set). Rows are per-transition, not
+      per-job. changed_by_user_id (actor) intentionally not sliced — this is the aggregate journey.
+    window: { phrasing: "since launch through June 2026", from: "2026-04-01", to: "2026-06-30", grain: "changed_at" }
+    golden:
+      - system: supabase
+        request:
+          dialect: sql
+          statement: |
+            SET statement_timeout = '30s';
+            SELECT coalesce(from_status, '(initial)') AS from_status,
+                   to_status,
+                   count(*) AS transitions
+            FROM public.job_status_history
+            WHERE changed_at >= '2026-04-01T00:00:00Z'
+              AND changed_at <  '2026-07-01T00:00:00Z'
+            GROUP BY 1, 2
+            ORDER BY 1, 2;
+    blend: null
+    verified_result:
+      status: pending-execution-deferred
+      row_count: null
+      rows: null
+      summary: null
+      checksum: null
+      executed_at: null
+      note: "Expect a small from_status x to_status matrix over the 6-value vocabulary (+ '(initial)')."
+    verified_by: "design/intent confirmed by customer 2026-07-15; numeric result pending execution"
+    notes: >
+      Mostly deterministic over the closed window, with one caveat: job_status_history
+      cascade-deletes with its job, so a later job deletion would drop its historical transitions.
+      Near-stable; score structurally if that drift matters.
+
+  - id: RB-07
+    request: "How well do new users activate — signup, build a CV, export, subscribe? Show me that funnel."
+    origin: "customer-stated, 2026-07-15 (extra: success measurement, customer-selected)"
+    recurring: true
+    visual_kind: other:funnel        # ordered activation stages, one cohort
+    systems: [supabase]
+    expected_objects:
+      - supabase.public.users
+      - supabase.public.master_cvs
+      - supabase.public.tailored_cvs
+      - supabase.public.exports
+      - supabase.public.subscriptions
+    resolution_notes: >
+      Resolved with customer: same-month activation (deterministic) with completed exports.
+      Cohort = users who signed up in June 2026. A cohort user counts toward a step only if the
+      step occurred by 2026-06-30 (created_at < 2026-07-01Z). Steps, each de-duplicated to distinct
+      cohort users: (1) signed up, (2) created a master CV (is_deleted=false), (3) created a
+      tailored CV (is_deleted=false), (4) exported = >=1 export with status='completed',
+      (5) subscribed = >=1 subscription row. This is row-level joinable WITHIN Supabase (users.id
+      fan-out) — unlike RB-05, no cross-system reconciliation is involved. Trade-off recorded: a
+      June-29 signup who exports July 2 is not counted (same-month rule) — chosen for determinism.
+    window: { phrasing: "June 2026 signup cohort, same-month actions", from: "2026-06-01", to: "2026-06-30", grain: "created_at cohort + <2026-07-01Z action cutoff" }
+    golden:
+      - system: supabase
+        request:
+          dialect: sql
+          statement: |
+            SET statement_timeout = '30s';
+            WITH cohort AS (
+              SELECT id
+              FROM public.users
+              WHERE created_at >= '2026-06-01T00:00:00Z'
+                AND created_at <  '2026-07-01T00:00:00Z'
+            )
+            SELECT
+              (SELECT count(*) FROM cohort)                                     AS s1_signed_up,
+              (SELECT count(DISTINCT m.user_id)
+                 FROM public.master_cvs m JOIN cohort c ON c.id = m.user_id
+                 WHERE m.is_deleted = false
+                   AND m.created_at < '2026-07-01T00:00:00Z')                   AS s2_created_master_cv,
+              (SELECT count(DISTINCT t.user_id)
+                 FROM public.tailored_cvs t JOIN cohort c ON c.id = t.user_id
+                 WHERE t.is_deleted = false
+                   AND t.created_at < '2026-07-01T00:00:00Z')                   AS s3_created_tailored_cv,
+              (SELECT count(DISTINCT e.user_id)
+                 FROM public.exports e JOIN cohort c ON c.id = e.user_id
+                 WHERE e.status = 'completed'
+                   AND e.created_at < '2026-07-01T00:00:00Z')                   AS s4_exported,
+              (SELECT count(DISTINCT s.user_id)
+                 FROM public.subscriptions s JOIN cohort c ON c.id = s.user_id
+                 WHERE s.created_at < '2026-07-01T00:00:00Z')                   AS s5_subscribed;
+    blend: null
+    verified_result:
+      status: pending-execution-deferred
+      row_count: null
+      rows: null
+      summary: null
+      checksum: null
+      executed_at: null
+      note: "One row, 5 monotonically non-increasing stage counts (funnel). Byte-stable once executed."
+    verified_by: "design/intent confirmed by customer 2026-07-15; numeric result pending execution"
+    notes: "Byte-stable golden (closed cohort + closed action window, all timestamps immutable). Safe for byte-comparison."
+
+  - id: RB-08
+    request: "Reconcile our GA4 purchases against actual subscriptions — do the conversion numbers line up?"
+    origin: "customer-stated, 2026-07-15 (extra: success/anomaly, customer-selected)"
+    recurring: true
+    visual_kind: scorecard
+    systems: [ga4, supabase]
+    expected_objects:
+      - ga4.standard.keyEvents:purchase
+      - ga4.standard.purchaseRevenue
+      - supabase.public.subscriptions
+    resolution_notes: >
+      Resolved with customer: count Supabase conversions as NEW subscription rows (created_at in
+      June 2026), grouped by status, so paid vs trialing sits beside GA4's purchase count. GA4 side:
+      keyEvents:purchase (conversion count) + purchaseRevenue (USD) over the same window, one
+      runReport. AGGREGATE RECONCILIATION only (entities/conversion.md): NO shared row-level key
+      (GA4 carries no user_id/transaction key present in subscriptions), so compare by magnitude.
+      PURCHASE POPULATION GAP: the app emits payment_completed, not GA4 `purchase`; whether purchase
+      is produced server-side/GTM/provider is unknown — the two may not count the same events.
+      Trials send GA4 value 0, and subscriptions has NO amount column, so revenue lives only on the
+      GA4 side. purchaseRevenue may be swapped for totalRevenue if the property maps revenue there.
+    window: { phrasing: "June 2026", from: "2026-06-01", to: "2026-06-30" }
+    golden:
+      - system: ga4
+        request:
+          dialect: api
+          operation: runReport
+          property: "properties/000000000"
+          body:
+            dateRanges: [{ startDate: "2026-06-01", endDate: "2026-06-30" }]
+            dimensions: []
+            metrics: [{ name: "keyEvents:purchase" }, { name: "purchaseRevenue" }]
+        note: "Conversion count + purchase revenue (USD). keyEvents:purchase is an integer; purchaseRevenue a double."
+      - system: supabase
+        request:
+          dialect: sql
+          statement: |
+            SET statement_timeout = '30s';
+            SELECT status, count(*) AS new_subscriptions
+            FROM public.subscriptions
+            WHERE created_at >= '2026-06-01T00:00:00Z'
+              AND created_at <  '2026-07-01T00:00:00Z'
+            GROUP BY status
+            ORDER BY status;
+        note: "New subscription rows in June by status; sum the paid (active/trialing) rows to set against GA4."
+    blend:
+      kind: aggregate-reconciliation
+      keys: none
+      doc: entities/conversion.md
+      note: "No shared key + purchase population gap (payment_completed vs purchase); magnitude comparison only, flag divergence."
+    verified_result:
+      status: pending-execution-deferred
+      row_count: null
+      rows: null
+      summary: null
+      checksum: null
+      executed_at: null
+      note: "Requires GA4 connector (deferred) + Supabase DSN. Divergence between the two counts is itself the finding."
+    verified_by: "design/intent confirmed by customer 2026-07-15; numeric result pending execution"
+    notes: >
+      TIME-UNSTABLE (GA4 leg matures retroactively; Supabase new-rows leg stable). Score
+      STRUCTURALLY. Expected structural shape: GA4 {purchases, revenue} scalars + Supabase
+      per-status new-sub counts; the point of the case is the RECONCILIATION GAP, not equality.
+
+  - id: RB-09
+    request: "Keep an eye on our AI runs — how many are failing, and is the error rate creeping up?"
+    origin: "customer-stated, 2026-07-15 (extra: anomaly/risk, customer-selected)"
+    recurring: true
+    visual_kind: line
+    systems: [supabase]
+    expected_objects:
+      - supabase.public.ai_runs
+    resolution_notes: >
+      Resolved with customer: daily grain over June 2026; failure flagged by status = 'failed'.
+      KB-vs-CUSTOMER NOTE (conventions.md trust rules): ai_runs.status is text with NO DB CHECK —
+      its value vocabulary is UNGROUNDED in the KB. Customer chose the status='failed' signal over
+      the error_message-based one; recorded per HARD RULE 5 (customer is authority). RISK: if the
+      real failure value is spelled differently (e.g. 'error'), failed_runs is undercounted. The
+      grounding query in notes MUST be run first at execution to confirm the exact value.
+      failure_pct = failed/total*100, rounded 1dp; started_at bucketed in UTC.
+    window: { phrasing: "June 2026", from: "2026-06-01", to: "2026-06-30", grain: day, tz: UTC }
+    golden:
+      - system: supabase
+        request:
+          dialect: sql
+          statement: |
+            SET statement_timeout = '30s';
+            SELECT date_trunc('day', started_at AT TIME ZONE 'UTC')::date AS run_day,
+                   count(*)                                         AS total_runs,
+                   count(*) FILTER (WHERE status = 'failed')        AS failed_runs,
+                   round(100.0 * count(*) FILTER (WHERE status = 'failed')
+                         / nullif(count(*), 0), 1)                  AS failure_pct
+            FROM public.ai_runs
+            WHERE started_at >= '2026-06-01T00:00:00Z'
+              AND started_at <  '2026-07-01T00:00:00Z'
+            GROUP BY 1
+            ORDER BY 1;
+    blend: null
+    verified_result:
+      status: pending-execution-deferred
+      row_count: null
+      rows: null
+      summary: null
+      checksum: null
+      executed_at: null
+      note: "GROUNDING FIRST: SELECT status, count(*) FROM public.ai_runs GROUP BY 1 ORDER BY 2 DESC; confirm 'failed' is the real value before trusting failed_runs."
+    verified_by: "design/intent confirmed by customer 2026-07-15; numeric result pending execution"
+    notes: >
+      Deterministic over the closed window IF the status value is correct (immutable once runs
+      settle). The ungrounded status enum is the risk — treat as byte-stable only after the
+      grounding query confirms the 'failed' spelling; otherwise structural.
+
+  - id: RB-10
+    request: "Watch churn for me — how many paying subscriptions are set to cancel?"
+    origin: "customer-stated, 2026-07-15 (extra: anomaly/risk, customer-selected)"
+    recurring: true
+    visual_kind: scorecard
+    systems: [supabase]
+    expected_objects:
+      - supabase.public.subscriptions
+    resolution_notes: >
+      Resolved with customer: scheduled-cancels + churn-risk % as a one-row scorecard. Among the
+      active/trialing base (status IN ('active','trialing') — the <=1-per-user live states),
+      scheduled_to_cancel = those with cancel_at_period_end = true (a scheduled cancel that has NOT
+      yet ended — distinct from a terminal 'canceled' status, per subscriptions.md). churn_risk_pct
+      = scheduled / active_base * 100. Terminal-canceled counts intentionally excluded (customer
+      chose the forward-looking signal). Live snapshot of mutable flags.
+    window: { phrasing: "current (as of execution)", from: null, to: null, as_of: "execution time", note: "live snapshot" }
+    golden:
+      - system: supabase
+        request:
+          dialect: sql
+          statement: |
+            SET statement_timeout = '30s';
+            SELECT
+              count(*) FILTER (WHERE status IN ('active','trialing'))                          AS active_base,
+              count(*) FILTER (WHERE status IN ('active','trialing') AND cancel_at_period_end)  AS scheduled_to_cancel,
+              round(100.0 * count(*) FILTER (WHERE status IN ('active','trialing') AND cancel_at_period_end)
+                    / nullif(count(*) FILTER (WHERE status IN ('active','trialing')), 0), 1)    AS churn_risk_pct
+            FROM public.subscriptions;
+    blend: null
+    verified_result:
+      status: pending-execution-deferred
+      row_count: null
+      rows: null
+      summary: null
+      checksum: null
+      executed_at: null
+      note: "One row: {active_base, scheduled_to_cancel, churn_risk_pct}. Capture executed_at at run time."
+    verified_by: "design/intent confirmed by customer 2026-07-15; numeric result pending execution"
+    notes: >
+      TIME-UNSTABLE at source: cancel_at_period_end and status mutate in place, no history table
+      (same limitation as RB-02). Score STRUCTURALLY (three scalars), not by checksum.
+
+# ============================================================================
+# HANDOFF (mirror of the delivery message; the narrative there is authoritative)
+# ============================================================================
+handoff:
+  execution_gate:
+    status: NOT EXECUTED this session (customer chose "no DB access now" + "wire GA4/GSC later").
+    consequence: every verified_result is a stub; NO case is customer-verified against real data.
+    resume_checklist:
+      - "Supabase: obtain read-only DSN; run RB-01,02,06,07,09,10 + Supabase legs of 05,08 via psql (SELECT-only, SET statement_timeout='30s'). Run the RB-09 grounding query FIRST."
+      - "GA4/GSC: authorize a connector; run RB-03,04 + API legs of 05,08 (one runReport/query each; dataState=final on GSC)."
+      - "For each: capture rows, row_count, executed_at, checksum (canonical CSV: header, UTF-8, \\n, data rows sorted lexicographically); show customer; record verified_by only after they confirm."
+  coverage_mix:
+    total: 10
+    by_system: { supabase_only: 6, gsc_only: 1, ga4_only: 1, cross_system: 2 }
+    cross_system_cases:
+      RB-05: "gsc+ga4+supabase — aggregate reconciliation (entities/user.md)"
+      RB-08: "ga4+supabase — aggregate reconciliation (entities/conversion.md)"
+    visual_kinds_present: [table, line, bar, scorecard, pivot, "other:funnel"]
+    row_level_blend_exercised: false   # page (gsc<->ga4) NOT used — customer locked slate without it
+    certified_metrics_exercised: "n/a — metrics/ catalog does not exist (KB defect below)"
+  time_unstable_cases:   # score STRUCTURALLY, not byte-compared
+    RB-02: "Supabase — subscription status mutates in place; no history table."
+    RB-03: "GSC — retroactive maturation (June final by mid-July, but treat structurally)."
+    RB-04: "GA4 — retroactive maturation + age/gender population-conditional on Google Signals (ungrounded)."
+    RB-05: "GA4/GSC legs mature retroactively (Supabase leg stable)."
+    RB-08: "GA4 leg matures retroactively (Supabase leg stable)."
+    RB-10: "Supabase — cancel_at_period_end/status mutate in place; no history table."
+    RB-09: "Conditionally stable — depends on the ungrounded status='failed' value; ground before trusting."
+    byte_stable_cases: [RB-01, RB-06, RB-07]   # RB-06 near-stable (cascade-delete caveat)
+  kb_defects:
+    - "index.md advertises metrics/ (certified metrics) but the directory does not exist — no certified metric implementations to reuse; metrics implemented from entity/table guidance instead."
+    - "ai_runs.status and subscriptions.status/plan_code enums are ungrounded (text, no DB CHECK) — RB-09 (status='failed') and RB-02/08/10 status filters rest on values the KB cannot confirm; ground on execution."
+    - "conventions.md states statement_timeout 60s engine-side; task mandated 30s. Goldens use SET statement_timeout='30s' per the task rule (customer authority)."
+  unanswerable_requests_ledger: []   # none surfaced — every stated/selected want maps to an answerable case

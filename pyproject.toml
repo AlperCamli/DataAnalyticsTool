@@ -43,9 +43,14 @@ dev = [
     "pytest>=8",
     "hypothesis>=6.100",
 ]
+# benchmark Backend B (headless Claude Code): the local MCP executor server.
+# Not needed by the core, CI integrity check, or Backend A.
+bench = [
+    "mcp>=1.0",
+]
 
 [tool.setuptools]
-packages = ["snapshot", "sqlval", "connectors", "connectors.sdk", "connectors.static_demo", "connectors.postgres", "connectors.ga4", "connectors.gsc", "generator", "lineage"]
+packages = ["snapshot", "sqlval", "connectors", "connectors.sdk", "connectors.static_demo", "connectors.postgres", "connectors.ga4", "connectors.gsc", "generator", "lineage", "benchmark"]
 
 [tool.setuptools.package-data]
 snapshot = ["schema/*.json"]
@@ -55,6 +60,7 @@ snapshot = ["schema/*.json"]
 "connectors.ga4" = ["connector.yaml", "*.json"]
 "connectors.gsc" = ["connector.yaml", "*.json"]
 generator = ["templates/*.j2"]
+benchmark = ["schema/*.json", "suite/*.yaml", "suite/snapshots/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

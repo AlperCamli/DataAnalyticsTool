@@ -1,0 +1,525 @@
+{
+  "schema_version": "1",
+  "cases_meta": [
+    {
+      "id": "RB-01",
+      "request": "How many new users are signing up? I want to watch new users over time.",
+      "systems": [
+        "supabase"
+      ],
+      "visual_kind": "line",
+      "recurring": true,
+      "expected_objects": [
+        "supabase.public.users"
+      ],
+      "byte_stable": true,
+      "blend": null
+    },
+    {
+      "id": "RB-02",
+      "request": "Show me the subscriptions \u2014 who's currently paying, broken down by plan.",
+      "systems": [
+        "supabase"
+      ],
+      "visual_kind": "pivot",
+      "recurring": true,
+      "expected_objects": [
+        "supabase.public.subscriptions"
+      ],
+      "byte_stable": false,
+      "blend": null
+    },
+    {
+      "id": "RB-03",
+      "request": "I check the search results regularly \u2014 what are our top search queries?",
+      "systems": [
+        "gsc"
+      ],
+      "visual_kind": "table",
+      "recurring": true,
+      "expected_objects": [
+        "gsc.standard.query",
+        "gsc.standard.clicks",
+        "gsc.standard.impressions",
+        "gsc.standard.ctr",
+        "gsc.standard.position"
+      ],
+      "byte_stable": false,
+      "blend": null
+    },
+    {
+      "id": "RB-04",
+      "request": "Give me an audience/demographics report from our web analytics \u2014 where are visitors from, and who are they?",
+      "systems": [
+        "ga4"
+      ],
+      "visual_kind": "pivot",
+      "recurring": true,
+      "expected_objects": [
+        "ga4.standard.country",
+        "ga4.standard.userAgeBracket",
+        "ga4.standard.userGender",
+        "ga4.standard.activeUsers",
+        "ga4.standard.newUsers"
+      ],
+      "byte_stable": false,
+      "blend": null
+    },
+    {
+      "id": "RB-05",
+      "request": "I want a funnel report \u2014 how does our Google search traffic turn into signups?",
+      "systems": [
+        "gsc",
+        "ga4",
+        "supabase"
+      ],
+      "visual_kind": "bar",
+      "recurring": true,
+      "expected_objects": [
+        "gsc.standard.clicks",
+        "ga4.standard.sessionDefaultChannelGroup",
+        "ga4.standard.sessions",
+        "ga4.standard.newUsers",
+        "supabase.public.users"
+      ],
+      "byte_stable": false,
+      "blend": "aggregate-reconciliation"
+    },
+    {
+      "id": "RB-06",
+      "request": "I want to see the journeys of users \u2014 how their job applications move through the stages.",
+      "systems": [
+        "supabase"
+      ],
+      "visual_kind": "pivot",
+      "recurring": true,
+      "expected_objects": [
+        "supabase.public.job_status_history"
+      ],
+      "byte_stable": true,
+      "blend": null
+    },
+    {
+      "id": "RB-07",
+      "request": "How well do new users activate \u2014 signup, build a CV, export, subscribe? Show me that funnel.",
+      "systems": [
+        "supabase"
+      ],
+      "visual_kind": "other:funnel",
+      "recurring": true,
+      "expected_objects": [
+        "supabase.public.users",
+        "supabase.public.master_cvs",
+        "supabase.public.tailored_cvs",
+        "supabase.public.exports",
+        "supabase.public.subscriptions"
+      ],
+      "byte_stable": true,
+      "blend": null
+    },
+    {
+      "id": "RB-08",
+      "request": "Reconcile our GA4 purchases against actual subscriptions \u2014 do the conversion numbers line up?",
+      "systems": [
+        "ga4",
+        "supabase"
+      ],
+      "visual_kind": "scorecard",
+      "recurring": true,
+      "expected_objects": [
+        "ga4.standard.keyEvents:purchase",
+        "ga4.standard.purchaseRevenue",
+        "supabase.public.subscriptions"
+      ],
+      "byte_stable": false,
+      "blend": "aggregate-reconciliation"
+    },
+    {
+      "id": "RB-09",
+      "request": "Keep an eye on our AI runs \u2014 how many are failing, and is the error rate creeping up?",
+      "systems": [
+        "supabase"
+      ],
+      "visual_kind": "line",
+      "recurring": true,
+      "expected_objects": [
+        "supabase.public.ai_runs"
+      ],
+      "byte_stable": false,
+      "blend": null
+    },
+    {
+      "id": "RB-10",
+      "request": "Watch churn for me \u2014 how many paying subscriptions are set to cancel?",
+      "systems": [
+        "supabase"
+      ],
+      "visual_kind": "scorecard",
+      "recurring": true,
+      "expected_objects": [
+        "supabase.public.subscriptions"
+      ],
+      "byte_stable": false,
+      "blend": null
+    }
+  ],
+  "run": {
+    "run_id": "smoke-2026-07-15",
+    "kind": "smoke",
+    "suite_version": "0",
+    "customer": "cvbuilder",
+    "journey_prompt_version": "v1",
+    "backend": "claude-code",
+    "model_id": "claude-opus-4-8",
+    "snapshot_refs": {
+      "ga4": "sha256:9f220827b90a9d45f6a3ea398af427f9bd880de3473f2b6ee93f06c4b6489c70",
+      "gsc": "sha256:0cbb227400cee2e7311b1ce78d950f2bab27b7a165cef9362ca99e73337db193",
+      "supabase": "sha256:ed698942eb6242e519f7793bb35109554bc79907a206f790d09a0712bb9784df"
+    },
+    "kb_refs": {
+      "no-kb": "live-discovery",
+      "machine-kb": "sha256:400e359d312a98613053966f8377f17f33af1c96efbe9c977d2f18392ffcf076",
+      "enriched-kb": "4e47c550405d587322606a5e8377d68ca69046e0"
+    },
+    "reps": 1,
+    "cases": [
+      "RB-01",
+      "RB-02",
+      "RB-03",
+      "RB-04",
+      "RB-05",
+      "RB-06",
+      "RB-07",
+      "RB-08",
+      "RB-09",
+      "RB-10"
+    ],
+    "conditions": [
+      "no-kb",
+      "machine-kb",
+      "enriched-kb"
+    ],
+    "started_at": "2026-07-15T14:47:24.203309+00:00",
+    "ended_at": "2026-07-15T14:49:45.354629+00:00",
+    "notes": "R6 executable = first-try execution success; refines to validate-pass when validate_sql lands (CP-4)."
+  },
+  "ga4_execution_count": 0,
+  "golden_executions": [
+    {
+      "case_id": "RB-01",
+      "system": "supabase",
+      "dialect": "sql",
+      "ok": true,
+      "row_count": 6,
+      "error": null,
+      "executed_at": "2026-07-15T14:57:30.975855+00:00"
+    }
+  ],
+  "journeys": [
+    {
+      "case_id": "RB-01",
+      "condition": "no-kb",
+      "rep": 0,
+      "backend": "claude-code",
+      "model_id": "claude-opus-4-8",
+      "cost_usd": 0.363368,
+      "session_id": "1e79f35a-5637-4896-a474-c21cd30e3971",
+      "tokens": {
+        "input_tokens": 12,
+        "output_tokens": 1681,
+        "cache_read_input_tokens": 110170,
+        "cache_creation_input_tokens": 26559
+      },
+      "tool_calls": 6,
+      "started_at": "2026-07-15T14:47:24.203309+00:00",
+      "ended_at": "2026-07-15T14:48:15.469353+00:00",
+      "context_reads": [
+        "discover:supabase"
+      ],
+      "declared_objects": [
+        "supabase.public.users"
+      ],
+      "drafts": [
+        {
+          "seq": 1,
+          "system": "supabase",
+          "request": {
+            "dialect": "sql",
+            "statement": "SELECT date_trunc('month', created_at)::date AS month, count(*) AS new_users\nFROM public.users\nGROUP BY 1\nORDER BY 1"
+          },
+          "final": false,
+          "executed": true,
+          "ok": true,
+          "error": null,
+          "columns": [
+            "month",
+            "new_users"
+          ],
+          "row_count": 4,
+          "result_checksum": "sha256:fd35ed4b648d217b4b8b82afec1ed38fa3abc5967d838cb99af5db3c3f1fbb98"
+        },
+        {
+          "seq": 2,
+          "system": "supabase",
+          "request": {
+            "dialect": "sql",
+            "statement": "SELECT date_trunc('week', created_at)::date AS week_start, count(*) AS new_users\nFROM public.users\nGROUP BY 1\nORDER BY 1"
+          },
+          "final": true,
+          "executed": true,
+          "ok": true,
+          "error": null,
+          "columns": [
+            "week_start",
+            "new_users"
+          ],
+          "row_count": 11,
+          "result_checksum": "sha256:8190679361af05ba4f4daa53b18d5c52caeaf094ca232b975abfb74238a76ff0"
+        }
+      ],
+      "selection": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          "supabase.public.users"
+        ],
+        "scored": [
+          "supabase.public.users"
+        ],
+        "true_positives": [
+          "supabase.public.users"
+        ],
+        "false_positives": [],
+        "false_negatives": [],
+        "declared": [
+          "supabase.public.users"
+        ],
+        "parse_failures": []
+      },
+      "executable": {
+        "first_try_executable": true,
+        "error": null,
+        "reason": null
+      },
+      "correctness": {
+        "scored": true,
+        "correct": false,
+        "mode": "checksum",
+        "reason": null,
+        "legs": [
+          {
+            "system": "supabase",
+            "scored": true,
+            "correct": false,
+            "reason": null,
+            "checksum_match": false,
+            "values_match": false,
+            "shape_match": false,
+            "golden_shape": [
+              2,
+              6
+            ],
+            "agent_shape": [
+              2,
+              11
+            ],
+            "drift": false,
+            "notes": []
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "RB-01",
+      "condition": "machine-kb",
+      "rep": 0,
+      "backend": "claude-code",
+      "model_id": "claude-opus-4-8",
+      "cost_usd": 0.22278200000000004,
+      "session_id": "aa2e6a8f-b572-4c50-9bf1-fc5367c6dd19",
+      "tokens": {
+        "input_tokens": 11,
+        "output_tokens": 1544,
+        "cache_read_input_tokens": 107078,
+        "cache_creation_input_tokens": 12998
+      },
+      "tool_calls": 6,
+      "started_at": "2026-07-15T14:48:15.476113+00:00",
+      "ended_at": "2026-07-15T14:48:59.471247+00:00",
+      "context_reads": [
+        "read:/private/tmp/claude-501/-Users-alpercamli-Desktop-DataProject/a65d47d1-fee1-4891-b81a-64a849bae01e/scratchpad/smoke-mkb/systems/supabase/public/users.schema.md"
+      ],
+      "declared_objects": [
+        "supabase.public.users"
+      ],
+      "drafts": [
+        {
+          "seq": 1,
+          "system": "supabase",
+          "request": {
+            "dialect": "sql",
+            "statement": "SELECT date_trunc('month', created_at)::date AS signup_month,\n       count(*) AS new_users\nFROM public.users\nGROUP BY 1\nORDER BY 1;"
+          },
+          "final": true,
+          "executed": true,
+          "ok": true,
+          "error": null,
+          "columns": [
+            "signup_month",
+            "new_users"
+          ],
+          "row_count": 4,
+          "result_checksum": "sha256:0a38dc9230fcfbb837edb107346874270fed93e79c3c46e1a8e1d24dc6432d9c"
+        }
+      ],
+      "selection": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          "supabase.public.users"
+        ],
+        "scored": [
+          "supabase.public.users"
+        ],
+        "true_positives": [
+          "supabase.public.users"
+        ],
+        "false_positives": [],
+        "false_negatives": [],
+        "declared": [
+          "supabase.public.users"
+        ],
+        "parse_failures": []
+      },
+      "executable": {
+        "first_try_executable": true,
+        "error": null,
+        "reason": null
+      },
+      "correctness": {
+        "scored": true,
+        "correct": false,
+        "mode": "checksum",
+        "reason": null,
+        "legs": [
+          {
+            "system": "supabase",
+            "scored": true,
+            "correct": false,
+            "reason": null,
+            "checksum_match": false,
+            "values_match": false,
+            "shape_match": false,
+            "golden_shape": [
+              2,
+              6
+            ],
+            "agent_shape": [
+              2,
+              4
+            ],
+            "drift": false,
+            "notes": []
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "RB-01",
+      "condition": "enriched-kb",
+      "rep": 0,
+      "backend": "claude-code",
+      "model_id": "claude-opus-4-8",
+      "cost_usd": 0.2624305,
+      "session_id": "669b9468-8231-43b5-8150-6acfb69b7b81",
+      "tokens": {
+        "input_tokens": 11,
+        "output_tokens": 1791,
+        "cache_read_input_tokens": 112865,
+        "cache_creation_input_tokens": 16056
+      },
+      "tool_calls": 8,
+      "started_at": "2026-07-15T14:48:59.477022+00:00",
+      "ended_at": "2026-07-15T14:49:45.354629+00:00",
+      "context_reads": [
+        "read:$HOME/Desktop/kb/entities/user.md",
+        "read:$HOME/Desktop/kb/systems/supabase/public/users.md",
+        "read:$HOME/Desktop/kb/systems/supabase/public/users.schema.md"
+      ],
+      "declared_objects": [
+        "supabase.public.users"
+      ],
+      "drafts": [
+        {
+          "seq": 1,
+          "system": "supabase",
+          "request": {
+            "dialect": "sql",
+            "statement": "SELECT date_trunc('month', created_at)::date AS signup_month,\n       count(*) AS new_users\nFROM public.users\nGROUP BY 1\nORDER BY 1;"
+          },
+          "final": true,
+          "executed": true,
+          "ok": true,
+          "error": null,
+          "columns": [
+            "signup_month",
+            "new_users"
+          ],
+          "row_count": 4,
+          "result_checksum": "sha256:0a38dc9230fcfbb837edb107346874270fed93e79c3c46e1a8e1d24dc6432d9c"
+        }
+      ],
+      "selection": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          "supabase.public.users"
+        ],
+        "scored": [
+          "supabase.public.users"
+        ],
+        "true_positives": [
+          "supabase.public.users"
+        ],
+        "false_positives": [],
+        "false_negatives": [],
+        "declared": [
+          "supabase.public.users"
+        ],
+        "parse_failures": []
+      },
+      "executable": {
+        "first_try_executable": true,
+        "error": null,
+        "reason": null
+      },
+      "correctness": {
+        "scored": true,
+        "correct": false,
+        "mode": "checksum",
+        "reason": null,
+        "legs": [
+          {
+            "system": "supabase",
+            "scored": true,
+            "correct": false,
+            "reason": null,
+            "checksum_match": false,
+            "values_match": false,
+            "shape_match": false,
+            "golden_shape": [
+              2,
+              6
+            ],
+            "agent_shape": [
+              2,
+              4
+            ],
+            "drift": false,
+            "notes": []
+          }
+        ]
+      }
+    }
+  ]
+}
