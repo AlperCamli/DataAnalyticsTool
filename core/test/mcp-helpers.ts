@@ -29,6 +29,8 @@ export const USERS = {
   auditlite: { username: "aud-lite", password: "pw", roles: ["auditlite"], display: "Audit Lite" },
   /** Execute grant with a row_cap of 5 — the CI-7 truncation evidence. */
   capped: { username: "cap-user", password: "pw", roles: ["capped"], display: "Capped User" },
+  /** CP-5 baseline `no-kb` condition (D-74.4): validate/execute, no content tools. */
+  nokb: { username: "nokb-bot", password: "pw", roles: ["nokb"], display: "No-KB Benchmark" },
 };
 
 const ROLES_YAML = `# Scratch-KB role map (KB-A per-directory globs).
@@ -101,6 +103,23 @@ skills: [benchmark]
 tools:
   allow: [search_context, get_entity, get_table, get_metric, get_lineage,
           validate_sql, report_freshness, flag_gap, list_gaps]
+limits: { row_cap: 50000, timeout_s: 60 }
+`;
+
+/**
+ * The CP-5 baseline's `no-kb` condition (D-74.4a): validate + execute
+ * across *every* system, and no content tools at all. The condition is
+ * "discover the estate live" — `information_schema` for SQL, the GA4
+ * metadata endpoint, GSC's fixed schema — so the grant spans all systems;
+ * a supabase-only grant would score the GA4/GSC cases as failures of the
+ * condition rather than of the KB.
+ */
+const NOKB_PROFILE = `name: No-KB
+description: Baseline v1 no-kb condition — live discovery, no context tools
+roles: [nokb]
+skills: [report]
+tools:
+  allow: [validate_sql, execute_sql:drill, execute_sql:ga4, flag_gap]
 limits: { row_cap: 50000, timeout_s: 60 }
 `;
 
@@ -204,7 +223,16 @@ export interface McpRig {
 }
 
 export async function setupMcpRig(
-  overrides: { limits?: Partial<TestCore["cfg"]["mcp"]["limits"]> } = {},
+  overrides: {
+    limits?: Partial<TestCore["cfg"]["mcp"]["limits"]>;
+    /**
+     * Visibility map to seed. Omit for the standard suite map; pass
+     * `null` to commit **no** `roles.yaml` at all — the CP-5 `no-kb`
+     * condition's scratch repo, where the map's absence is what makes
+     * the full surface visible (D-74.4b/4c).
+     */
+    rolesYaml?: string | null;
+  } = {},
 ): Promise<McpRig> {
   const base = await mkdtemp(path.join(tmpdir(), "cl-mcp-"));
   const idp = await startDevIdp({ users: Object.values(USERS) });
@@ -218,11 +246,15 @@ export async function setupMcpRig(
   await writeFile(path.join(kb.seedClone, "index.md"), "# Scratch KB\n\nEntry point.\n");
   await writeFile(path.join(kb.seedClone, "conventions.md"), CONVENTIONS);
   await mkdir(path.join(kb.seedClone, ".contextlayer", "profiles"), { recursive: true });
-  await writeFile(path.join(kb.seedClone, ".contextlayer", "roles.yaml"), ROLES_YAML);
+  const rolesYaml = overrides.rolesYaml === undefined ? ROLES_YAML : overrides.rolesYaml;
+  if (rolesYaml !== null) {
+    await writeFile(path.join(kb.seedClone, ".contextlayer", "roles.yaml"), rolesYaml);
+  }
   await writeFile(path.join(kb.seedClone, ".contextlayer", "profiles", "reporter.yaml"), REPORTER_PROFILE);
   await writeFile(path.join(kb.seedClone, ".contextlayer", "profiles", "steward.yaml"), STEWARD_PROFILE);
   await writeFile(path.join(kb.seedClone, ".contextlayer", "profiles", "benchmark.yaml"), BENCHMARK_PROFILE);
   await writeFile(path.join(kb.seedClone, ".contextlayer", "profiles", "capped.yaml"), CAPPED_PROFILE);
+  await writeFile(path.join(kb.seedClone, ".contextlayer", "profiles", "nokb.yaml"), NOKB_PROFILE);
 
   // The contaminated fixture doc the M1 demo surfaces (KB §5 semantics).
   const legacyPath = path.join(kb.seedClone, "systems", "drill", "shop", "legacy_sessions.md");
