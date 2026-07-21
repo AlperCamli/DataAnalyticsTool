@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-07-21T08:41:23.680287Z",
+  "generated_at": "2026-07-21T15:54:34.191808Z",
   "model_id": "claude-opus-4-8",
   "fixture": {
-    "base": "http://127.0.0.1:51558",
+    "base": "http://127.0.0.1:55002",
     "execution": true
   },
   "verdict": "PASS",
@@ -12,8 +12,8 @@
       "skill": "enrich",
       "profile": "steward",
       "passed": true,
-      "session_id": "929bff96-865a-460b-9d2d-f75103658fc0",
-      "cost_usd": 0.407955,
+      "session_id": "a9a84869-2ad4-41d3-b8a5-750ecfbe096f",
+      "cost_usd": 0.351601,
       "audit_tools": [
         "get_table",
         "flag_gap"
@@ -32,7 +32,7 @@
         {
           "name": "AS-12: no body 'Purpose' section restating front-matter",
           "ok": true,
-          "detail": "body headings=['status values', 'join guidance', 'warnings']"
+          "detail": "body headings=['enum decoding', 'join guidance', 'warnings']"
         },
         {
           "name": "AS-9: discount NOT guessed in column_purposes",
@@ -45,40 +45,41 @@
           "detail": "flag_gap called: True; discount named in a gap/warning section: True"
         }
       ],
-      "agent_result": "Written to `out/orders.md`.\n\n**What's grounded:** five of six columns get `column_purposes` entries \u2014 `id`, `customer_id`, `status`, `net`, `created_at` \u2014 each traceable to the staged customer doc, with `customer_id`'s FK corroborated by the snapshot.\n\n**What's a gap, not a guess:** `discount` (`numeric(12,2)`, nullable) is in the machine facts but absent from the evidence. No `column_purposes` entry was written for it. Filed as `flag_gap(missing_doc)` \u2192 issue `d783f7e9-3fab-4c33-9082-527405c3f726`, routed to data-team, and recorded in Warnings. The tempting inference \u2014 that `discount` is the amount subtracted to produce `net`, since the doc calls `net` \"after discounts\" \u2014 is exactly the plausible-but-unestablished claim the rules forbid, so the Warnings section names it as unresolved instead.\n\nTwo further gaps surfaced while cross-checking evidence against machine facts:\n\n- **`status` isn't a DB-enforced enum.** The column is plain `text` with no `CHECK`; the four values are an application constraint per the customer doc only. Graded as such rather than presented as a closed enum.\n- **`net` units conflict.** The doc says \"minor currency units\"; the snapshot types it `numeric(12,2)`. Both can't be right, and the evidence doesn't arbitrate \u2014 flagged rather than silently resolved. Currency itself is undocumented and has no column.\n\n**Two notes on scope.** I did not run the S4 self-check \u2014 `python -m generator.render` / `validate` operate from a KB clone root, and this is a standalone scenario workdir writing to `out/`, so there's no snapshot tree to render against. KB-8 and KB-10 are therefore unverified; KB-10 in particular would be the real check that my five `column_purposes` keys resolve. I also stopped at the doc, per your \"write the doc and finish\" \u2014 no PR, and `status: draft` throughout."
+      "agent_result": "Written to `out/orders.md`.\n\n**Scope:** one object, `drill.shop.orders`, as named in the request.\n\n**Grounded (5 of 6 columns)** \u2014 `id`, `customer_id`, `status`, `net`, `created_at` all have `column_purposes` entries backed by `evidence/orders.md`. Front-matter carries `status: draft`, graded `sources`, a one-line `purpose`, and `depends_on` listing `orders`, `customers` (join target), and `order_items` (the routing hop the join guidance relies on).\n\n**Body carries only what a one-liner structurally can't hold:** the `status` enum decoding, the join guidance, and Warnings. No section restates a front-matter value.\n\n**Three things the evidence did not close**, all recorded as gaps rather than guessed:\n\n1. **`discount`** \u2014 the evidence documents every other column and is silent on this one. No `column_purposes` entry written. Filed `flag_gap(missing_doc)` \u2192 issue `aca5b3d5-da32-4b1e-971b-a2539f493e85`, occurrences 1, **routed to `data-team`**. The gap names what would unblock it: the creating migration, the checkout/pricing code, or a customer doc section on discount handling.\n\n2. **`status` is not DB-enforced** \u2014 the snapshot shows plain `text` with default `'new'::text` and no CHECK constraint. The four values are an *application* constraint per the customer doc only, so I documented them as a decoding but warned against treating the set as exhaustive.\n\n3. **`net` units conflict between sources** \u2014 the doc says \"minor currency units\"; the snapshot types it `numeric(12,2)`, whose two decimals conventionally indicate major units. Neither source is authoritative here (a doc isn't a constraint, a type isn't a unit declaration), so I flagged it rather than picking one. Worth resolving before `net` feeds any revenue figure.\n\nTwo notes on what I did **not** do. I skipped S4 self-check and S5 PR: this workdir has no KB clone, no `.contextlayer/snapshots/`, and no generator module, so `render`/`validate` have nothing to run against and the front-matter purposes have not been"
     },
     {
       "scenario": "AS-10 report net sales (warn-user in path)",
       "skill": "report",
-      "profile": "steward",
+      "profile": "reporter",
       "passed": true,
-      "session_id": "acce8102-3770-4c35-8035-6ca7c0889e59",
-      "cost_usd": 0.7109815000000002,
+      "session_id": "9f8bc3b4-3b16-49a7-ab29-ba3fcfc4b81c",
+      "cost_usd": 0.7144599999999999,
       "audit_tools": [
         "search_context",
         "get_entity",
         "get_metric",
         "get_table",
         "get_table",
-        "get_table",
+        "validate_sql",
+        "execute_sql",
         "validate_sql",
         "execute_sql",
         "flag_gap",
-        "flag_gap"
+        "execute_sql"
       ],
       "assertions": [
         {
           "name": "AS-10: the journey validated and executed",
           "ok": true,
-          "detail": "tools called: ['search_context', 'get_entity', 'get_metric', 'get_table', 'get_table', 'get_table', 'validate_sql', 'execute_sql', 'flag_gap', 'flag_gap']"
+          "detail": "tools called: ['search_context', 'get_entity', 'get_metric', 'get_table', 'get_table', 'validate_sql', 'execute_sql', 'validate_sql', 'execute_sql', 'flag_gap', 'execute_sql']"
         },
         {
           "name": "AS-10: trust warning travelled into the artifact's trust_notes",
           "ok": true,
-          "detail": "trust_notes=['STALE DOC (agent_guidance: warn-user) \u2014 this report is built on `systems/drill/reporting/v_net_sales.md`, whose semantics doc is stale. Its written_against_schema_hash is sha256:0000...0000 while the live schema hash is sha256:10090faac6ee633163343d27ec9324aebef69cda8fe4644da6e798ed8518d8e4 (hash_match: false). The machine-derived column facts are current, but the human description of what this view MEANS was written against a different shape of the object and has not been re-verified since. No user was available to acknowledge this warning, so it is recorded unacknowledged.', \"METRIC NAMING vs IMPLEMENTATION \u2014 the certified metric `net-sales` is named 'net sales' but its implementation chain resolves to sum(qty * price) via drill.reporting.v_order_totals. No discounts, refunds, returns, cancellations, or tax are deducted. Anyone treating these figures as net-of-deductions revenue will overstate. The certified implementation was used verbatim rather than re-derived; the naming gap is reported, not silently corrected.\", \"UNDECLARED POSSIBLE REFERENCE \u2014 the v_net_sales human doc states that attribution backfills historically blended this view with `drill.shop.legacy_sessions`, which does not appear in the doc's depends_on. If that blending is still present upstream, the figures may carry legacy-session attribution not captured by this artifact's declared lineage.\", 'UNCONFIRMED \u2014 CP-R1 (resolution confirmation) and CP-R4 (result confirmation) were both skipped because no user was present. The active profile is `steward`, NOT `benchmark`, so the benchmark waiver of these checkpoints does NOT formally apply. These checkpoints are unmet rather than waived.', 'EXECUTION FAILED \u2014 execute_sql timed out twice. No numbers were produced and none are presented. Any figures attributed to this report from another source did not come from here.']"
+          "detail": "trust_notes=['NO RESULTS: this artifact contains no numbers. execute_sql against `drill` timed out on three consecutive attempts (two on one validation token, one on a freshly issued token). The SQL validated cleanly (verdict=pass) but was never executed. Any figure quoted as an answer to this request did not come from this artifact.', 'WARN-USER doc in the dependency chain: `systems/drill/reporting/v_net_sales.md` carries agent_guidance=warn-user. Its written_against_schema_hash is sha256:0000000000000000000000000000000000000000000000000000000000000000 but the current snapshot hash for drill.reporting.v_net_sales is sha256:10090faac6ee633163343d27ec9324aebef69cda8fe4644da6e798ed8518d8e4 (hash_match=false). The human semantics describing this view were written against a different shape of the object than the one now in the snapshot, so the meaning of `net_total` is not confirmed against current schema. This warning applies to the certified metric `metrics/net-sales.md` too, which depends on this view.', 'The same warn-user doc records that attribution backfills historically blended this view with `drill.shop.legacy_sessions`, and that this reference is undeclared in the dependency graph. An undeclared upstream means contamination on legacy_sessions would not propagate to this artifact automatically.', 'No user confirmation was obtained at CP-R1 (resolution) or CP-R4 (result check). The benchmark waiver does NOT apply: the validation token reports profile=`reporter`, not `benchmark`. Confirmations were skipped because no user was reachable in this session, not because they were waived. The resolution set and any eventual results remain unconfirmed by a human.', \"Deviation from the certified metric implementation: metrics/net-sales.md specifies `SELECT customer_id, net_total FROM reporting.v_net_sales`. The aggregation was used verbatim; a join to drill.shop.customers (on v.customer_id = c.id, the join path documented in entities/customer.md) was added to attach customer names, plus ORDER BY net_total DESC and LIMIT 10 to satisfy 'the top few'. No part of the metric arithmetic was re-derived.\", \"Assumption logged (no user available to confirm): 'the top few' was read as the top 10 by net_total descending; no time window was applied, because drill.reporting.v_net_sales exposes no date column and aggregates over all history.\"]"
         }
       ],
-      "agent_result": "**I could not answer the question.** The artifact is written to `out/report-artifact.json`, but it contains no numbers, because I never got any.\n\n**What worked:** resolution and validation. The entity, the certified metric, and the table docs all resolved cleanly, and `validate_sql` passed on the first attempt, issuing a token.\n\n**What blocked it:** `execute_sql` timed out twice. That's a transport-level failure, not one of the documented outcomes (`truncated` / `quota_exhausted` / `revalidate_required`), so there was nothing to repair \u2014 retrying was the only available move, and it failed the same way. Per the honest-gap rule I stopped rather than guessing. Filed as `capability_gap` `7e5b2016`, routed to **data-team**.\n\n**Three things I found in the KB that outlive this failure**, all recorded in `semantics.trust_notes` and filed as `schema_mismatch` `1bf772b4` (also routed to **data-team**):\n\n1. **The reporting view's semantics doc is stale** \u2014 `warn-user`. Written against the all-zeros hash; live schema is `sha256:10090faa\u2026`. Machine facts are current; the human account of what the view *means* is not.\n2. **\"Net sales\" is not net.** The certified metric resolves through `v_order_totals` to `sum(qty * price)` \u2014 no discounts, refunds, returns, or tax deducted. This one matters most: the metric is certified and `use-freely`, so trust signals alone would have waved it through. It would have produced confidently overstated revenue under a name that says otherwise. I used the certified implementation verbatim and flagged the gap rather than quietly re-deriving it.\n3. **Undeclared reference** to `drill.shop.legacy_sessions` mentioned in the doc but absent from `depends_on`.\n\n**One correction to the framing I was given.** The task said to treat this as unattended, but the validation token shows the active profile is `steward`, not `benchmark` \u2014 so the CP-R1/CP-R4 confirmation waivers don't formally apply. I proceeded anyway since no user was reachable, but I've recorded t"
+      "agent_result": "**I could not answer the question. There are no numbers in this report.**\n\nArtifact written to `out/report-artifact.json` with `status: \"incomplete\"` and zero rows.\n\n**What worked:** resolution and validation were clean. `entities/customer.md` (verified, `use-freely`) gave the join path; `metrics/net-sales.md` is certified and `use-freely`; `validate_sql` returned `pass` with a signed token.\n\n**What blocked it:** `execute_sql` against `drill` timed out three times \u2014 twice on the first token, then once on a freshly issued token, which rules out token expiry. The execution path is down. I did not substitute an estimate or a narrower question for the answer.\n\n**Two things the artifact carries that matter beyond this failure:**\n\n1. **`v_net_sales` is `warn-user`.** Its human doc was written against schema hash `0000\u20260000`; the current snapshot hash is `10090faa\u2026`. The prose defining what `net_total` *means* describes a different shape of that view than the one in the snapshot. This taints the certified metric too, since `metrics/net-sales.md` depends on the view \u2014 so even once execution recovers, these numbers need that doc reconciled before anyone trusts them. That doc also mentions a historical blend with `drill.shop.legacy_sessions` that is **undeclared** in the dependency graph, so contamination there would not propagate here on its own.\n\n2. **The benchmark waiver does not apply.** The validation token reports `profile: \"reporter\"`, not `benchmark`. CP-R1 and CP-R4 confirmations were therefore *skipped for lack of a reachable user*, not waived \u2014 I recorded it that way rather than claiming an exemption I don't have.\n\n**Gap filed:** `capability_gap`, issue `8436a92c-a637-449e-a599-a8a14281b423`, routed to **data-team** (1 occurrence).\n\nAssumptions logged in the artifact: \"top few\" \u2192 top 10 by `net_total` desc; no time window, because the view exposes no date column and aggregates over all history. The validated SQL is stored in the artifact and will run as-is once the"
     }
   ]
 }

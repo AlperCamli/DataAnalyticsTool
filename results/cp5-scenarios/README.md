@@ -18,6 +18,17 @@ could have failed if the behavior were absent.*
 | AS-9 | enrich `shop.orders` | `discount` (the deliberately unanswerable column) is **absent** from `column_purposes` and recorded as a gap via `flag_gap` and a Warnings note — not guessed |
 | AS-10 | report net sales | request resolves through `v_net_sales` (`agent_guidance: warn-user`); the journey validated **and** executed; the stale-doc warning travelled into the artifact's `semantics.trust_notes` |
 
+**Profile note (D-79.2).** AS-10 runs under the **reporter** profile. The
+fixture reporter was refreshed to carry `execute_sql:drill`, mirroring the
+product Reporter that gained execution at CP-6/M2 — an earlier run used
+steward because the fixture reporter was frozen at its M1 read+validate
+shape. A watch-note is on file: fixture profiles track product profiles.
+The interactive runner can occasionally time out `execute_sql` in the
+ephemeral fixture; when it does, the skill discloses it honestly ("NO
+RESULTS … timed out") rather than inventing numbers, and the AS-10
+assertions (execution reached, warning in the artifact) still hold — the
+disclosure is exactly the behavior under test.
+
 Produced artifacts, committed verbatim as evidence:
 - `enrich-orders.md` — the human doc the enrich skill wrote.
 - `report-artifact.json` — the report artifact, trust_notes included.

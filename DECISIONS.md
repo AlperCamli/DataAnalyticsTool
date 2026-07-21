@@ -2739,3 +2739,46 @@ credentials. CI marks them gate-evidence tests, not per-commit tests.
 spec): fixture deployment → three scenarios → rig prep per D-76.3 →
 smoke journey → packet. The scenarios precede the baseline instances and
 need neither pilot credentials nor the scratch repos.
+
+## D-79 — CP-5 behavioral scenarios accepted; fixture reporter refreshed
+
+**Gate evidence accepted.** The AS-9/10/12 behavioral scenarios (D-78
+layer (b)) are the CP-5 conformance evidence: real skills in real headless
+Claude Code sessions against the standalone fixture deployment, asserting
+on the audit stream and produced files. Both journeys pass under
+`claude-opus-4-8`; the agent-produced `enrich-orders.md` and
+`report-artifact.json` are committed verbatim under `results/cp5-scenarios/`.
+
+**The falsifiability demonstration D-78.2 required is on record, observed
+not presumed.** The AS-10 journey *failed* on its first run: the profile
+in use exposed no `execute_sql`, the loop stopped at validation, and the
+"validated and executed" assertion went red. The suite has now been seen
+to discriminate — a conformance item reported green because its assertion
+could, and once did, fail. This is the general rule from D-78 made
+concrete: evidence that cannot fail cannot green an item.
+
+**Fixture reporter refreshed to the product shape (D-79.2).** The first
+AS-10 pass ran under the steward profile, because the fixture's reporter
+was frozen at its M1 read+validate shape while the product Reporter gained
+`execute_sql` at CP-6/M2. Accepted for that run (AS-10 asserts disclosure
+reaching the artifact, not profile identity), but the root cause was
+fixed: `REPORTER_PROFILE` now carries `execute_sql:drill`, `REPORTER_TOOLS`
+gains `execute_sql`, and the stale MT-3 assertion ("execute never runs at
+M1 — profile-denied for reporters") was rewritten to the CP-6 reality (the
+reporter passes the profile gate; token binding still turns away a
+non-matching request). AS-10 re-run under the refreshed reporter: pass.
+
+**Watch-note filed (register-style, home: skill spec / test fixtures):**
+*fixture profiles must track product profiles.* Silent divergence makes
+scenario evidence quietly weaker — a scenario can pass against a profile
+the product no longer ships, and nobody is told. There is no mechanism
+today that fails when a fixture profile drifts from its KB counterpart;
+until there is, the coupling is a review responsibility.
+
+**Two fixture-side choices, both accepted (D-79.2/3).** The report
+scenario seeds the reporting-view chain (`v_order_totals` → `v_net_sales`)
+so execution returns real rows rather than a `schema_mismatch`; the
+seeding is fixture-side only. And `helpers.ts` loads vitest `inject`
+lazily (gated on `CORE_TEST_DATABASE_URL`) so the module also loads
+outside vitest under vite-node for the standalone launcher — vitest path
+unchanged, suite green.

@@ -1,31 +1,28 @@
 {
   "artifact_version": "1",
-  "title": "Net sales per customer — top 5 (INCOMPLETE: execution failed)",
-  "kb_ref": "a308afa34b33cf6dfaad5a88ea2968bed1a1a0cf",
+  "title": "Net sales per customer — top 10 (INCOMPLETE: execution unavailable)",
+  "kb_ref": "d298eac7897f2bff664167401236b27020a3305f",
   "identity": {
-    "intent": "What are our net sales per customer? Give me the top few.",
-    "status": "incomplete",
-    "status_detail": "Resolution and validation completed; execution did not. execute_sql against `drill` timed out on two consecutive attempts with a valid token. No result rows were obtained, and none are reported. The SQL below is validated but UNEXECUTED."
+    "intent": "What are our net sales per customer? Give me the top few."
   },
+  "status": "incomplete",
   "queries": [
     {
       "name": "top_customers_by_net_sales",
       "system": "drill",
       "request": {
         "dialect": "sql",
-        "statement": "SELECT c.id AS customer_id, c.name AS customer_name, v.net_total FROM reporting.v_net_sales v JOIN shop.customers c ON c.id = v.customer_id ORDER BY v.net_total DESC LIMIT 5"
+        "statement": "SELECT c.id AS customer_id, c.name AS customer_name, v.net_total FROM reporting.v_net_sales v JOIN shop.customers c ON v.customer_id = c.id ORDER BY v.net_total DESC LIMIT 10"
       },
       "validated_against": "sha256:2af8bf2cafdc4791e15b3e397701c05c5f2bce0df8db01b08a86674bed30cf0c",
-      "statement_sha256": "329f59afa73ea61b9c9054a67fe89462a7da3d5021672ee57c1e61b376468b68",
-      "backing": { "mode": "direct" },
+      "validation_verdict": "pass",
       "executed": false,
-      "results": null,
-      "guardrails": {
-        "statement_class": "select-only",
-        "timeout_s": 120,
-        "row_cap": 100000,
-        "note": "Guardrails injected server-side from the `steward` profile; not set by the agent."
-      }
+      "execution_outcome": "timeout",
+      "backing": {
+        "mode": "direct"
+      },
+      "results": [],
+      "row_count": 0
     }
   ],
   "semantics": {
@@ -33,48 +30,38 @@
       {
         "column": "net_total",
         "ref": "metrics/net-sales.md",
-        "certified": true,
-        "implementation_used_verbatim": true,
-        "source_object": "drill.reporting.v_net_sales"
+        "certified": true
       }
     ],
     "dimensions": [
-      { "column": "customer_id", "ref": "entities/customer.md" },
-      { "column": "customer_name", "ref": "systems/drill/shop/customers.md" }
+      {
+        "column": "customer_id",
+        "ref": "entities/customer.md"
+      },
+      {
+        "column": "customer_name",
+        "ref": "systems/drill/shop/customers.md"
+      }
     ],
     "grain": "customer",
     "trust_notes": [
-      "STALE DOC (agent_guidance: warn-user) — this report is built on `systems/drill/reporting/v_net_sales.md`, whose semantics doc is stale. Its written_against_schema_hash is sha256:0000...0000 while the live schema hash is sha256:10090faac6ee633163343d27ec9324aebef69cda8fe4644da6e798ed8518d8e4 (hash_match: false). The machine-derived column facts are current, but the human description of what this view MEANS was written against a different shape of the object and has not been re-verified since. No user was available to acknowledge this warning, so it is recorded unacknowledged.",
-      "METRIC NAMING vs IMPLEMENTATION — the certified metric `net-sales` is named 'net sales' but its implementation chain resolves to sum(qty * price) via drill.reporting.v_order_totals. No discounts, refunds, returns, cancellations, or tax are deducted. Anyone treating these figures as net-of-deductions revenue will overstate. The certified implementation was used verbatim rather than re-derived; the naming gap is reported, not silently corrected.",
-      "UNDECLARED POSSIBLE REFERENCE — the v_net_sales human doc states that attribution backfills historically blended this view with `drill.shop.legacy_sessions`, which does not appear in the doc's depends_on. If that blending is still present upstream, the figures may carry legacy-session attribution not captured by this artifact's declared lineage.",
-      "UNCONFIRMED — CP-R1 (resolution confirmation) and CP-R4 (result confirmation) were both skipped because no user was present. The active profile is `steward`, NOT `benchmark`, so the benchmark waiver of these checkpoints does NOT formally apply. These checkpoints are unmet rather than waived.",
-      "EXECUTION FAILED — execute_sql timed out twice. No numbers were produced and none are presented. Any figures attributed to this report from another source did not come from here."
+      "NO RESULTS: this artifact contains no numbers. execute_sql against `drill` timed out on three consecutive attempts (two on one validation token, one on a freshly issued token). The SQL validated cleanly (verdict=pass) but was never executed. Any figure quoted as an answer to this request did not come from this artifact.",
+      "WARN-USER doc in the dependency chain: `systems/drill/reporting/v_net_sales.md` carries agent_guidance=warn-user. Its written_against_schema_hash is sha256:0000000000000000000000000000000000000000000000000000000000000000 but the current snapshot hash for drill.reporting.v_net_sales is sha256:10090faac6ee633163343d27ec9324aebef69cda8fe4644da6e798ed8518d8e4 (hash_match=false). The human semantics describing this view were written against a different shape of the object than the one now in the snapshot, so the meaning of `net_total` is not confirmed against current schema. This warning applies to the certified metric `metrics/net-sales.md` too, which depends on this view.",
+      "The same warn-user doc records that attribution backfills historically blended this view with `drill.shop.legacy_sessions`, and that this reference is undeclared in the dependency graph. An undeclared upstream means contamination on legacy_sessions would not propagate to this artifact automatically.",
+      "No user confirmation was obtained at CP-R1 (resolution) or CP-R4 (result check). The benchmark waiver does NOT apply: the validation token reports profile=`reporter`, not `benchmark`. Confirmations were skipped because no user was reachable in this session, not because they were waived. The resolution set and any eventual results remain unconfirmed by a human.",
+      "Deviation from the certified metric implementation: metrics/net-sales.md specifies `SELECT customer_id, net_total FROM reporting.v_net_sales`. The aggregation was used verbatim; a join to drill.shop.customers (on v.customer_id = c.id, the join path documented in entities/customer.md) was added to attach customer names, plus ORDER BY net_total DESC and LIMIT 10 to satisfy 'the top few'. No part of the metric arithmetic was re-derived.",
+      "Assumption logged (no user available to confirm): 'the top few' was read as the top 10 by net_total descending; no time window was applied, because drill.reporting.v_net_sales exposes no date column and aggregates over all history."
     ]
   },
   "visuals": [],
   "blend": null,
   "gaps_filed": [
     {
-      "issue_id": "7e5b2016-9c6a-41d2-9443-28437dc40cc9",
+      "issue_id": "8436a92c-a637-449e-a599-a8a14281b423",
       "kind": "capability_gap",
       "object": "drill.reporting.v_net_sales",
       "occurrences": 1,
-      "routed_to": "data-team",
-      "summary": "execute_sql timed out twice on a validated SELECT; report blocked at S5."
-    },
-    {
-      "issue_id": "1bf772b4-10dc-40f3-b29a-1c4ae74b9ecd",
-      "kind": "schema_mismatch",
-      "object": "drill.reporting.v_net_sales",
-      "occurrences": 1,
-      "routed_to": "data-team",
-      "summary": "Stale semantics doc (hash mismatch), plus gross-vs-net metric naming gap and undeclared legacy_sessions reference."
+      "routed_to": "data-team"
     }
-  ],
-  "assumptions": [
-    "'the top few' read as top 5 by net sales descending.",
-    "No time window was specified; the certified metric and the v_net_sales rollup are all-time with no date filter, so no window was applied.",
-    "Customer names joined additively from drill.shop.customers for readability; the metric expression itself was not modified.",
-    "Proceeded without user confirmation because the invocation stated no user was available — see the UNCONFIRMED trust note."
   ]
 }

@@ -260,16 +260,15 @@ artifact and finish."""
 
 
 def scenario_report(conn: dict, model: str, workroot: Path, timeout_s: int) -> ScenarioResult:
-    # Steward profile: it carries execute_sql:drill (the fixture's reporter
-    # profile is the M1 read+validate one, pre-M2 execution grant). AS-10
-    # is about the warn-user disclosure reaching the artifact through a
-    # completed journey — the profile identity is not the subject.
-    res = ScenarioResult("AS-10 report net sales (warn-user in path)", "report", "steward")
+    # Reporter profile — the product Reporter carries execute_sql at CP-6,
+    # and the fixture reporter now mirrors it (D-79.2). Running AS-10 as
+    # reporter exercises the profile the product actually ships.
+    res = ScenarioResult("AS-10 report net sales (warn-user in path)", "report", "reporter")
     workdir = workroot / "report"
     workdir.mkdir(parents=True, exist_ok=True)
     (workdir / "out").mkdir(exist_ok=True)
 
-    _prepare_workdir(workdir, "report", _mcp_config(conn["mcp_url"], "steward", conn["tokens"]["steward"]))
+    _prepare_workdir(workdir, "report", _mcp_config(conn["mcp_url"], "reporter", conn["tokens"]["reporter"]))
     since = datetime.now(timezone.utc)
     agent = _run_agent(
         workdir, REPORT_PROMPT, model,
@@ -283,7 +282,7 @@ def scenario_report(conn: dict, model: str, workroot: Path, timeout_s: int) -> S
     res.session_id = agent.get("session_id", "")
     res.cost_usd = agent.get("total_cost_usd")
 
-    audit = _audit_tools(conn["ops_db_url"], "steward", since)
+    audit = _audit_tools(conn["ops_db_url"], "reporter", since)
     res.audit_tools = [r["tool"] for r in audit]
 
     # The loop must have reached validation and execution — otherwise there

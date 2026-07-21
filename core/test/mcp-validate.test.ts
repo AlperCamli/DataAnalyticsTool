@@ -199,13 +199,20 @@ describe("MT-3 / MT-4 / MCP-R5 — the §5 token binding, via the verification l
     expect(verdict).toMatchObject({ ok: false, code: "revalidate_required" });
   });
 
-  it("MT-3: execute never runs at M1 — profile-denied for reporters, CP-6 stub for stewards", async () => {
+  it("MT-3: the reporter passes the profile gate on execute (CP-6 grant); token binding still holds", async () => {
+    // Execution was granted to the reporter at CP-6/M2, so the profile
+    // gate now opens for it exactly as for the steward. The token still
+    // binds the exact statement, so this empty request — which does not
+    // match the token issued by `issue()` — is turned away at the token
+    // layer, not the permission layer. `permission_denied` here would mean
+    // the fixture reporter had drifted back to its M1 read-only shape.
     const reporter = await callTool(rig, rig.token("reporter"), "reporter", "execute_sql", {
       system: "drill",
       request: {},
       validation_token: await issue(),
     });
-    expect(reporter.payload.code).toBe("permission_denied");
+    expect(reporter.payload.code).not.toBe("permission_denied");
+    expect(reporter.payload.code).toBe("revalidate_required");
   });
 });
 

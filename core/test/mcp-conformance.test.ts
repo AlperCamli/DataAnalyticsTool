@@ -30,6 +30,7 @@ afterAll(async () => {
 });
 
 const REPORTER_TOOLS = [
+  "execute_sql",
   "flag_gap",
   "get_entity",
   "get_lineage",
