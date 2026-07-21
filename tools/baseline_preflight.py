@@ -13,11 +13,8 @@ not a runbook step someone asserts they performed.
 
 Checks, each a hard gate:
 
-1. **Billing is on subscription.** `ANTHROPIC_API_KEY` unset in this
-   environment, and the one smoke journey's own record reports no API
-   cost. The evidence is the run's `cost_usd`, not a self-reported auth
-   status — what was billed is a fact the run produces. A baseline that
-   quietly bills API credit is a spend the owner did not approve.
+1. **The smoke journey completed** — one journey end-to-end as proof the
+   loop works before thirty are run through it.
 2. **Sync is off on every condition instance.** Three schedulers sharing
    one queue and pushing sync PRs at scratch repos is the failure mode
    D-75.4 names; the production core stays the sole sync writer.
@@ -28,6 +25,13 @@ Checks, each a hard gate:
    the results artifact can be keyed and the owner can check what was
    actually served.
 
+**Cost is out of scope here (ruling D-77).** AI usage cost is the
+operating user's responsibility, in development and in the product alike:
+skills run in the customer's own Claude Code under their licenses, and the
+platform ships no model, no keys, and no billing management. The preflight
+gates nothing on cost. `cost_usd` stays a recorded field in journey
+records, informational only — absent stays absent, never coerced to zero.
+
 This module is deliberately outside `benchmark/`: the CP-5 fence keeps
 the CP-2 harness byte-unchanged, and this is new CP-5 tooling.
 """
@@ -36,7 +40,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import urllib.error
 import urllib.request
@@ -86,72 +89,41 @@ def probe_instance(condition: str, url: str, timeout: float = 10.0) -> InstanceP
     )
 
 
-def check_billing(smoke_record: Path | None = None) -> list[Check]:
-    """Subscription, not API credit.
+def check_smoke(smoke_record: Path | None) -> list[Check]:
+    """The smoke journey: one journey end-to-end before thirty.
 
-    Two signals, and note what each one is worth:
-
-    * ``ANTHROPIC_API_KEY`` unset is *definitive for the API path* — with
-      no key, Backend B's ``claude -p`` cannot bill API credit. It is a
-      precondition, not a proof of anything positive.
-    * The smoke journey's ``cost_usd``, read from the record the harness
-      already writes (``total_cost_usd`` from the CLI JSON, journey.py),
-      is the empirical signal. This is deliberately *not* a self-reported
-      auth-status string: what the run actually billed is a fact the run
-      itself produces, and it is the same field the baseline records for
-      every journey, so the check and the evidence agree by construction.
-
-    A subscription-billed run reports no API cost. A non-zero cost means
-    credit was spent and the preflight fails — that is the whole point of
-    running one smoke journey before thirty.
+    This gates on the loop working, not on what it cost. Per D-77, cost is
+    the operating user's responsibility and nothing here blocks on it —
+    ``cost_usd`` is reported alongside for the record and gates nothing.
     """
-    checks: list[Check] = []
-
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    checks.append(
-        Check(
-            "ANTHROPIC_API_KEY unset",
-            key is None or key == "",
-            "unset" if not key else f"SET ({len(key)} chars) — would bill API credit",
-        )
-    )
-
     if smoke_record is None:
-        checks.append(
-            Check(
-                "smoke journey billed on subscription",
-                False,
-                "no --smoke-record given; run one journey and pass its record",
-            )
-        )
-        return checks
+        return [Check("smoke journey completed", False, "no --smoke-record given; run one journey first")]
 
     try:
         record = json.loads(smoke_record.read_text())
     except (OSError, json.JSONDecodeError) as exc:
-        checks.append(Check("smoke journey billed on subscription", False, f"unreadable: {exc}"))
-        return checks
+        return [Check("smoke journey completed", False, f"unreadable: {exc}")]
 
+    drafts = record.get("drafts") or []
+    executed = [d for d in drafts if d.get("executed")]
     cost = record.get("cost_usd")
-    backend = record.get("backend")
-    # `None` is not a pass: it means the field was never populated, which
-    # tells us nothing about what was billed.
-    checks.append(
-        Check(
-            "smoke journey billed on subscription",
-            cost == 0 or cost == 0.0,
-            f"backend={backend} cost_usd={cost!r}"
-            + ("" if cost == 0 else " — non-zero or absent means this was not verified on-subscription"),
-        )
-    )
-    checks.append(
+
+    return [
         Check(
             "smoke journey completed",
-            bool(record.get("drafts")),
-            f"case={record.get('case_id')} condition={record.get('condition')}",
-        )
-    )
-    return checks
+            bool(drafts),
+            f"case={record.get('case_id')} condition={record.get('condition')} "
+            f"backend={record.get('backend')} drafts={len(drafts)}"
+            # Informational only (D-77.3): absent stays absent.
+            f" cost_usd={cost!r}",
+        ),
+        Check(
+            "smoke journey reached execution",
+            bool(executed),
+            f"{len(executed)} of {len(drafts)} draft(s) executed"
+            + ("" if executed else " — the loop did not close end-to-end"),
+        ),
+    ]
 
 
 def check_instances(probes: list[InstanceProbe]) -> list[Check]:
@@ -256,11 +228,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--model", required=True, help="pinned model id for the run")
     ap.add_argument("--out", type=Path, help="write packet.json + packet.md here")
-    ap.add_argument("--skip-billing", action="store_true", help="probe instances only")
+    ap.add_argument("--skip-smoke", action="store_true", help="probe instances only")
     ap.add_argument(
         "--smoke-record",
         type=Path,
-        help="journey record from the one smoke journey — its cost_usd is the billing evidence",
+        help="journey record from the one smoke journey (end-to-end proof of the loop)",
     )
     args = ap.parse_args(argv)
 
@@ -272,12 +244,12 @@ def main(argv: list[str] | None = None) -> int:
         probes.append(probe_instance(condition, url))
 
     checks: list[Check] = []
-    if not args.skip_billing:
-        checks += check_billing(args.smoke_record)
+    if not args.skip_smoke:
+        checks += check_smoke(args.smoke_record)
     if probes:
         checks += check_instances(probes)
     if not checks:
-        ap.error("nothing to check: pass --instance and/or drop --skip-billing")
+        ap.error("nothing to check: pass --instance and/or drop --skip-smoke")
 
     packet = build_packet(probes, checks, args.model)
     md = render_markdown(packet)

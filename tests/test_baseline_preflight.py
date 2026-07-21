@@ -1,4 +1,4 @@
-"""Go/no-go preflight gates (CP-5, rulings D-74.5 / D-75.4).
+"""Go/no-go preflight gates (CP-5, rulings D-74.5 / D-75.4 / D-77).
 
 The preflight's whole job is to fail closed: every check must block the
 baseline when it cannot positively verify its condition. These tests are
@@ -17,7 +17,7 @@ from tools.baseline_preflight import (
     Check,
     InstanceProbe,
     build_packet,
-    check_billing,
+    check_smoke,
     check_instances,
     render_markdown,
 )
@@ -41,50 +41,51 @@ def _named(checks: list[Check], fragment: str) -> Check:
     return matches[0]
 
 
-class TestBilling:
-    def test_api_key_set_blocks_the_run(self, monkeypatch):
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-whatever")
-        checks = check_billing(None)
-        assert _named(checks, "ANTHROPIC_API_KEY").ok is False
+class TestSmokeJourney:
+    """Gates on the loop working end-to-end — never on cost (D-77)."""
 
-    def test_missing_smoke_record_is_not_a_pass(self, monkeypatch):
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        checks = check_billing(None)
-        # The precondition passes; the positive evidence is absent, and
-        # absence must not read as verified.
-        assert _named(checks, "ANTHROPIC_API_KEY").ok is True
-        assert _named(checks, "billed on subscription").ok is False
+    def test_missing_record_is_not_a_pass(self):
+        checks = check_smoke(None)
+        assert _named(checks, "smoke journey completed").ok is False
 
-    def test_zero_cost_smoke_record_passes(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    def test_completed_journey_passes(self, tmp_path):
         rec = tmp_path / "journey.json"
         rec.write_text(json.dumps({
             "case_id": "c1", "condition": "enriched-kb", "backend": "claude-code",
-            "cost_usd": 0, "drafts": [{"seq": 1}],
+            "drafts": [{"seq": 1, "executed": True}],
         }))
-        checks = check_billing(rec)
-        assert _named(checks, "billed on subscription").ok is True
+        checks = check_smoke(rec)
         assert _named(checks, "smoke journey completed").ok is True
+        assert _named(checks, "reached execution").ok is True
 
-    def test_non_zero_cost_blocks_the_run(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    def test_journey_that_never_executed_blocks_the_run(self, tmp_path):
+        # Drafting without executing is not proof the loop closes.
         rec = tmp_path / "journey.json"
-        rec.write_text(json.dumps({"cost_usd": 0.42, "drafts": [{"seq": 1}]}))
-        assert _named(check_billing(rec), "billed on subscription").ok is False
+        rec.write_text(json.dumps({"drafts": [{"seq": 1, "executed": False}]}))
+        assert _named(check_smoke(rec), "reached execution").ok is False
 
-    def test_absent_cost_field_blocks_the_run(self, tmp_path, monkeypatch):
-        # None means the field was never populated: that tells us nothing
-        # about what was billed, so it cannot pass.
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        rec = tmp_path / "journey.json"
-        rec.write_text(json.dumps({"drafts": [{"seq": 1}]}))
-        assert _named(check_billing(rec), "billed on subscription").ok is False
-
-    def test_unreadable_record_blocks_the_run(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    def test_unreadable_record_blocks_the_run(self, tmp_path):
         rec = tmp_path / "journey.json"
         rec.write_text("{not json")
-        assert _named(check_billing(rec), "billed on subscription").ok is False
+        assert _named(check_smoke(rec), "smoke journey completed").ok is False
+
+    @pytest.mark.parametrize("cost", [None, 0, 0.0, 0.42, 12.5])
+    def test_cost_never_gates_anything(self, tmp_path, cost):
+        """D-77: cost is the operating user's responsibility, not a gate.
+
+        Every value — including a large one and an absent one — leaves the
+        verdict untouched. The field is carried into the detail line for
+        the record and coerced nowhere.
+        """
+        rec = tmp_path / "journey.json"
+        payload = {"drafts": [{"seq": 1, "executed": True}]}
+        if cost is not None:
+            payload["cost_usd"] = cost
+        rec.write_text(json.dumps(payload))
+
+        checks = check_smoke(rec)
+        assert all(c.ok for c in checks)
+        assert f"cost_usd={cost!r}" in _named(checks, "smoke journey completed").detail
 
 
 class TestInstances:
@@ -144,11 +145,3 @@ class TestPacket:
         nogo = render_markdown(build_packet(probes, [Check("a", False, "bad")], "m"))
         assert "**Verdict: NO-GO**" in nogo
         assert "block the baseline" in nogo
-
-
-@pytest.mark.parametrize("cost", [0, 0.0])
-def test_zero_cost_variants_all_pass(tmp_path, monkeypatch, cost):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    rec = tmp_path / "j.json"
-    rec.write_text(json.dumps({"cost_usd": cost, "drafts": [{"seq": 1}]}))
-    assert _named(check_billing(rec), "billed on subscription").ok is True
