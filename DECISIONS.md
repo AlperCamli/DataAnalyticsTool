@@ -2587,3 +2587,107 @@ additive capability §6 code). (b) Task 6.1 landed — **cleared** by D-71
 points 1–2. (c) Introspection role swapped live with byte-identity
 verified — **on the owner**; the pilot fails closed until then, and the
 baseline hash is recorded in `.secrets/connections.md`.
+
+---
+
+# DECISIONS — CP-5 (the loop closes): shipped skills + baseline v1
+
+## D-74 — CP-5 premise resolution: branch, integration debt, condition realization
+
+**Numbering note:** D-73 is unallocated. The owner's ruling arrived
+labelled D-74 and is recorded under that number rather than renumbered —
+a gap in the sequence is cheaper than a label that disagrees with the
+ruling it records.
+
+**1. The premise did not hold on `cp4-m1-mcp`.** CP-5's deliverables 4, 6
+and 7 build on the CP-2 harness. That harness had never left
+`task/2-benchmark-harness`: neither `main` nor `cp4-m1-mcp` carried
+`benchmark/`, `benchmark/suite/benchmark-seed-v0.yaml`, the eleven
+`tests/test_benchmark_*.py` modules, or **ruling D-62** — the CP-2 gate
+amendment that defers baseline v1 into CP-5 and is the authority for
+CP-5's added exit criterion. On `cp4-m1-mcp` the plan still listed the
+baseline under task 2.3 at CP-2, and the register's MC-1 trigger still
+read without its CP-5 re-point. What made this hard to see from the
+working tree: `benchmark/` existed on disk containing **only a stale
+`__pycache__/`** left by an earlier checkout of that branch, so the
+directory looked present while `git ls-files benchmark` was empty.
+
+Flagged rather than patched, per the CP-5 fence. Resolution accepted:
+`cp5-skills` cut from `cp4-m1-mcp`, `task/2-benchmark-harness` merged in.
+Six conflicts, all append-shaped, resolved as unions; CI keeps the `core`
+job and gains `benchmark-integrity` (R7); `DECISIONS.md`'s CP-2 records
+(D-50..D-62) reordered ahead of D-63..D-72 so the file runs in number
+order.
+
+**The fence is now verifiable and holds.** `benchmark/`,
+`tests/test_benchmark_*.py` and `results/` diff clean against
+`task/2-benchmark-harness` — harness code is byte-identical, not merely
+believed unchanged. Suites green post-merge: 588 Python (486 + 102
+benchmark), 140 core, R7 integrity GREEN.
+
+**2. Integration debt — standing convention (process ruling).** At CP-5
+completion `cp5-skills` PRs to `main`, and `main` becomes current through
+M2 + CP-5 in one reviewed landing. From then on: **every checkpoint
+sign-off includes its branch landing on `main` — a checkpoint is not
+closed while its work is unmerged.** The plan's gate definitions read
+accordingly (§1, "The checkpoint model").
+
+The convention exists because of what point 1 cost. Five task branches
+had accumulated unmerged; the CP-2 work sat unmerged for the whole of
+CP-3/CP-4/CP-6 and was silently absent from the branch that depended on
+it. The failure mode is not lost work — it is a *premise* believed true
+because the work was done, when the branch doing the depending never
+received it.
+
+**3. Uncommitted D-71/D-72 work committed** (`2ff056d`, `e0c4f43`) as a
+precondition of the merge — `DECISIONS.md` was the one dirty file the
+merge touched. Affirmed by the owner as the correct call on the evidence
+(finished PR bodies, both suites green, described as live in the task
+premise). `DECISIONS.md`'s addition covers both rulings and rides in the
+D-71 commit rather than being split across the two: interactive staging
+is unavailable in this environment. **Accepted as-is by ruling — history
+purity is not load-bearing; the DECISIONS text is.**
+
+**4. Condition realization (deliverable 5).** The three benchmark
+conditions are realized as **three dev-core instances**, one per
+condition, each pointed at a different KB remote, with the profile fixing
+the tool surface. R2 holds: identical journey prompt, identical execution
+access, context access the only difference.
+
+The load-bearing correction to the owner's sketch: the varying axis must
+be the **core instance**, not the profile. `kb_ref` is per-instance
+config (`SYNC_GIT_REMOTE`, `core/src/config.ts`), not a profile field, so
+three profiles against one core would all resolve against the same KB and
+the conditions would be indistinguishable — the experiment would report a
+difference it never actually created.
+
+| Condition | KB the instance serves | Tool surface |
+|---|---|---|
+| `enriched-kb` | customer KB clone at pinned `kb_ref` | full read set + validate + execute |
+| `machine-kb` | `benchmark.conditions` render (deterministic, byte-stable → keys cleanly under R8) pushed to a scratch repo | full read set + validate + execute |
+| `no-kb` | scratch repo containing **only the profile files** | validate + execute only |
+
+Three additions by ruling:
+
+- **(a) `no-kb` spans all three systems.** The seed suite has GA4 and GSC
+  cases, and CP-2's R1 defined no-kb discovery as `information_schema` +
+  the GA4 metadata endpoint + GSC's fixed schema. Grant validate/execute
+  for supabase, ga4 *and* gsc — a supabase-only grant would score the
+  GA4/GSC cases as failures of the condition rather than of the KB.
+- **(b) Visibility must be verified permissive for `no-kb`.** D-71.1 made
+  `validate_sql` visibility-governed. A default-hidden visibility map
+  would refuse every statement and **silently destroy the condition** —
+  it would look like a no-kb agent that cannot write valid SQL, which is
+  exactly the headline finding the baseline is meant to produce honestly.
+  Guarded by a fixture test: the no-kb profile validates a statement
+  against a example estate table successfully.
+- **(c) The `no-kb` instance's KB carries no content.** The tool surface
+  already prevents content reads; pointing the instance at content it
+  must not serve is a second thing that has to stay true. Defense in
+  depth, and it makes the R8 condition keying honest.
+
+**5. Baseline spend gated.** Return before the baseline run with: smoke
+journey evidence (one case, one condition), on-subscription billing
+verified per the preflight (`ANTHROPIC_API_KEY` unset, auth route
+checked), the pinned model id, and the three instances' R8 keys
+(`kb_ref` / render hash / profile) for the owner's check.

@@ -4,6 +4,8 @@ Status: first full plan, built against spec set v1.0 and the agreed nine-checkpo
 
 **The checkpoint model.** A checkpoint is a *demonstrable event* plus a *mechanically verifiable gate* — the same discipline the onboarding playbook applies to its readiness gate. A checkpoint is passed when its demo has been performed and every gate item checks green; no checkpoint passes on intent. M1, M2, and M3 keep their spec-set names and meanings: they are the three points where the design partner gets hands-on value and where security approval is sought incrementally.
 
+**Landing is part of the gate** *(added per ruling D-74, 2026-07-21)*. Every checkpoint sign-off includes its branch landing on `main`: **a checkpoint is not closed while its work is unmerged.** This is a gate item, not bookkeeping — CP-2's harness sat unmerged through CP-3, CP-4 and CP-6, and CP-5 opened believing a premise (the harness, the seed suite, ruling D-62) that its own branch did not carry. The failure mode is not lost work; it is a premise believed true because the work was done, on a branch that never received it. CP-5 clears the accumulated debt: `cp5-skills` PRs to `main`, carrying M2 + CP-5 in one reviewed landing.
+
 **Duration discipline.** Per OB-4, no duration promises before data. This plan commits to *sequence and dependency*, not dates; OB-4 instrumentation (armed at CP-0) is what makes dating the second build honest.
 
 ---

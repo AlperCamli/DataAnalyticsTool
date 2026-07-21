@@ -79,7 +79,11 @@ scope → evidence → drafting → self-check → PR
 
 **S2 evidence.** Per object: machine doc (facts), harvest results whose `mentions`/content cover it, usage evidence where present (join_pairs → evidence-grade join guidance), existing entity docs. Maturity-ladder discipline (HLR §8 P4): the evidence tier available dictates the `sources` grading — `customer doc: <uri>`, `observed in N queries`, or `inferred from column names`; never upgrade inference to observation.
 
-**S3 drafting.** Canonical templates (KB §7), one human doc per object (or group doc edits for API kinds). **CP-E2 [A]:** every draft carries complete front-matter with `status: draft`, graded `sources`, and a `depends_on` list covering every FQN the body relies on (the K-2 declaration duty). **CP-E3 [E-adjacent]:** the skill never sets `verified` and never touches `*.schema.md` — violations are caught by KB CI checks KB-3/KB-7 at PR time, so the gate is enforced at merge even if the skill misbehaves.
+**S3 drafting.** Canonical templates (KB §7), one human doc per object (or group doc edits for API kinds). **CP-E2 [A]:** every draft carries complete front-matter with `status: draft`, graded `sources`, and a `depends_on` list covering every FQN the body relies on (the K-2 declaration duty).
+
+**CP-E4 [A] — purposes go in front-matter, not prose** *(added at CP-5, with the matching KB §7 amendment)*. Every drafted human doc carries `purpose`, and `column_purposes` covering the columns the evidence supports (`object_purposes` for group docs). These are the fields the generator merges into the machine sibling (KB §4.2, D-49), so a purpose written only into the body reaches no render and is invisible to every agent reading the machine doc. The body carries only what a one-line value cannot: enum decodings, JSON/JSONB structures, multi-condition join caveats, warning rationale. **The skill does not write a body section that restates a front-matter one-liner** — duplicated claims drift, and a drifted purpose is worse than an absent one because both copies look authoritative. A draft whose meaning is fully carried by its front-matter ships with an empty body; that is a complete doc, not a stub.
+
+Purpose values obey the same grounding rules as everything else (K-GROUND, the S2 maturity ladder): a `column_purposes` entry is a claim about the estate and needs the evidence tier its `sources` grading declares. Guessing a one-liner because the slot would otherwise render `—` is the exact failure the gap-vs-guess rule forbids; an unpopulated slot is honest, and KB-10 warns on keys that do not resolve. **CP-E3 [E-adjacent]:** the skill never sets `verified` and never touches `*.schema.md` — violations are caught by KB CI checks KB-3/KB-7 at PR time, so the gate is enforced at merge even if the skill misbehaves.
 
 **S4 self-check.** Run the KB CI validation locally (front-matter schemas, FQN resolution, links) before opening the PR; fix or drop failing drafts.
 
@@ -125,6 +129,20 @@ Each skill ships scripted scenarios executed against a fixture deployment (fixtu
 | AS-6 | enrich: drafts carry `draft` status, graded sources, non-empty `depends_on`; PR under user identity; zero edits to machine files | CP-E2/E3, K-IDENT |
 | AS-7 | review-sync: rename candidate summarized with both interpretations; no merge action; no sync-PR edits | CP-V1/V2 |
 | AS-8 | benchmark: run under `benchmark` profile; publish absent from tools/list; adoption-metric query over the fixture audit excludes the run | SK-4 |
+
+**Additions at CP-5 (additive only; AS-1..AS-8 unchanged).** The scenarios above were written before the three skills were packaged; these cover what packaging made testable. AS-9..AS-11 are the CP-5 deliverable-7 tests.
+
+| # | Scenario | Verifies |
+|---|---|---|
+| AS-9 | enrich: a scoped object whose definition the evidence cannot settle → the item appears in the PR body's gap list and in `flag_gap`, and **no prose about it appears in any drafted doc** | K-GROUND, gap-vs-guess, S5 failure exit |
+| AS-10 | report: an entity doc in the resolution path carries a contamination marking → the warning is surfaced **in the report artifact itself**, not only in the session transcript | K-TRUST reaching the artifact |
+| AS-11 | benchmark: a skill-emitted journey record is ingested by the CP-2 harness **byte-compatibly** with the CP-2 fixture records — same file-ingestion path, no harness change | §8 hand-off contract, R8 keying |
+| AS-12 | enrich: drafts carry `purpose` and `column_purposes` in front-matter; no body section restates a front-matter one-liner; a fully-one-lined object ships an empty body | CP-E4 |
+| AS-13 | report: a cross-source request follows the entity doc's stated resolution rule verbatim (blend vs fetch-and-combine); the artifact's `blend.keys[].entity_ref` resolves to the entity doc that decided it | S3, formats spec |
+| AS-14 | benchmark: the journey prompt is byte-identical across all three conditions; only the served KB and the profile allowlist differ | R2 fairness |
+| AS-15 | profile compilation: a compiled profile yields a Claude Code setup whose MCP config, skills bundle, and CLAUDE.md fragment match the profile's `tools.allow`, `skills`, and `context` — and **widening the compiled client config does not widen access** when replayed against the server | platform-architecture §5, M-3 |
+
+AS-15's second clause is the one that matters: compiled configs are conveniences, and the scenario must demonstrate the enforcement boundary rather than assume it — a hand-edited config granting a tool the profile withholds still gets denied server-side.
 
 ## 10. Amendments to other specs (additive)
 
