@@ -2691,3 +2691,51 @@ journey evidence (one case, one condition), on-subscription billing
 verified per the preflight (`ANTHROPIC_API_KEY` unset, auth route
 checked), the pinned model id, and the three instances' R8 keys
 (`kb_ref` / render hash / profile) for the owner's check.
+
+## D-78 — AS-9/10/12 conformance layering; the falsifiability rule
+
+**The question.** The three CP-5 conformance items (AS-9 gap-vs-guess,
+AS-10 contamination reaching the artifact, AS-12 CP-E4 front-matter) all
+assert on what an agent *did*. They could be built as rule validators
+over staged artifacts — cheap, deterministic, CI-resident — or as
+behavioral scenarios against a fixture deployment, which is what
+skill-spec SK-1 ("verified behaviorally through the audit stream") and §9
+("executed against a fixture deployment") actually specify.
+
+**Ruling: both, layered.** (a) Validators ship as CI-resident regression
+tests over staged good/bad artifacts; they pin the rules cheaply and
+permanently. (b) The three behavioral scenarios run against the fixture
+deployment — fixture KB, fixture snapshots, stub connectors — asserting
+on the audit stream and the resulting files. **(b), not (a), is the
+AS-9/10/12 conformance evidence for the CP-5 gate.**
+
+**The standing rule this establishes** — general, not CP-5-local, and
+recorded alongside the fan-out-helper rule above:
+
+> **A conformance item may only be reported green on evidence that could
+> have failed if the behavior were absent.**
+
+Validators over staged artifacts cannot fail when the skill misbehaves:
+the fixtures are hand-written, so the test would stay green if the enrich
+skill never wrote a purpose in its life. It tests the checker, not the
+skill. Reporting such a suite as "AS-9/10/12 green" would claim
+behavioral conformance that was never observed — the failure is not a
+weak test but a **false claim about what was verified**.
+
+The same principle, wearing different clothes, is why the CP-5 benchmark
+driver refuses to synthesize a journey record when the skill emitted
+none (deliverable 4): a fabricated record would be ingested and scored as
+though a real journey happened, and the resulting number would look
+exactly like a real one. Evidence that cannot fail, and evidence that was
+manufactured, are the same defect at different points in the pipeline.
+
+**Re-runnability.** The scenarios ship as an invocable target against the
+fixture deployment, with their journey records and audit extracts
+committed as gate evidence. Re-run on any skill edit — cheap enough to be
+the norm, since the fixture deployment needs no example estate and no
+credentials. CI marks them gate-evidence tests, not per-commit tests.
+
+**Sequencing** (correcting D-76.4's "in parallel", which was wrong on the
+spec): fixture deployment → three scenarios → rig prep per D-76.3 →
+smoke journey → packet. The scenarios precede the baseline instances and
+need neither pilot credentials nor the scratch repos.
