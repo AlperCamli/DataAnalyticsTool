@@ -161,3 +161,6 @@ AS-15's second clause is the one that matters: compiled configs are conveniences
 | SP-3 | `enrich` batch size default | 10 objects | Steward feedback on PR review ergonomics |
 | SP-4 | report skill offering saved/parameterized re-runs of confirmed reports | Out of v1; re-run = re-journey | Recurring-report demand in pilot |
 | SP-5 | Localization of user-facing skill language | Follows the session user's language naturally (LLM behavior); canonical checkpoint content defined language-neutrally | First non-English pilot |
+| SP-6 | Per-profile skill version pinning | Out of v1: core version **is** skill version, one axis. Skills ship in the product at `core/skills/<name>/SKILL.md` and upgrade on the release path (D-75.1) | First customer needing to hold back a skill upgrade while taking a core release |
+
+SP-6 is parked, not solved. It exists because §5's variance rule and the release-path packaging together mean a customer cannot take a core release without taking every skill change in it. That is the right default at one pilot — one axis, nothing to reconcile — and the wrong one the first time a customer has certified a workflow against a skill's current behavior. The trigger is that customer, not a schedule.
