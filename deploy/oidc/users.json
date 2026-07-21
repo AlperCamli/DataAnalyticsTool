@@ -1,4 +1,27 @@
 [
-  { "username": "alper", "password": "steward-dev-pw", "roles": ["steward", "ops"], "display": "Alper (steward)" },
-  { "username": "reporter", "password": "reporter-dev-pw", "roles": ["reporter"], "display": "Pilot reporter" }
+  {
+    "username": "alper",
+    "password": "steward-dev-pw",
+    "roles": [
+      "steward",
+      "ops"
+    ],
+    "display": "Alper (steward)"
+  },
+  {
+    "username": "reporter",
+    "password": "reporter-dev-pw",
+    "roles": [
+      "reporter"
+    ],
+    "display": "Pilot reporter"
+  },
+  {
+    "username": "benchmark",
+    "password": "benchmark-dev-pw",
+    "roles": [
+      "benchmark"
+    ],
+    "display": "Benchmark harness (non-user)"
+  }
 ]

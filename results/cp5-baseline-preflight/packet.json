@@ -1,0 +1,101 @@
+{
+  "packet_version": "1",
+  "generated_at": "2026-07-21T16:59:56.617974Z",
+  "model_id": "claude-opus-4-8",
+  "transport": "benchmark-skill-v1",
+  "r8_keys": {
+    "enriched-kb": {
+      "kb_ref": "14fe1e60cee0c003ba104750ea4e85c1e939f9b4",
+      "kb_remote": "https://github.com/AlperCamli/DataAnalyticsTool.git",
+      "url": "http://127.0.0.1:8100"
+    },
+    "machine-kb": {
+      "kb_ref": "af1469e0274cd4e8ab1c0d50661a44243a8d05fc",
+      "kb_remote": "https://github.com/AlperCamli/cl-baseline-machine-kb.git",
+      "url": "http://127.0.0.1:8101"
+    },
+    "no-kb": {
+      "kb_ref": "456d8cc64cc7cb7bd61c516b719377fa7c38f897",
+      "kb_remote": "https://github.com/AlperCamli/cl-baseline-nokb.git",
+      "url": "http://127.0.0.1:8102"
+    }
+  },
+  "checks": [
+    {
+      "name": "smoke journey completed",
+      "ok": true,
+      "detail": "case=RB-01 condition=enriched-kb backend=benchmark-skill-v1 drafts=3 cost_usd=0.686128"
+    },
+    {
+      "name": "smoke journey reached execution",
+      "ok": true,
+      "detail": "3 of 3 draft(s) executed"
+    },
+    {
+      "name": "enriched-kb: reachable",
+      "ok": true,
+      "detail": "http://127.0.0.1:8100"
+    },
+    {
+      "name": "enriched-kb: sync disabled",
+      "ok": true,
+      "detail": "sync_enabled=False"
+    },
+    {
+      "name": "enriched-kb: MCP armed",
+      "ok": true,
+      "detail": "mcp_enabled=True"
+    },
+    {
+      "name": "enriched-kb: kb_ref resolved",
+      "ok": true,
+      "detail": "kb_ref=14fe1e60cee0c003ba104750ea4e85c1e939f9b4"
+    },
+    {
+      "name": "machine-kb: reachable",
+      "ok": true,
+      "detail": "http://127.0.0.1:8101"
+    },
+    {
+      "name": "machine-kb: sync disabled",
+      "ok": true,
+      "detail": "sync_enabled=False"
+    },
+    {
+      "name": "machine-kb: MCP armed",
+      "ok": true,
+      "detail": "mcp_enabled=True"
+    },
+    {
+      "name": "machine-kb: kb_ref resolved",
+      "ok": true,
+      "detail": "kb_ref=af1469e0274cd4e8ab1c0d50661a44243a8d05fc"
+    },
+    {
+      "name": "no-kb: reachable",
+      "ok": true,
+      "detail": "http://127.0.0.1:8102"
+    },
+    {
+      "name": "no-kb: sync disabled",
+      "ok": true,
+      "detail": "sync_enabled=False"
+    },
+    {
+      "name": "no-kb: MCP armed",
+      "ok": true,
+      "detail": "mcp_enabled=True"
+    },
+    {
+      "name": "no-kb: kb_ref resolved",
+      "ok": true,
+      "detail": "kb_ref=456d8cc64cc7cb7bd61c516b719377fa7c38f897"
+    },
+    {
+      "name": "the conditions serve distinct KBs",
+      "ok": true,
+      "detail": "3 distinct kb_ref across 3 instances"
+    }
+  ],
+  "verdict": "GO"
+}
