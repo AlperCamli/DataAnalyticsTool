@@ -4,20 +4,28 @@
     "  node dist/cli.js systems set jobs/live/supabase-connection.json",
     "",
     "This is what the execution gateway resolves when execute_sql runs.",
-    "Two credentials, deliberately distinct roles (G3):",
-    "  - `dsn`         : introspection, used by snapshot jobs",
+    "Two credentials, deliberately distinct roles (G3, D-71.2):",
+    "  - `dsn`         : the catalog-read introspection role, used by",
+    "                    snapshot jobs (deploy/introspection-role.sql)",
     "  - `execute_dsn` : the SELECT-only execution role, and the ONLY one",
     "                    the gateway forwards, because it is the only one",
     "                    marked required_for: [query].",
     "An execute job with no query-marked credential fails closed rather",
-    "than falling back to the broader introspection role."
+    "than falling back to the broader introspection role.",
+    "",
+    "Both env names say which role they carry. That is deliberate: the",
+    "pilot previously read `env://SUPABASE_DSN`, a name that said only",
+    "which database it reached, and the value behind it was the estate's",
+    "`postgres` role holding BYPASSRLS. Renaming it forces the operator",
+    "to set a new variable to a new credential rather than leaving the",
+    "old one in place under a name that no longer describes it."
   ],
   "system": "supabase",
   "connector": { "name": "postgres", "version_constraint": ">=0.2 <0.3" },
   "payload": {
     "config": { "system": "supabase", "mode": "live" },
     "credentials": [
-      { "ref": "env://SUPABASE_DSN", "key": "dsn", "required_for": ["live"] },
+      { "ref": "env://CL_INTROSPECT_DSN", "key": "dsn", "required_for": ["live"] },
       { "ref": "env://CL_EXEC_DSN", "key": "execute_dsn", "required_for": ["query"] }
     ]
   }

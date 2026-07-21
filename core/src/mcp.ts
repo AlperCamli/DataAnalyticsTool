@@ -525,6 +525,7 @@ async function toolValidateSql(ctx: CallContext, args: Record<string, unknown>):
       ctx.ws,
       ctx.identity,
       ctx.profile,
+      ctx.scopes,
       { system, request },
     );
   } catch (e) {
@@ -538,6 +539,10 @@ async function toolValidateSql(ctx: CallContext, args: Record<string, unknown>):
     typeof request.statement === "string"
       ? request.statement
       : JSON.stringify({ operation: request.operation, body: request.body });
+  // D-71.1 / M-4: the refusal the caller sees is the ordinary
+  // "no such object" one — the response below is not special-cased. Only
+  // the audit record knows the difference.
+  const filtered = outcome.hiddenObjects.length > 0;
   return {
     payload: {
       verdict: outcome.verdict,
@@ -548,11 +553,13 @@ async function toolValidateSql(ctx: CallContext, args: Record<string, unknown>):
         : {}),
       refs: refsEnvelope(ctx.ws),
     },
+    ...(filtered ? { decision: "filtered" as const, reason: "hidden by visibility map" } : {}),
     resultMeta: {
       verdict: outcome.verdict,
       system,
       cited_objects: outcome.citedObjects,
       finding_codes: outcome.findings.map((f) => f.code),
+      ...(filtered ? { hidden_objects: outcome.hiddenObjects } : {}),
     },
     statementText,
   };
@@ -581,6 +588,7 @@ async function toolExecuteSql(ctx: CallContext, args: Record<string, unknown>): 
         display: ctx.identity.display,
       },
       profile: ctx.profile,
+      scopes: ctx.scopes,
       sessionId: ctx.sessionId,
       auditId: ctx.auditId,
       intent: typeof args.intent === "string" ? args.intent : null,
@@ -597,6 +605,11 @@ async function toolExecuteSql(ctx: CallContext, args: Record<string, unknown>): 
         refs: refsEnvelope(ctx.ws),
       },
       isError: true,
+      // The allow-set recheck refused it (§5 amendment): audited as
+      // filtered with the true reason, exactly as the content tools do.
+      ...(outcome.meta.filtered === true
+        ? { decision: "filtered" as const, reason: "hidden by visibility map" }
+        : {}),
       resultMeta: outcome.meta,
       statementText: outcome.statementText,
     };

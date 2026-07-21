@@ -66,11 +66,13 @@ FETCH_BATCH = 500
 
 
 class RoleCheckFailed(ConfigError):
-    """The execution role can write — service is refused (G3).
+    """A role we were handed is wider than its job — service refused.
 
-    Non-retryable and loud on purpose: this is a provisioning error,
-    and serving execution anyway is precisely the failure mode the
-    check exists to prevent.
+    Raised by the execution check (G3: the role can write) and by the
+    introspection check (D-71.2: the role is SUPERUSER or BYPASSRLS).
+    Non-retryable and loud on purpose: this is a provisioning error, and
+    serving anyway is precisely the failure mode the checks exist to
+    prevent.
     """
 
 

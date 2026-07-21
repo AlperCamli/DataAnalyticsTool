@@ -33,6 +33,7 @@ from snapshot.canonical import canonical_body_bytes
 from snapshot.hashing import schema_hash
 from snapshot.registry import registered_stats_fields
 from snapshot.validate import validate_snapshot
+from tests.conftest import provision_introspection_role
 
 PG_IMAGE = os.environ.get("CTXLAYER_PG_TEST_IMAGE", "postgres:16")
 DDL_FILE = Path(__file__).parent / "data" / "postgres-demo.sql"
@@ -94,10 +95,19 @@ def ddl_doc(ddl_doc_pair):
 
 @pytest.fixture(scope="module")
 def pristine_dsn():
-    """A live server with the same DDL applied, kept up for live-mode runs."""
+    """A live server with the same DDL applied, kept up for live-mode runs.
+
+    Handed out as the **introspection role's** DSN, not `postgres`: since
+    D-71.2 the connector refuses live introspection over a
+    SUPERUSER/BYPASSRLS connection, so this is what live mode now means.
+    It also upgrades C-3 below — ddl-file mode introspects as the
+    container superuser, live mode as a role with no table privileges at
+    all, and the two canonical bodies must still be byte-identical. That
+    is the F3 swap's safety argument, executed as conformance.
+    """
     with ephemeral_postgres(PG_IMAGE) as (name, dsn):
         apply_ddl(name, [DDL_FILE])
-        yield dsn
+        yield provision_introspection_role(name, dsn, "pristine-introspect-pw")
 
 
 @pytest.fixture(scope="module")
@@ -108,10 +118,18 @@ def live_doc(pristine_dsn):
 @pytest.fixture(scope="module")
 def scratch():
     """A mutable server; every test takes its own before/after pair, so
-    accumulated mutations from earlier tests never leak into a comparison."""
+    accumulated mutations from earlier tests never leak into a comparison.
+
+    Two DSNs, because the two jobs need different rights: `.admin` stages
+    the DDL/DML a test wants to observe, `.dsn` is the introspection role
+    the connector reads it back through (D-71.2).
+    """
     with ephemeral_postgres(PG_IMAGE) as (name, dsn):
         apply_ddl(name, [DDL_FILE])
-        yield SimpleNamespace(dsn=dsn)
+        yield SimpleNamespace(
+            admin=dsn,
+            dsn=provision_introspection_role(name, dsn, "scratch-introspect-pw"),
+        )
 
 
 # --- C-2 / C-3: task 1.2 exit criteria ---
@@ -158,7 +176,7 @@ def test_c8_stats_contain_only_registered_fields(ddl_doc):
 def test_s2_comment_edit_moves_body_never_hashes(scratch):
     before = run_ok(live_config(scratch.dsn))
     execute(
-        scratch.dsn,
+        scratch.admin,
         "COMMENT ON TABLE public.orders IS 'Edited table comment.'",
         "COMMENT ON COLUMN public.orders.status IS 'Edited column comment.'",
     )
@@ -170,14 +188,14 @@ def test_s2_comment_edit_moves_body_never_hashes(scratch):
 
 def test_c6_structural_change_moves_exactly_one_hash(scratch):
     before = run_ok(live_config(scratch.dsn))
-    execute(scratch.dsn, "ALTER TABLE public.order_items ADD COLUMN unit_price_cents integer")
+    execute(scratch.admin, "ALTER TABLE public.order_items ADD COLUMN unit_price_cents integer")
     after = run_ok(live_config(scratch.dsn))
     changed = {i for i, h in hashes(before).items() if hashes(after)[i] != h}
     assert changed == {("table", "public", "order_items")}
 
 
 def test_ordinal_is_dense_rank_after_column_drop(scratch):
-    execute(scratch.dsn, "ALTER TABLE public.users DROP COLUMN full_name")
+    execute(scratch.admin, "ALTER TABLE public.users DROP COLUMN full_name")
     doc = run_ok(live_config(scratch.dsn))
     cols = get(doc, "users")["columns"]
     assert [c["name"] for c in cols] == ["id", "email", "created_at"]
@@ -188,7 +206,7 @@ def test_row_estimate_appears_after_analyze_without_hash_motion(scratch):
     before = run_ok(live_config(scratch.dsn))
     assert "row_estimate" not in get(before, "order_items")["stats"]  # reltuples = -1
     execute(
-        scratch.dsn,
+        scratch.admin,
         "INSERT INTO public.users (email) VALUES ('a@x.com'), ('b@x.com'), ('c@x.com')",
         "ANALYZE public.users",
     )

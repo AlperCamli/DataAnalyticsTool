@@ -146,6 +146,9 @@ describe("MT-3 / MT-4 / MCP-R5 — the §5 token binding, via the verification l
       system: "drill",
       subject: "alper-steward",
       currentSnapshotRef: `sha256:${rig.drill.verdict.canonical_body_sha256}`,
+      // Steward sees `**`; the D-71.1 allow-set recheck has its own
+      // cases in mcp-visibility.test.ts.
+      visible: () => true,
       ...overrides,
     };
   }

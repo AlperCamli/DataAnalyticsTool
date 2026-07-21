@@ -1949,3 +1949,213 @@ tests the connection *before* writing, and a companion
 `reset-exec-password.sh` generates a URL-safe password and writes both
 sides from that one value — the two-sided secret is never hand-carried,
 which removes the encoding-mismatch class rather than documenting it.
+
+## D-71 — Security review #2 F2/F3 landed: visibility governs execution; introspection gets its own role
+
+Ruling **D-71** (owner, 2026-07-21) disposed of security review #2. This
+record closes its **points 1 and 2** — findings **F2** and **F3** — with
+tests as the definition of done. Points 3–8 are recorded there and are
+not touched here.
+
+**Numbering note.** The ruling was handed down labelled *D-67*, which was
+already taken by the security-review-**#1** landing record (also its
+F2/F3/F4 — the collision is a genuine hazard, since both entries are
+"security review, findings F2/F3"). Renumbered to **D-71** on the owner's
+call; the review #1 record keeps D-67 because landed commits and code
+comments already point at it. Every reference this work introduced reads
+`D-71.1` / `D-71.2`.
+
+### F2 — the visibility map now governs validate_sql and execute_sql
+
+**Spec first, per the fence.** One additive amendment to the MCP tool
+reference, in three places: §3 strikes the words "for content tools" from
+the per-call decision; §6.6 specifies resolution against the caller's
+visible surface; §5 adds the `objects` allow-set to the validation token.
+Conformance rows MT-11/MT-12/MT-13 added. No other spec touched.
+
+**The implementation choice that carries the non-disclosure property.**
+The visible surface is the *input* to resolution, not a filter over its
+output: `valsql.ts` builds the object list handed to `sqlval` from the
+objects the caller can see, so a hidden table is refused by the same code
+path, with the same `unknown_object` finding, as a table that was never
+there. There is no second error message to keep in sync and no branch
+that could leak which case occurred. The alternative — resolve against
+everything, then reject hits that are hidden — needs the two messages to
+stay byte-identical forever, and would have been a plausible way to ship
+an enumeration oracle. The same ordering applies to the API dialect and,
+importantly, to column resolution: a hidden object's columns are hidden
+with it, so no column check can confirm a hidden object's shape.
+
+The true reason is recovered afterwards, server-side only, by asking
+whether a refused ref resolves in the *full* snapshot. That feeds the
+audit record (`decision: filtered`, `hidden_objects`) and nothing else —
+M-4's second half, the one that keeps this debuggable for a steward while
+opaque to the caller.
+
+**Carrying the decision to execute, and which check catches what.** The
+token now carries `objects`, the allow-set validation resolved against,
+and `execute_sql` re-checks every member against the caller's *current*
+scopes before enqueue. This is not redundant with the `snapshot_ref` pin
+and does not overlap it: `snapshot_ref` pins the **facts** surface, and
+visibility is not in the snapshot — the map lives in the KB at `kb_ref`.
+A revocation therefore moves no snapshot, advances no `snapshot_ref`, and
+a token minted a moment earlier verifies against every other §5 binding
+cleanly. **The allow-set recheck is the only mechanism that catches a
+mid-token visibility change.** MT-13 asserts exactly that, and asserts
+the snapshot rows are unchanged across the case so the claim cannot be
+satisfied accidentally by the pin.
+
+Refusal at execute is `not_found` with validation's wording, not
+`revalidate_required` — holding a token must not become a way to learn
+that an object exists. It is built without the module's `fail()` helper,
+which copies its extras into the caller-visible `detail` as well as the
+audit `meta`; the hidden FQNs go to the audit only. A token with no
+`objects` claim is refused (`revalidate_required`) rather than trusted:
+fail-closed, bounded by the 300 s TTL to one re-validation.
+
+*Tests* (`core/test/mcp-visibility.test.ts`, 12): hidden-table SELECT
+refused with no token; **the hidden and the absent responses compared
+field-by-field after normalising the object name**, which is the actual
+property rather than a proxy for it; the identical statement passing for
+a steward; a JOIN with one hidden side refused, asserting the visible
+side is not mentioned at all; a hidden GA4 custom dimension refused in
+the same words an undocumented one gets; both audited as `filtered` with
+the true reason; the mid-token revocation case above; a still-visible
+statement getting *past* the check (so the case above is not a blanket
+refusal); and the missing-allow-set token refused. Confirmed as genuine
+regression tests by mutation: disabling the surface filter fails 6 of 12,
+disabling the allow-set recheck fails MT-13 alone.
+
+### F3 — introspection moves to `contextlayer_introspect`
+
+`deploy/introspection-role.sql` provisions LOGIN + CONNECT + USAGE on the
+introspected schemas and **no SELECT on anything**, with none of the four
+role attributes. That looks too narrow until the reason lands: the
+connector reads `pg_catalog` only, and `pg_catalog` is world-readable and
+*not* privilege-filtered — so the role reads the full shape of the estate
+and the contents of none of it. That asymmetry is also why the swap is
+snapshot-neutral: the catalog answers the same regardless of who asks.
+
+`check_introspection_role` refuses SUPERUSER or BYPASSRLS at the start of
+every **live** snapshot job (not ddl-file mode — that container is ours
+and applying customer DDL requires the superuser the check would refuse).
+Failing the whole job is correct under S-6.
+
+**A fact worth recording, measured rather than assumed.** The review
+described the pilot's `postgres` as superuser-class. It is not: on
+Supabase `rolsuper = false`, while `rolcreatedb`, `rolcreaterole` and
+**`rolbypassrls`** are all true. A check written to look only for
+SUPERUSER — the obvious way to write it — would have passed the exact
+connection F3 was filed about. Both attributes are tested for that
+reason, and it is BYPASSRLS that actually fires on the pilot.
+
+*Tests.* `tests/test_introspection_role_sql.py` (15) applies the real
+file through `psql` per D-70 and holds it to both claims: introspection
+through the provisioned role is **byte-identical** to introspection as
+the container superuser on the same database, and all four read paths
+raise `InsufficientPrivilege`. The file's own VERIFY queries are parsed
+back out of it and asserted empty. Controls: a superuser connection and a
+BYPASSRLS-only role are each refused.
+
+Beyond the new file, the connector's own live-mode fixtures now run
+through this role (`tests/test_postgres_connector.py`), which upgrades
+**C-3 mode invariance** into direct evidence for the swap: ddl-file mode
+introspects as superuser, live mode as a role with no table privileges,
+and the canonical bodies must still match byte for byte. Provisioning
+goes through one shared helper that runs the shipped artifact — there is
+no test-only variant of this role.
+
+**Config swap.** `env://SUPABASE_DSN` → `env://CL_INTROSPECT_DSN` in the
+example job and connection registrations and in the onboarding skill. The
+rename is the point, not cosmetics: the old name said which *database* it
+reached while the value behind it was the estate's BYPASSRLS role, and
+renaming forces the operator to set a new variable to a new credential
+rather than leave the old one in place under a name that no longer
+describes it.
+
+**Not done, and why.** The live example swap is unfinished: applying
+`introspection-role.sql` is DDL against the customer estate and is the
+operator's to run, never ours. The pilot is wired and **fails closed**
+today — verified end-to-end through the real CLI, which now exits
+`config_error` naming the file to run. The byte-identity comparison is
+pre-loaded for that moment: baseline `canonical_body_sha256 =
+6fcfc976ce104e33ca56a16670d78e57ab44950bdf6ee4b106dad8c20ce3463c` (29
+objects, last pull under `postgres`, 2026-07-20T21:24:54Z), recorded in
+`.secrets/connections.md` with the two remaining steps. This is D-71
+point 8(c), already named there as an M2 sign-off condition.
+
+*Suites at landing:* Python 486 passed / 13 skipped; core 140 passed
+across 14 files (MT, FL, SO, drill, JP-2); `tsc --noEmit` clean.
+
+## D-72 — Task 6.1 accepted; playbook deploy-gate amendment authorized
+
+Ruling **D-72** (owner, 2026-07-21) accepted the D-71 points 1–2 build,
+authorized one additive playbook amendment, and filed the pairing motion.
+
+**1. Renumbering affirmed.** Review #1's landing record keeps **D-67**;
+the review-#2 dispositions ruling is **D-71** everywhere, including in
+the owner's own prior references.
+
+**2. F2 accepted as landed** — the resolution-input design and the
+allow-set answer for mid-token revocation both, the latter noted as
+consistent with MCP-R1's per-call re-resolution (roles are resolved from
+the token on every call and never session-cached; the allow-set recheck
+is that same principle reaching the objects a token authorized rather
+than the identity holding it). MT-13 plus the mutation evidence are
+recorded as the property's tests: disabling the surface filter fails 6 of
+12 in `mcp-visibility.test.ts`, disabling the recheck fails MT-13 alone.
+
+*Design rationale recorded at the owner's instruction — the `fail()`
+near-miss.* The first draft of the execute-side refusal was built with
+`execute.ts`'s local `fail()` helper, which spreads its `extra` argument
+into **both** `meta` (the audit record) and `detail` (the caller-visible
+error payload). Passing the hidden FQNs through it would have shipped, in
+the one refusal whose entire purpose is non-disclosure, a response naming
+exactly what was hidden and why. Caught before it ran, but it is worth
+recording *why* it was easy to write: the helper's two sinks are a
+convenience that reads as one, and every prior refusal in that function
+wanted both. The shipped refusal is constructed inline for that reason,
+with a comment saying so at the call site. **General shape:** a helper
+that fans one input out to an internal sink and an external sink is
+comfortable until the first value that may only reach one of them —
+non-disclosure paths should not use fan-out helpers.
+
+**3. F3 accepted as landed:** the dual-attribute startup check
+(`rolsuper`, `rolbypassrls`), the catalog-only introspection role, and
+C-3 mode invariance upgraded from a determinism check into evidence for
+the swap (ddl-file as superuser vs live as a role with no table
+privileges, canonical bodies byte-identical).
+
+**4. Playbook amendment authorized (additive) — applied here.**
+`customer-onboarding-playbook.md` §13 gains gate item 9: three
+role/credential assertions — `contextlayer_exec` read-only at the
+database level, `contextlayer_introspect` neither SUPERUSER nor
+BYPASSRLS, and the `contextlayer-sync` PAT fine-grained/single-repo/
+contents+PR-write-only (P-H, D-66.7) — as three distinct identities with
+distinct secrets, none of them the estate's default `postgres`. The
+item's closing note makes the Supabase finding normative guidance:
+**check attributes, not role names**, because `rolsuper = false` alongside
+`rolbypassrls = true` is a real configuration and a name-based check
+passes exactly the connection the item exists to catch. Draft text from
+`PR-D71-F2-F3.md` adopted; spec diff leads its own PR
+(`PR-D72-PLAYBOOK-GATE.md`). No other spec touched.
+
+**5. Pairing motion filed** as playbook register item **OB-5**: a profile
+granting `execute_sql` must be paired with a database role scoped no
+wider than that profile's visible surface. Stated as a deployment
+obligation, not yet a mechanical gate item — D-71.1 made the KB map
+govern the execution surface, but the map is the gate and the database
+role is the wall, and nothing checks that the wall matches the gate.
+Wording at the next playbook revision; **load-bearing at the first
+customer with more than one execute-granted profile**, which is the first
+point at which the two surfaces can diverge.
+
+**6. M2 sign-off conditions restated.** (a) The two flagged spec
+contradictions pasted back for ruling — **still outstanding**, and the
+only one of the three that is neither landed nor an operator action; the
+items are D-69 interpretive rulings 12 (fault-ledger §5 self-contradiction
+on `schema_mismatch_at_execute`) and 13 (`statement_class` proposed as an
+additive capability §6 code). (b) Task 6.1 landed — **cleared** by D-71
+points 1–2. (c) Introspection role swapped live with byte-identity
+verified — **on the owner**; the pilot fails closed until then, and the
+baseline hash is recorded in `.secrets/connections.md`.

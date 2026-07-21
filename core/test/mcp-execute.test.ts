@@ -127,6 +127,7 @@ describe("MT-3 — execute_sql token enforcement (M-2, §5, G4)", () => {
         snapshotRef: `sha256:${rig.drill.verdict.canonical_body_sha256.replace(/^sha256:/, "")}`,
         subject: "alper-steward", // the dev IdP's subject form
         profile: "steward",
+        objects: ["drill.shop.customers"],
       },
       -1, // already expired at issue
     );

@@ -49,6 +49,50 @@ def mutate(snapshot: dict, name: str, fn, *, rehash: bool = True) -> dict:
     return out
 
 
+# --- least-privilege introspection role (D-71.2, F3) ---
+
+INTROSPECTION_ROLE_SQL = (
+    Path(__file__).resolve().parent.parent / "deploy" / "introspection-role.sql"
+)
+INTROSPECT_ROLE = "contextlayer_introspect"
+
+
+def provision_introspection_role(container: str, admin_dsn: str, password: str) -> str:
+    """Apply the shipped `deploy/introspection-role.sql` to a container and
+    return a DSN for the role it creates.
+
+    Container-backed live-mode tests connect through this rather than as
+    `postgres`, because since D-71.2 the connector refuses to introspect
+    over a SUPERUSER/BYPASSRLS connection — and because running those
+    tests over the same least-privilege role the customer gets is the
+    only way they evidence anything about the real posture. Provisioning
+    goes through the shipped artifact, never inline SQL (D-70).
+    """
+    import subprocess
+
+    sql = INTROSPECTION_ROLE_SQL.read_text(encoding="utf-8").replace("<PASSWORD>", password)
+    proc = subprocess.run(
+        [
+            "docker", "exec", "--interactive", container,
+            "psql", "--username", "postgres", "--dbname", "postgres",
+            "-v", "ON_ERROR_STOP=1", "--file", "-",
+        ],
+        input=sql.encode("utf-8"),
+        capture_output=True,
+        timeout=300,
+    )
+    assert proc.returncode == 0, (
+        "deploy/introspection-role.sql was rejected by postgres:\n"
+        + proc.stderr.decode("utf-8", "replace")[-3000:]
+    )
+    import psycopg.conninfo
+
+    parsed = psycopg.conninfo.conninfo_to_dict(admin_dsn)
+    parsed["user"] = INTROSPECT_ROLE
+    parsed["password"] = password
+    return psycopg.conninfo.make_conninfo(**parsed)
+
+
 # --- generator helpers (test_generator_*.py) ---
 
 

@@ -21,13 +21,23 @@ export interface VtokenPayload {
   snapshot_ref: string;
   subject: string;
   profile: string;
+  /**
+   * The allow-set (§5 amendment, D-71.1): every object FQN validation
+   * resolved this statement against. `execute_sql` re-checks each one
+   * against the caller's *current* visibility, which is the only
+   * mechanism that catches a visibility change made after issuance —
+   * `snapshot_ref` pins the facts, not the caller's rights.
+   */
+  objects: string[];
   iat: number;
   exp: number;
 }
 
 export type VerifyResult =
   | { ok: true; payload: VtokenPayload }
-  | { ok: false; code: "revalidate_required"; reason: string };
+  | { ok: false; code: "revalidate_required"; reason: string }
+  /** An allow-set member the caller may no longer see (§5 amendment). */
+  | { ok: false; code: "not_found"; reason: string; hidden: string[] };
 
 function b64url(data: Buffer | string): string {
   return Buffer.from(data).toString("base64url");
@@ -64,6 +74,7 @@ export async function issueValidationToken(
     snapshotRef: string;
     subject: string;
     profile: string;
+    objects: string[];
   },
   ttlS: number,
   now: number = Date.now(),
@@ -77,6 +88,7 @@ export async function issueValidationToken(
     snapshot_ref: binding.snapshotRef,
     subject: binding.subject,
     profile: binding.profile,
+    objects: [...binding.objects].sort(),
     iat,
     exp: iat + ttlS,
   };
@@ -91,8 +103,14 @@ export async function issueValidationToken(
 
 /**
  * The §5 verification: signature ∧ statement hash ∧ subject ∧
- * snapshot_ref current ∧ not expired. Any mismatch →
- * `revalidate_required`, never silent re-validation.
+ * snapshot_ref current ∧ not expired ∧ **every allow-set member still
+ * visible to the caller**. Any mismatch → `revalidate_required`, never
+ * silent re-validation; a hidden allow-set member → `not_found`, per
+ * M-4 (the D-71.1 amendment).
+ *
+ * `visible` is a required predicate rather than an optional extra: the
+ * one way to execute is through this function, so a caller that has not
+ * decided what the subject can see cannot get a token verified at all.
  */
 export async function verifyValidationToken(
   pool: pg.Pool,
@@ -102,6 +120,7 @@ export async function verifyValidationToken(
     system: string;
     subject: string;
     currentSnapshotRef: string;
+    visible: (fqn: string) => boolean;
   },
   now: number = Date.now(),
 ): Promise<VerifyResult> {
@@ -138,6 +157,24 @@ export async function verifyValidationToken(
   if (payload.system !== expected.system) return fail("token bound to a different system");
   if (payload.snapshot_ref !== expected.currentSnapshotRef) {
     return fail("snapshot advanced since validation");
+  }
+  // The allow-set (§5 amendment). Absent claim ⇒ the token predates the
+  // amendment: refuse rather than execute an unrechecked statement. The
+  // TTL makes that at most one re-validation.
+  if (!Array.isArray(payload.objects)) {
+    return fail("token carries no object allow-set");
+  }
+  // Visibility can change without the snapshot moving — the map lives in
+  // the KB, not the snapshot — so this is the check, and the only check,
+  // that catches a revocation landing after issuance.
+  const hidden = payload.objects.filter((fqn) => !expected.visible(fqn));
+  if (hidden.length > 0) {
+    return {
+      ok: false,
+      code: "not_found",
+      reason: `hidden by visibility map: ${hidden.join(", ")}`,
+      hidden,
+    };
   }
   return { ok: true, payload };
 }

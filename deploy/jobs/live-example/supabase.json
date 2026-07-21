@@ -4,7 +4,7 @@
   "connector": { "name": "postgres", "version_constraint": ">=0.2 <0.3" },
   "payload": {
     "config": { "system": "supabase", "mode": "live" },
-    "credentials": [{ "ref": "env://SUPABASE_DSN", "key": "dsn" }]
+    "credentials": [{ "ref": "env://CL_INTROSPECT_DSN", "key": "dsn" }]
   },
   "trigger": { "kind": "manual", "detail": "live" }
 }

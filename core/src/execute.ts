@@ -12,6 +12,14 @@
  *   way to execute without a token — the verification library is the
  *   same one `validate_sql` issues with (vtoken.ts), so enforcement
  *   cannot drift from issuance.
+ * - **F2 / D-71.1 visibility recheck.** The token's allow-set — the
+ *   objects validation resolved the statement against — is re-checked
+ *   against the caller's *current* visibility scopes. This is the check
+ *   that catches a role losing access between validate and execute: the
+ *   map lives in the KB, so a revocation moves `kb_ref` and leaves
+ *   `snapshot_ref` untouched, and the §5 snapshot pin sails straight
+ *   past it. A hidden member is `not_found`, worded as validation words
+ *   it (M-4 — the caller learns nothing from having held a token).
  * - **G2 / MCP-R8 guardrail injection.** Guardrails are computed
  *   server-side from the profile and the system's conventions and are
  *   *written over* whatever the client sent. Client-supplied guardrails
@@ -41,6 +49,7 @@ import { awaitJobResult, enqueue, EnqueueError } from "./queue.js";
 import { interactiveDeadlineS } from "./registry.js";
 import { getSyncSystem } from "./triggers.js";
 import { effectiveGuardrails } from "./valsql.js";
+import { fqnVisible } from "./visibility.js";
 import { verifyValidationToken } from "./vtoken.js";
 
 export interface ExecuteIdentity {
@@ -119,6 +128,8 @@ export interface ExecuteDeps {
   ws: KbState;
   identity: ExecuteIdentity;
   profile: Profile;
+  /** The caller's visibility scopes, resolved this call (D-71.1). */
+  scopes: string[];
   sessionId: string | null;
   auditId: string;
   intent?: string | null;
@@ -169,9 +180,33 @@ export async function executeRequest(
       system,
       subject: identity.subject,
       currentSnapshotRef,
+      // D-71.1: the allow-set is checked against visibility as it is
+      // *now*, not as it was when the token was minted.
+      visible: (fqn) => fqnVisible(ws, deps.scopes, fqn),
     },
   );
   if (!verified.ok) {
+    if (verified.code === "not_found") {
+      // M-4, both halves. The caller gets validation's exact words for an
+      // object that does not resolve and nothing else — note this does
+      // NOT go through `fail()`, which copies its extras into the
+      // caller-visible `detail` as well as into `meta`; the hidden FQNs
+      // belong in the audit record only.
+      const first = verified.hidden[0] ?? system;
+      return {
+        ok: false,
+        code: "not_found",
+        message: `object ${first} does not exist in the latest accepted snapshot`,
+        meta: {
+          ...decided,
+          error: "not_found",
+          stage: "visibility",
+          filtered: true,
+          hidden_objects: verified.hidden,
+        },
+        statementText: binding.text,
+      };
+    }
     return fail("revalidate_required", verified.reason, { stage: "token" });
   }
 

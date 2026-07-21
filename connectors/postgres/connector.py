@@ -30,7 +30,7 @@ from connectors.sdk import (
 )
 from connectors.postgres.catalog import introspect_connection
 from connectors.postgres.ephemeral import apply_ddl, ephemeral_postgres
-from connectors.postgres.executor import PostgresExecutor
+from connectors.postgres.executor import PostgresExecutor, RoleCheckFailed
 
 
 def _connect(dsn: str) -> psycopg.Connection:
@@ -50,11 +50,51 @@ def _connect(dsn: str) -> psycopg.Connection:
         raise SourceUnavailable(f"cannot reach postgres: {message}") from exc
 
 
+def check_introspection_role(conn: psycopg.Connection) -> dict:
+    """Refuse to introspect as a superuser-class role (D-71.2, F3).
+
+    Introspection reads `pg_catalog`, which is world-readable and not
+    privilege-filtered — so it needs neither SUPERUSER nor BYPASSRLS,
+    and holding them buys nothing while costing the RLS guarantee for
+    anything that later reads rows over this connection.
+
+    Checked at the start of every live snapshot job rather than once at
+    process start: the DSN is per-system and resolved at job time (J-4),
+    so "startup" for this connection *is* the job. Returns the role
+    facts on success; raises `RoleCheckFailed` naming the attributes
+    otherwise. Failing the whole job is correct under S-6 — a snapshot
+    is all-or-nothing, and one taken over an over-privileged connection
+    is not a snapshot we want to accept.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT current_user, rolsuper, rolbypassrls "
+            "FROM pg_roles WHERE rolname = current_user"
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise RoleCheckFailed("cannot read pg_roles for the current introspection role")
+        role, is_super, bypass_rls = row
+
+    held = [name for name, value in (("SUPERUSER", is_super), ("BYPASSRLS", bypass_rls)) if value]
+    if held:
+        raise RoleCheckFailed(
+            f"introspection role {role!r} holds {', '.join(held)}; introspection reads "
+            "pg_catalog and requires neither (D-71.2). Provision the dedicated role with "
+            "deploy/introspection-role.sql and point config.dsn/dsn_env at it. "
+            "Refusing to introspect."
+        )
+    return {"role": role, "superuser": is_super, "bypassrls": bypass_rls}
+
+
 class PostgresMetadata(MetadataProvider):
     def introspect(self, config: dict) -> IntrospectionResult:
         schemas = config.get("schemas")
         if config["mode"] == "live":
-            objects, props = self._introspect_dsn(self._live_dsn(config), schemas)
+            # The role check applies to the *customer's* connection only.
+            objects, props = self._introspect_dsn(
+                self._live_dsn(config), schemas, check_role=True
+            )
         else:  # "ddl-file" — the config schema admits no other mode
             ddl_files = [Path(p) for p in config["ddl_files"]]
             missing = [str(p) for p in ddl_files if not p.is_file()]
@@ -62,7 +102,11 @@ class PostgresMetadata(MetadataProvider):
                 raise ConfigError(f"DDL files not found: {', '.join(missing)}")
             with ephemeral_postgres(config["image"]) as (container, dsn):
                 apply_ddl(container, ddl_files)
-                objects, props = self._introspect_dsn(dsn, schemas)
+                # Deliberately unchecked: this is our own throwaway
+                # container, and applying the customer's DDL *requires*
+                # the superuser the check would refuse. Nothing customer-
+                # owned is reachable from it.
+                objects, props = self._introspect_dsn(dsn, schemas, check_role=False)
         return IntrospectionResult(
             system_class="sql", objects=objects, source_properties=props
         )
@@ -78,8 +122,12 @@ class PostgresMetadata(MetadataProvider):
         return dsn
 
     @staticmethod
-    def _introspect_dsn(dsn: str, schemas: list[str] | None) -> tuple[list[dict], dict]:
+    def _introspect_dsn(
+        dsn: str, schemas: list[str] | None, *, check_role: bool
+    ) -> tuple[list[dict], dict]:
         with _connect(dsn) as conn:
+            if check_role:
+                check_introspection_role(conn)
             try:
                 return introspect_connection(conn, schemas)
             except psycopg.OperationalError as exc:
