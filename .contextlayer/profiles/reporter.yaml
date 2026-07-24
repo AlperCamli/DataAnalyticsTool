@@ -1,9 +1,9 @@
-# Reporter profile (CP-4 / M1; execution added CP-6 / M2) —
-# platform-architecture §5 shape. The v1 pilot-user surface: read +
-# resolve + validate + execute; no publish until CP-7, no steward tools.
-# Enforcement is server-side on every call: the MCP server evaluates
-# (OIDC roles ∩ this allowlist) and injects `limits` itself — client
-# config can never widen access (M-3, MCP-R2/R4/R8).
+# Reporter profile (CP-4 / M1; execution added CP-6 / M2; publish added
+# CP-7 / M3) — platform-architecture §5 shape. The v1 pilot-user
+# surface: read + resolve + validate + execute + publish; no steward
+# tools. Enforcement is server-side on every call: the MCP server
+# evaluates (OIDC roles ∩ this allowlist) and injects `limits` itself —
+# client config can never widen access (M-3, MCP-R2/R4/R8).
 name: Reporter
 description: Read the context estate and produce validated SQL / API requests
 roles: [reporter]              # OIDC groups permitted to bind this profile
@@ -15,8 +15,17 @@ tools:
   # validation token from validate_sql, and runs under a database role that
   # is read-only at the DATABASE level (deploy/execution-role.sql, G3), not
   # merely a role we ask nicely to read.
+  #
+  # `publish_report:looker_studio` is target-qualified the same way
+  # (CP-7 / M3): publishing to any other target is denied server-side
+  # and audited. The artifact is validated before anything is enqueued
+  # (MT-10 refs, documented blend keys, F-7 re-validation), and the
+  # template-link path carries no credentials at all — the exec role's
+  # password is entered by a human in the Looker Studio UI, never by an
+  # agent, never in a URL.
   allow: [search_context, get_entity, get_table, get_metric, get_lineage,
-          validate_sql, execute_sql:supabase, report_freshness, flag_gap]
+          validate_sql, execute_sql:supabase, publish_report:looker_studio,
+          report_freshness, flag_gap]
 context:
   claude_md_fragment: |
     Prefer certified metrics from metrics/. Warn on stale or draft docs;
