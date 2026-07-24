@@ -2782,3 +2782,55 @@ seeding is fixture-side only. And `helpers.ts` loads vitest `inject`
 lazily (gated on `CORE_TEST_DATABASE_URL`) so the module also loads
 outside vitest under vite-node for the standalone launcher — vitest path
 unchanged, suite green.
+
+## D-80 — CP-5 closure by amendment + CP-7 entry (owner ruling)
+
+**1. BASELINE v1 SKIPPED by explicit decision.** CP-5's gate is amended:
+deliverable 6 removed; gate evidence = the AS-9/10/12 behavioral
+scenarios + the smoke journey (full-loop proof, RB-01 enriched).
+Consequences recorded, not relitigated: the three-condition comparison
+remains unmeasured; MC-1's trigger ("recall is the accuracy bottleneck")
+cannot be evaluated and stays open; the standing constraint from the
+CP-2 deferral PERSISTS — **no quantitative KB-value claims in any
+customer or demo material until a baseline exists.** Register item
+BASELINE-1 filed (master register, plan-level section; home ruling =
+this entry): full baseline via the benchmark skill; trigger: before CP-8
+go/no-go, or before the first external customer conversation that would
+benefit from numbers, whichever first. The built rig makes this cheap to
+revive (driver + preflight + conditions all landed and re-runnable).
+
+**2. RISK ACCEPTANCES recorded, owner: AlperCamli.** (a) Customer KB
+remains public by choice — owner's own data, confidentiality waived;
+revisit before any real second customer. (b) Leaked exec DSN +
+service-account key: rotation deferred; trigger: before CP-8 sign-off or
+any non-localhost exposure of the estate, whichever first.
+
+**3. EMPTY-TABLE CAUSE CONFIRMED:** RLS on base tables; contextlayer_exec
+correctly lacks BYPASSRLS. The CP-6 "reporting views over RLS" decision
+is activated as CP-7 task 7.0 (views drafted by the session, applied by
+the owner as customer DBA).
+
+**4. CP-5 CLOSES on:** rig + both `cl-baseline-*` scratch repos torn
+down; AS-10 re-run under the refreshed execute-granted reporter
+(D-79.2); `cp5-skills` landed on `main` per the D-74.2 convention.
+
+**5. CP-7 ENTRY CONDITION:** task 7.0 views applied and flowing through
+the product path (snapshot → additive drift PR → merged) before the
+publisher demo depends on them.
+
+**Execution record (2026-07-24):**
+- AS-10 re-run: already on record as pass under the refreshed reporter
+  (D-79) — nothing further to run.
+- Baseline rig: no `compose.baseline` containers or volumes remain on
+  the pilot machine (`cl-fixture-pg` stays — it is the fixture
+  deployment, gate-evidence infrastructure per D-78, not the rig).
+- Scratch repos: **pending one operator action.** The `gh` token lacks
+  the `delete_repo` scope and the refresh flow is interactive. Owner
+  runbook: `gh auth refresh -h github.com -s delete_repo` then
+  `gh repo delete AlperCamli/cl-baseline-machine-kb --yes` and
+  `gh repo delete AlperCamli/cl-baseline-nokb --yes`.
+- `cp5-skills` landed on `main`: merge `b663434` (no-ff), main current
+  through M2 + CP-5 in one landing.
+- BASELINE-1 added to the master register; MC-1's revisit trigger
+  re-pointed at it (was "Baseline v1 … CP-5 per D-62", which D-80.1
+  amends away).

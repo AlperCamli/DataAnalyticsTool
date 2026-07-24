@@ -62,7 +62,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 
 | ID | Item | Status | Default | Revisit trigger |
 |---|---|---|---|---|
-| MC-1 | Semantic search (embeddings) | Open | Lexical + aliases only (M-6) | Baseline v1 (CP-5 per D-62; was CP-2) shows recall is the accuracy bottleneck |
+| MC-1 | Semantic search (embeddings) | Open | Lexical + aliases only (M-6) | Baseline (BASELINE-1; v1 skipped at CP-5 per D-80.1) shows recall is the accuracy bottleneck |
 | MC-2 | Validation-token TTL | Open | 300 s | Revalidation friction in long sessions |
 | MC-3 | Very-wide-table responses | Open | Full columns; paginate at 300 with continuation | First SAP-scale estate |
 | MC-4 | Rate limits per profile class vs per identity | Open | Global per-identity defaults, profile-overridable | Pilot telemetry |
@@ -107,3 +107,11 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | OB-2 | Entity draft authorship (skill vs R5) | Open | Skill-drafted, R5-paired, customer-certified | After 2–3 onboardings |
 | OB-3 | Staged drift drill as shipped fixture | Open | Ship a standard drill fixture with the product | Build during phase 4 |
 | OB-4 | Onboarding duration targets | Open | Measure first three; no promises before data | Third onboarding |
+
+## Plan-level (BASELINE-*)
+
+Items whose home is the development plan rather than a spec; home ruling recorded in `DECISIONS.md`.
+
+| ID | Item | Status | Default | Revisit trigger |
+|---|---|---|---|---|
+| BASELINE-1 | Full KB-value baseline via the benchmark skill (three-condition comparison; D-80.1 — v1 skipped at CP-5, standing constraint: no quantitative KB-value claims in customer or demo material until it exists) | Open | Rig re-runnable as landed (driver + preflight + conditions); no numbers claimed meanwhile | Before CP-8 go/no-go, or before the first external customer conversation that would benefit from numbers, whichever first |
