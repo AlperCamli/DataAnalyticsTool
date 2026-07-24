@@ -1,0 +1,56 @@
+{
+  "_comment": [
+    "Looker Studio publisher connection for the pilot (CP-7/M3).",
+    "Register with: node dist/cli.js sync systems set jobs/live/looker-studio-connection.json",
+    "",
+    "template_report_id: create the template report once in Looker Studio",
+    "(five pages exercising the formats §4.4 registry: table, line, bar,",
+    "scorecard, pivot — the FM-2 note records what it actually exercises),",
+    "then take the id from its URL (lookerstudio.google.com/reporting/<id>)",
+    "and declare the exercised kinds in template_visual_kinds below.",
+    "",
+    "sources: keys are estate system names as artifact queries name them;",
+    "each alias MUST equal the data-source alias inside the template —",
+    "the Linking API swaps sources by alias. The supabase source points",
+    "at the reporting views through contextlayer_exec (SELECT on",
+    "reporting.* only, deploy/reporting-views.sql); its password is",
+    "entered by the human in the Looker Studio UI when prompted —",
+    "credentials are empty here BY DESIGN (no secret ever rides a URL",
+    "or this registration; JC-8).",
+    "",
+    "Host: use the Supabase pooler host if direct :5432 is unreachable",
+    "from Google's connector infrastructure; pooler usernames take the",
+    "<role>.<project_ref> form (see .secrets/connections.md)."
+  ],
+  "system": "looker_studio",
+  "connector": { "name": "looker_studio", "version_constraint": ">=0.1 <0.2" },
+  "payload": {
+    "config": {
+      "system": "looker_studio",
+      "template_report_id": "<REPLACE-template-report-id>",
+      "template_visual_kinds": ["table", "line", "bar", "scorecard", "pivot"],
+      "sources": {
+        "supabase": {
+          "kind": "postgres",
+          "alias": "supabase_reporting",
+          "host": "<REPLACE-db-host>",
+          "port": 5432,
+          "database": "postgres",
+          "username": "contextlayer_exec"
+        },
+        "ga4": {
+          "kind": "ga4",
+          "alias": "ga4_main",
+          "property_id": "000000000"
+        },
+        "gsc": {
+          "kind": "gsc",
+          "alias": "gsc_main",
+          "site_url": "sc-domain:example-estate.com",
+          "table_type": "SITE_IMPRESSION"
+        }
+      }
+    },
+    "credentials": []
+  }
+}

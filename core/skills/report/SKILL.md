@@ -138,6 +138,61 @@ the user's stated discrepancy (SK-5), then offer to revise. This is
 detector class 3 and it is the most valuable signal the system collects:
 it is the only place a wrong-but-plausible answer gets caught.
 
+## S7 — Publish (optional; checkpoint CP-R5)
+
+Only on user request **and** profile permission — `publish_report` with
+your target appears in `tools/list` or it does not; when it does not,
+publishing is refused server-side regardless of what you attempt. Say
+what you can actually do (S1 already set this ceiling) and deliver
+validated SQL + results instead.
+
+**CP-R5 [A]: never publish results the user has not confirmed at
+CP-R4.** The server cannot check whether a human nodded; this checkpoint
+is yours alone, which is exactly why it is absolute.
+
+Behavior follows the effective `create_report` flag read at S1. For a
+`template_link` target (Looker Studio):
+
+1. **Backing first (SK-6).** Every SQL query in the artifact must carry
+   `backing: {mode: "reporting_view", ref: "<schema.view>"}` — the
+   adapter refuses `direct` SQL backing, because a raw SELECT is not a
+   thing a Looker data source can point at. If the view does not exist:
+   produce the DDL, attach it via `flag_gap(kind: capability_gap)`
+   routed to the data team (the DDL rides in the ledger entry's
+   detail), tell the user their data team received it, and stop the
+   publish leg. Never point backing at a base table instead.
+2. **Mint the artifact `id` once** (`ra-<uuid4>`) the first time a
+   report is published, and reuse it for every revision of the same
+   report (F-5): the server assigns revisions per content hash, and
+   republish updates the same dashboard identity rather than minting a
+   new one. A fresh id per edit is how duplicate dashboards happen.
+3. **Call `publish_report(artifact, target)`**, then:
+   - relay the returned link, and relay `pending_human_steps`
+     **verbatim** (PB-3) — they are the honest remainder of the
+     journey, not boilerplate to summarize away;
+   - surface `semantics.trust_notes` **next to the link**. On the
+     template-link path the human creates the report copy themselves,
+     so the disclosures travel in the artifact (persisted server-side
+     with the publish) and in your handoff text — a stale/contaminated
+     warning that lives only in chat scrollback fails the formats
+     spec's disclosure rule;
+   - relay `detail.visual_substitutions` when present: the template's
+     fidelity is honest, not assumed (PB-4).
+4. **Handle refusals as the system working, not as obstacles:**
+   - `revalidate_required` — the snapshot moved since drafting. Tell
+     the user, re-validate (S4), re-emit, retry once.
+   - `config_error` naming an unresolved ref — the artifact cites
+     context the KB lacks: K-FAIL with the most specific kind
+     (`missing_doc` / `uncertified_metric`).
+   - `config_error` on an undocumented blend key — call
+     `flag_gap(kind: missing_join_path)` naming the entity doc and the
+     columns, relay `routed_to`, and **do not retry with an improvised
+     key**. Blends ride documented entity mappings or they do not ride.
+   - `permission_denied` — the target is outside your profile. Say so
+     plainly; do not speculate about targets you cannot see (M-3).
+5. Publishes are rate-limited (4/hour per identity, §7 — source
+   protection): batch revisions rather than republishing per tweak.
+
 ### The report artifact
 
 Emit the artifact per the formats spec §4. The fields that carry the
@@ -145,12 +200,13 @@ grounding:
 
 ```json
 { "artifact_version": "1",
+  "id": "ra-<uuid4, minted once, stable across revisions (F-5)>",
   "title": "…",
   "kb_ref": "<commit-sha>",
   "queries": [ {"name": "…", "system": "supabase",
                 "request": {"dialect": "sql", "statement": "…"},
                 "validated_against": "sha256:…",
-                "backing": {"mode": "direct"}} ],
+                "backing": {"mode": "reporting_view", "ref": "reporting.v_…"}} ],
   "semantics": { "metrics": [ {"column": "net_total",
                                "ref": "metrics/net-revenue.md",
                                "certified": true} ],

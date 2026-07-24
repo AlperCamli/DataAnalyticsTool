@@ -2905,3 +2905,79 @@ sign-off still requires green suites at the sign-off commit. The KB
 repo is unchanged: PRs + KB CI + code-owner review remain (it has the
 remote and the enforcement). `cp7-m3` fast-forwarded into `main`
 (`8f04455`) and deleted under this ruling.
+
+## D-83 — CP-7 publisher build decisions (M3, 2026-07-24)
+
+Publisher capability + Looker Studio template-link adapter +
+`publish_report` + report-skill S7, built per capability §8, formats
+§4/§4.6, MCP §6.8. The decisions that were genuinely mine to make, on
+record:
+
+**1. Publish payload members are first-class `Job` fields** (`artifact`,
+`target`) — additive on the SDK dataclass and the service's payload
+mapping, mirroring how `execute` carries `request`/`guardrails`.
+
+**2. Template-link "created" identity.** In template_link mode nothing
+exists at Google until a human clicks, so `created[0]` is
+`{type: "template_link", id: "tl-<sha256(artifact.id ‖ target)[:16]>", url}` —
+deterministic, stable per (artifact.id, target) (PB-2), revision-blind
+(a revised artifact updates the same identity, F-5). The F-4 report
+node is `<target>.report.<that id>`: it represents the published link
+artifact, the only stable object this platform tier yields. Honest,
+recorded, revisit if a full-mode adapter arrives.
+
+**3. Linking API parameter names are pinned in one table**
+(`connectors/looker_studio/publisher.py _SOURCE_PARAMS`), from the
+published Linking API docs. They are externally owned facts; the live
+M3 gate verifies them by opening a real link, and a drifted name
+degrades softly — the human completes that field in the Looker UI,
+which template_link journeys already require (PB-3 steps say so).
+
+**4. MT-10 carries a certification-honesty check:** an artifact
+claiming `certified: true` against a doc whose status is not
+`verified` is refused (`config_error`). Reading of MT-10's "may not
+cite context that doesn't exist" — certification the KB never granted
+is exactly such a citation.
+
+**5. Undocumented-blend-key ledger path.** The server refuses with the
+actionable error naming the entity doc and its documented keys; the
+LEDGER entry arrives via the report skill's
+`flag_gap(kind: missing_join_path)` (SKILL.md S7.4), class-2 provenance
+honest — the server does not synthesize a class-2 event no agent
+filed, and no new class-1 rule is invented (the CP-7 fence: existing
+classes only). `guardrail_pattern`'s sweep now also reads
+`publish_report` audit rows — same rule, honest inclusion.
+
+**6. F-7 re-validation is token-less** (`validateRequest`
+`issueToken: false`): a publish re-validates every query against the
+caller's visible surface but never mints an execution right.
+
+**7. Publish responses are §8.2-verbatim plus additive envelope
+fields:** `artifact: {id, revision, content_hash}` (so the skill can
+cite the server-assigned revision) and the house `refs` envelope.
+
+**8. Graph-only drift runs.** Gateway attestations pending with no
+snapshot change lift the pipeline's no-op short-circuit and run the
+lineage stage alone — F-4 nodes land as their own KB PR. `graph.json`
+gains an additive `inputs` entry `{kind: "gateway", attestations: N}`;
+report nodes are `resolved: true` with no `doc` (the `_node` doc path
+now keys on schema presence). Determinism: the attestation export is
+ordered, `generated_at` stays a function of snapshots alone (FG-1
+re-asserted by test).
+
+**FM-2 note (which visual kinds the shipped template exercises):** the
+mechanism is config-declared — `template_visual_kinds` on the
+connection is what the adapter enforces substitutions against (PB-4).
+The pilot template should exercise all five registry kinds (the seed
+slate needs: line RB-01/09, pivot RB-02/06 (+RB-04), table RB-03, bar
+RB-05, scorecard RB-08/10; RB-07's `other:funnel` maps to bar/pivot
+with a recorded substitution). To be filled with the template's actual
+id + kinds at operator template creation; the deploy example
+(`deploy/jobs/live-example/looker-studio-connection.json`) declares all
+five as the target state.
+
+**Rollout state:** product reporter profile grant = KB PR #23 (steward
+merges); fixture reporter already tracks it (D-79 watch-note). Suites
+at this entry: python 578 passed (+13 env-gated skips; docker-gated
+postgres suites deselected, run separately and green incl.
+`test_reporting_views_sql.py` 8/8), TS 167 passed across 17 files.

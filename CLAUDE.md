@@ -23,10 +23,14 @@ trust signals. First deployment: Supabase + GA4 + GSC → Looker Studio.
   (reporting views over RLS, D-80.3/D-81): delta DDL drafted in
   `deploy/reporting-views.sql`, awaiting operator apply as customer
   DBA (we never run DDL against the customer estate), then manual
-  sync → additive drift PR → lineage → enrich-the-hot-views, before
-  any publisher work. M1's live-demo gate remains open (PR-CP4-M1.md);
-  M2's pending two-machine demo happens as part of the M3 gate demo,
-  through these views.
+  sync → additive drift PR → lineage → enrich-the-hot-views. The
+  publisher stack is BUILT and fixture-green (D-83): SDK publish
+  capability, Looker Studio template-link adapter, `publish_report`
+  in the MCP server (MT-10/F-7/F-5/F-4), report-skill S7; live path
+  gated on the 7.0 views + operator template creation + connection
+  registration + KB PR #23 (reporter publish grant). M1's live-demo
+  gate remains open (PR-CP4-M1.md); M2's pending two-machine demo
+  happens as part of the M3 gate demo, through these views.
 
 ## Engineering norms
 - Conformance tests are the definition of done. Snapshot work is done
