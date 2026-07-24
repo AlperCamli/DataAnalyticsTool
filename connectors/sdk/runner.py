@@ -27,6 +27,8 @@ from connectors.sdk.providers import (
     Guardrails,
     Identity,
     IntrospectionResult,
+    PublishRequest,
+    PublishResult,
 )
 from connectors.sdk.redact import redact_deep, redact_text
 
@@ -50,6 +52,9 @@ class Job:
     request: dict | None = None
     guardrails: dict | None = None
     identity: dict | None = None
+    # `publish` payload members (capability §8.2); unused elsewhere.
+    artifact: dict | None = None
+    target: str | None = None
 
     @classmethod
     def local(cls, config: dict) -> "Job":
@@ -100,6 +105,8 @@ def run_job(connector: Connector, job: Job, *, captured_at: str | None = None) -
     """Execute one job, dispatched by type."""
     if job.type == "execute":
         return _run_execute(connector, job)
+    if job.type == "publish":
+        return _run_publish(connector, job)
     if job.type != "snapshot":
         raise ValueError(f"no engine for job type {job.type!r} in this SDK version")
 
@@ -252,5 +259,112 @@ def _run_execute(connector: Connector, job: Job) -> JobOutcome:
     logger.info(
         "job %s: %d rows (truncated=%s) in %dms",
         job.job_id, result.row_count, result.truncated, result.duration_ms,
+    )
+    return JobOutcome(status="succeeded", result=result.to_json())
+
+
+def _run_publish(connector: Connector, job: Job) -> JobOutcome:
+    """The `publish` engine (capability §8, job class interactive).
+
+    Same interactive posture as `execute` (quota is terminal, never a
+    deferral — the caller is blocked on this result), plus two §8.2
+    gates the engine owns so no adapter can forget them:
+
+    - `artifact_version` outside the adapter's declared support fails
+      with capability code `artifact_version_unsupported` before the
+      adapter parses a byte of the artifact;
+    - PB-3: a non-`full` result without `pending_human_steps` is an
+      adapter contract bug and fails loudly here rather than shipping a
+      journey that quietly overstates what happened.
+    """
+    manifest = connector.manifest
+    publisher = connector.handlers.get("publish")
+    if publisher is None:
+        return JobOutcome(
+            status="failed",
+            error=_job_error(
+                "config_error",
+                f"connector {manifest.name!r} does not declare the publish capability",
+                retryable=False,
+            ),
+        )
+    try:
+        request = PublishRequest.parse(job.artifact, job.target)
+    except ValueError as exc:
+        return JobOutcome(
+            status="failed",
+            error=_job_error("config_error", str(exc), retryable=False),
+        )
+
+    supported = getattr(publisher, "SUPPORTED_ARTIFACT_VERSIONS", ("1",))
+    if request.artifact_version not in supported:
+        return JobOutcome(
+            status="failed",
+            error=_job_error(
+                "config_error",
+                f"artifact_version {request.artifact_version!r} unsupported by "
+                f"{manifest.name!r} (supports: {', '.join(supported)})",
+                retryable=False,
+                detail={"capability_code": "artifact_version_unsupported"},
+            ),
+        )
+
+    identity = Identity.parse(job.identity)
+    flags = dict(manifest.capabilities.get("publish", {}))
+    logger.info(
+        "job %s: publishing artifact=%s target=%s connector=%s@%s subject=%s",
+        job.job_id, request.artifact.get("id"), request.target,
+        manifest.name, manifest.version, identity.subject,
+    )
+    try:
+        result = publisher.publish(job.config, request, identity, flags)
+        if not isinstance(result, PublishResult):
+            raise TypeError(
+                f"publish must return PublishResult, got {type(result).__name__}"
+            )
+    except QuotaExceeded as exc:
+        logger.info("job %s: quota exhausted (%s)", job.job_id, exc)
+        return JobOutcome(
+            status="failed",
+            error=_job_error(
+                "guardrail",
+                str(exc),
+                retryable=False,
+                detail={
+                    **dict(exc.detail),
+                    "capability_code": "quota_exhausted",
+                    "retry_after_s": exc.retry_after_s,
+                },
+            ),
+        )
+    except ConnectorError as exc:
+        logger.warning("job %s: failed %s (%s)", job.job_id, exc.code, redact_text(str(exc)))
+        return _failed(exc)
+    except Exception as exc:
+        logger.warning("job %s: failed internal (%s)", job.job_id, redact_text(repr(exc)))
+        return JobOutcome(
+            status="failed",
+            error=_job_error(
+                "internal",
+                f"{type(exc).__name__}: {exc}",
+                retryable=True,
+                detail={"traceback": traceback.format_exc()},
+            ),
+        )
+
+    if result.mode != "full" and not result.pending_human_steps:
+        return JobOutcome(
+            status="failed",
+            error=_job_error(
+                "internal",
+                f"adapter returned mode={result.mode!r} without pending_human_steps "
+                "(PB-3: mandatory whenever mode is not 'full')",
+                retryable=False,
+            ),
+        )
+
+    logger.info(
+        "job %s: published mode=%s created=%d pending_steps=%d",
+        job.job_id, result.mode, len(result.created), len(result.pending_human_steps),
     )
     return JobOutcome(status="succeeded", result=result.to_json())

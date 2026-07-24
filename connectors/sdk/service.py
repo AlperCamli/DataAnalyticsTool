@@ -83,7 +83,7 @@ CREDENTIAL_CONFIG_KEYS: dict[str, str] = {
 }
 
 # Job types this SDK can execute (run_job dispatches by type).
-EXECUTABLE_TYPES = ("snapshot", "execute")
+EXECUTABLE_TYPES = ("snapshot", "execute", "publish")
 
 
 class RunnerConfigError(Exception):
@@ -423,6 +423,9 @@ class Runner:
                         request=payload.get("request"),
                         guardrails=payload.get("guardrails"),
                         identity=payload.get("identity"),
+                        # Interactive `publish` members (capability §8.2).
+                        artifact=payload.get("artifact"),
+                        target=payload.get("target"),
                     ))
                 ),
                 daemon=True, name=f"work-{job_id}",

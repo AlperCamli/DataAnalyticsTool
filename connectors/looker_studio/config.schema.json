@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["system", "template_report_id", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "system": {
+      "type": "string",
+      "description": "Target name this connection serves (the publish_report target qualifier), e.g. looker_studio."
+    },
+    "template_report_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Report id of the pre-built Looker Studio template this connection links against (the c.reportId Linking API parameter)."
+    },
+    "report_name_prefix": {
+      "type": "string",
+      "description": "Optional prefix for r.reportName ahead of the artifact title."
+    },
+    "template_visual_kinds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["table", "line", "bar", "scorecard", "pivot"] },
+      "description": "Visual kinds the shipped template actually exercises (formats spec registry v1). Artifact visuals outside this set are recorded as substitutions (PB-4), never silently absorbed."
+    },
+    "sources": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Per-system data-source wiring. Keys are estate system names as they appear in artifact queries[].system; each entry names the template's data-source alias to prefill.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["kind", "alias"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "enum": ["postgres", "ga4", "gsc"] },
+          "alias": { "type": "string", "minLength": 1 },
+          "host": { "type": "string" },
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "database": { "type": "string" },
+          "username": { "type": "string" },
+          "property_id": { "type": "string" },
+          "site_url": { "type": "string" },
+          "table_type": { "enum": ["SITE_IMPRESSION", "URL_IMPRESSION"] }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+# Looker Studio publisher adapter (CP-7/M3, capability spec §8).
+#
+# Flag values are the spec's own reference declaration for Looker
+# Studio, verbatim (§8.1) — declared honestly, not aspirationally:
+# no report/dataset API write access exists on this platform tier, so
+# create_report is template_link and create_dataset is "no"; agent SQL
+# reaches dashboards only through reporting views (sql_backing: views,
+# the task 7.0 pattern); cross-system reports ride Looker blending on
+# entity-documented keys (cross_source: blending, formats spec §4.5).
+#
+# Values are quoted where YAML 1.1 would otherwise read them as
+# booleans ("no") — the manifest schema pins the §8.1 registry enums
+# and rejects the unquoted form loudly.
+name: looker_studio
+version: 0.1.0
+protocol_version: 1
+snapshot_version: "1"
+capabilities:
+  publish:
+    create_report: template_link
+    create_dataset: "no"
+    sql_backing: views
+    cross_source: blending
+    scheduled_refresh: "no"
+    git_integration: "no"
+config_schema: ./config.schema.json
+# No credentials: the template-link path builds a prefilled Linking API
+# URL and never calls a Google API. The human completes authentication
+# (and the database password) in the Looker Studio UI — deliberately,
+# so no secret ever rides a URL or this connector's config (JC-8).
+credentials: []
+rate_limit: { strategy: none }

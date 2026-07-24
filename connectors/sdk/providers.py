@@ -216,3 +216,85 @@ class QueryExecutor(ABC):
         """Optional startup check, run before the executor serves any
         traffic. Raise `ConfigError` to refuse service — the postgres
         executor uses this to verify its role cannot write (G3)."""
+
+
+@dataclass(frozen=True)
+class PublishRequest:
+    """§8.2 payload members the adapter consumes.
+
+    The artifact is opaque-but-versioned to this layer: the engine gates
+    on `artifact_version` against the adapter's declared support
+    (capability code `artifact_version_unsupported`), and everything
+    else about its interior is the formats spec's business — the server
+    validated it before enqueue (F-7/MT-10); the adapter re-checks only
+    what it structurally depends on (defense in depth, CI-3 spirit).
+    """
+
+    artifact: dict
+    target: str
+
+    @classmethod
+    def parse(cls, artifact: object, target: object) -> "PublishRequest":
+        if not isinstance(artifact, dict):
+            raise ValueError("payload.artifact must be an object")
+        if not isinstance(target, str) or not target:
+            raise ValueError("payload.target must be a non-empty string")
+        return cls(artifact=artifact, target=target)
+
+    @property
+    def artifact_version(self) -> str | None:
+        version = self.artifact.get("artifact_version")
+        return version if isinstance(version, str) else None
+
+
+@dataclass(frozen=True)
+class PublishResult:
+    """§8.2 result. PB-2: every created object carries a stable id +
+    URL; PB-3: `pending_human_steps` is mandatory whenever
+    `mode != "full"` (the engine enforces it, so a forgetful adapter is
+    a loud failure rather than a silently misleading journey); PB-4:
+    visual-kind substitutions ride in `detail.visual_substitutions`.
+    """
+
+    mode: str  # "full" | "template_link" | "instructions"
+    created: list[dict]
+    pending_human_steps: list[str]
+    backing: list[dict]
+    detail: dict
+
+    def to_json(self) -> dict:
+        return {
+            "mode": self.mode,
+            "created": self.created,
+            "pending_human_steps": self.pending_human_steps,
+            "backing": self.backing,
+            "detail": self.detail,
+        }
+
+
+class Publisher(ABC):
+    """Handler for job type `publish` (capability `publish`).
+
+    Duties are normative in capability spec §8: mode consistent with
+    the manifest's declared flags (PB-1 — attempting beyond them is
+    `config_error`, a core/release bug, not a runtime surprise);
+    idempotency per `(artifact.id, target)` (PB-2/CC-7); mandatory
+    `pending_human_steps` off the `full` path (PB-3); substitutions
+    recorded, never silent (PB-4).
+    """
+
+    #: artifact_version values this adapter can parse (§8.2 gate).
+    SUPPORTED_ARTIFACT_VERSIONS: tuple[str, ...] = ("1",)
+
+    @abstractmethod
+    def publish(
+        self,
+        config: dict,
+        request: PublishRequest,
+        identity: Identity,
+        flags: dict,
+    ) -> PublishResult:
+        """Publish one artifact to `request.target` and return the §8.2
+        result. `flags` is the manifest's `capabilities.publish` block —
+        the static side of CI-5; a tenant probe may only ever narrow it,
+        so an adapter honoring `flags` never overstates."""
