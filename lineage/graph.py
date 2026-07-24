@@ -101,7 +101,9 @@ def merge_attestations(attestations: list[dict]) -> tuple[list[dict], list[dict]
 
 def _node(fqn: str, meta: dict) -> dict:
     node = {"id": fqn, "node_kind": meta["kind"], "resolved": meta["resolved"]}
-    if meta["resolved"]:
+    # BI-side nodes (F-4: report/datasource, written from publish audit)
+    # carry no schema and have no machine doc — resolved, doc-less.
+    if meta["resolved"] and meta.get("schema"):
         # KB machine-doc path, computed from the snapshot + naming rules
         # (single-sourced from generator.naming) — never by reading the
         # KB tree (D-42.9). The generator guarantees the doc exists for
@@ -114,8 +116,16 @@ def _node(fqn: str, meta: dict) -> dict:
     return node
 
 
-def build_graph(snapshots: list[dict]) -> dict:
-    """Snapshots in, `lineage/graph.json` document out (sql-parse only).
+def build_graph(snapshots: list[dict], gateway_attestations: list[dict] | None = None) -> dict:
+    """Snapshots in, `lineage/graph.json` document out.
+
+    `gateway_attestations` (CP-7, F-3/F-4) are pre-shaped attestation
+    dicts the core exported from publish audit — tier `pipeline-tool`,
+    ref ``gateway:<audit-id>`` — merged through the same
+    `merge_attestations` entry point as the sql-parse producer, exactly
+    as that function was shaped for (D-42.10). Determinism holds: the
+    export is ordered, and `generated_at` stays a function of the
+    snapshot inputs alone.
 
     `generated_at` is stamped with the latest `captured_at` among the
     inputs; the writer's byte-no-op rule (D-39) decides whether that
@@ -129,11 +139,16 @@ def build_graph(snapshots: list[dict]) -> dict:
     for snapshot in sorted(snapshots, key=lambda s: s["system"]):
         snapshot_ref[snapshot["system"]] = snapshot_body_hash(snapshot)
         attestations.extend(snapshot_attestations(snapshot))
+    gateway = list(gateway_attestations or [])
+    attestations.extend(gateway)
     nodes, edges = merge_attestations(attestations)
+    inputs: list[dict] = [{"kind": "sql-parse", "snapshot_ref": snapshot_ref}]
+    if gateway:
+        inputs.append({"kind": "gateway", "attestations": len(gateway)})
     return {
         "graph_version": "1",
         "generated_at": max(s["captured_at"] for s in snapshots),
-        "inputs": [{"kind": "sql-parse", "snapshot_ref": snapshot_ref}],
+        "inputs": inputs,
         "nodes": nodes,
         "edges": edges,
     }

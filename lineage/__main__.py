@@ -30,6 +30,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="snapshot JSON file(s), one per system")
     parser.add_argument("--kb", required=True, metavar="DIR",
                         help="KB root; writes DIR/lineage/graph.json")
+    parser.add_argument("--attestations", action="append", default=[],
+                        metavar="FILE",
+                        help="gateway attestation JSON file(s) exported by the "
+                             "core (list of LP-shaped entries; F-3/F-4)")
     args = parser.parse_args(argv)
 
     docs = []
@@ -47,8 +51,21 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         docs.append(doc)
 
+    gateway: list[dict] = []
+    for path in args.attestations:
+        try:
+            with open(path, encoding="utf-8") as f:
+                entries = json.load(f)
+        except (OSError, ValueError) as e:
+            print(f"error: cannot read attestations {path}: {e}", file=sys.stderr)
+            return 1
+        if not isinstance(entries, list):
+            print(f"error: {path}: attestations file must be a JSON list", file=sys.stderr)
+            return 1
+        gateway.extend(entries)
+
     try:
-        graph = build_graph(docs)
+        graph = build_graph(docs, gateway_attestations=gateway)
     except (LineageParseError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
@@ -58,7 +75,8 @@ def main(argv: list[str] | None = None) -> int:
     state = "written" if changed else "unchanged (byte-identical, §3.1)"
     print(
         f"{out}: {state} — nodes={len(graph['nodes'])} edges={len(graph['edges'])} "
-        f"systems={sorted(k for i in graph['inputs'] for k in i['snapshot_ref'])}"
+        f"systems={sorted(k for i in graph['inputs'] for k in i.get('snapshot_ref', {}))}"
+        + (f" gateway_attestations={len(gateway)}" if gateway else "")
     )
     return 0
 

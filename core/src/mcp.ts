@@ -49,6 +49,7 @@ import {
 } from "./ledger.js";
 import type { Identity, OidcClient } from "./oidc.js";
 import { parseProfile, profilePermitted, toolAllowed, type Profile } from "./profiles.js";
+import { publishReport } from "./publish.js";
 import { categoryForTool, type RateLimiter } from "./ratelimit.js";
 import { buildIndex, search, type IndexEntry } from "./searchindex.js";
 import { humanTrust, machineTrust, refsEnvelope, type TrustBlock } from "./trust.js";
@@ -170,7 +171,8 @@ const TOOL_DEFS: { name: string; description: string; inputSchema: Record<string
   },
   {
     name: "publish_report",
-    description: "Publish a report artifact to a configured target. Arrives with the CP-6/CP-7 publish path.",
+    description:
+      "Publish a report artifact (formats spec §4) to a configured target. The artifact is validated before anything is enqueued: every cited metric/dimension/entity ref must resolve, blend keys must be the entity doc's documented mappings, and every query is re-validated against the current snapshot (a moved snapshot returns revalidate_required — re-validate and re-emit). Response is the capability §8.2 result: mode, created objects with URLs, pending_human_steps to relay verbatim, and backing.",
     inputSchema: {
       type: "object",
       properties: { artifact: { type: "object" }, target: { type: "string" } },
@@ -622,8 +624,69 @@ async function toolExecuteSql(ctx: CallContext, args: Record<string, unknown>): 
   };
 }
 
-async function toolPublishStub(_ctx: CallContext, _args: Record<string, unknown>): Promise<ToolOutcome> {
-  return err("upstream_error", "publish_report arrives with the CP-6/CP-7 publish path");
+/**
+ * §6.8: validate the artifact (formats §4 shape, MT-10 refs, §4.5 blend
+ * keys, F-7 re-validation), persist with server-assigned revision,
+ * enqueue an interactive `publish` job, await the §8.2 result.
+ * Everything load-bearing lives in publish.ts; this is the tool-surface
+ * adapter.
+ */
+async function toolPublishReport(ctx: CallContext, args: Record<string, unknown>): Promise<ToolOutcome> {
+  const target = typeof args.target === "string" ? args.target : "";
+  if (!target) return err("invalid_argument", "target (string) required");
+  const artifact = args.artifact;
+  if (!artifact || typeof artifact !== "object" || Array.isArray(artifact)) {
+    return err("invalid_argument", "artifact (object) required");
+  }
+
+  const outcome = await publishReport(
+    {
+      pool: ctx.deps.pool,
+      cfg: ctx.deps.cfg,
+      notifier: ctx.deps.doneNotifier,
+      ws: ctx.ws,
+      identity: {
+        subject: ctx.identity.subject,
+        roles: ctx.identity.roles,
+        display: ctx.identity.display,
+      },
+      profile: ctx.profile,
+      scopes: ctx.scopes,
+      sessionId: ctx.sessionId,
+      auditId: ctx.auditId,
+    },
+    { artifact: artifact as Record<string, unknown>, target },
+  );
+
+  if (!outcome.ok) {
+    return {
+      payload: {
+        code: outcome.code,
+        message: outcome.message,
+        ...(outcome.detail ? { detail: outcome.detail } : {}),
+        refs: refsEnvelope(ctx.ws),
+      },
+      isError: true,
+      // Hidden refs/objects refused it: audited as filtered with the
+      // true reason, exactly as validation does (M-4).
+      ...(outcome.meta.filtered === true
+        ? { decision: "filtered" as const, reason: "hidden by visibility map" }
+        : {}),
+      resultMeta: outcome.meta,
+      statementText: outcome.statementText,
+    };
+  }
+  return {
+    // Capability §8.2 result verbatim, plus the server-assigned artifact
+    // identity facts and the refs envelope every tool carries.
+    payload: {
+      ...outcome.result,
+      artifact: outcome.artifactInfo,
+      refs: refsEnvelope(ctx.ws),
+    },
+    resultMeta: outcome.meta,
+    statementText: outcome.statementText,
+  };
 }
 
 async function toolReportFreshness(ctx: CallContext, _args: Record<string, unknown>): Promise<ToolOutcome> {
@@ -768,7 +831,7 @@ const TOOL_IMPLS: Record<string, (ctx: CallContext, args: Record<string, unknown
   get_lineage: toolGetLineage,
   validate_sql: toolValidateSql,
   execute_sql: toolExecuteSql,
-  publish_report: toolPublishStub,
+  publish_report: toolPublishReport,
   report_freshness: toolReportFreshness,
   flag_gap: toolFlagGap,
   list_gaps: toolListGaps,

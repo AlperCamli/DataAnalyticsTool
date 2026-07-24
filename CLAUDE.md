@@ -17,7 +17,8 @@ trust signals. First deployment: Supabase + GA4 + GSC → Looker Studio.
   resolution; propose a new register item instead.
 - Sequence: `plans/context-layer-development-plan-v1.md`
   (checkpoints CP-0..CP-8). Current position: CP-7 (M3, "the report
-  ships") on branch `cp7-m3`; `main` is current through M2 + CP-5
+  ships"); platform work commits directly to `main` (D-82 — local-only
+  repo, no remote); `main` is current through M2 + CP-5
   (CP-5 closed by amendment, D-80; landing `b663434`). Task 7.0
   (reporting views over RLS, D-80.3/D-81): delta DDL drafted in
   `deploy/reporting-views.sql`, awaiting operator apply as customer

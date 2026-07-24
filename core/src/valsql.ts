@@ -149,6 +149,7 @@ export async function validateRequest(
   profile: Profile,
   scopes: string[],
   args: { system: string; request: Record<string, unknown> },
+  opts: { issueToken?: boolean } = {},
 ): Promise<ValidateOutcome> {
   const system = args.system;
   const state = ws.systems.get(system);
@@ -187,6 +188,11 @@ export async function validateRequest(
   } else {
     outcome = validateApiDialect(ws, system, surface, request, base);
   }
+
+  // F-7 publish-time re-validation runs this same resolution with
+  // issueToken:false — a real validation, but never a mintable
+  // execution right (an artifact is not a bypass around the gate).
+  if (opts.issueToken === false) return outcome;
 
   if (outcome.verdict === "pass" && outcome.statementSha256) {
     outcome.validationToken = await issueValidationToken(

@@ -2893,3 +2893,15 @@ graph build the product-path sync depends on. Suite 8/8.
 never run DDL against the customer estate); `contextlayer_exec` gains
 SELECT on views only; no default privileges exist in `reporting`, so a
 future view is exposed only by deliberately re-running the grant.
+
+## D-82 — Platform repo commits directly to main (owner ruling, 2026-07-24)
+
+The platform repo is local-git-only — no remote, no PR machinery — so
+the branch-and-land convention collapses: work commits to `main` at the
+latest version, small reviewable commits in place of PRs. What D-74.2
+protected ("a checkpoint is not closed while its work is unmerged") is
+preserved trivially, since work is always on `main`; checkpoint
+sign-off still requires green suites at the sign-off commit. The KB
+repo is unchanged: PRs + KB CI + code-owner review remain (it has the
+remote and the enforcement). `cp7-m3` fast-forwarded into `main`
+(`8f04455`) and deleted under this ruling.

@@ -160,3 +160,57 @@ def test_cli_rejects_invalid_snapshot(tmp_path):
     bad = tmp_path / "bad.json"
     bad.write_text('{"snapshot_version": "1"}', encoding="utf-8")
     assert lineage_cli([str(bad), "--kb", str(tmp_path / "kb")]) == 1
+
+
+# --- CP-7 F-4: gateway attestations (publish → report nodes/edges) -------------
+
+
+def gateway_attestation(target_node="looker_studio.report.tl-abc123"):
+    return {
+        "source": VIEW,
+        "target": target_node,
+        "operation": "ingest",
+        "evidence": {"tier": "pipeline-tool", "ref": "gateway:audit-1"},
+        "source_meta": {"resolved": True, "kind": "view",
+                        "schema": "public", "name": "v_daily_revenue"},
+        "target_meta": {"resolved": True, "kind": "report",
+                        "schema": None, "name": "tl-abc123"},
+    }
+
+
+def test_gateway_attestations_land_as_report_nodes_and_edges():
+    graph = build_graph([load_fixture(CUSTOMER)],
+                        gateway_attestations=[gateway_attestation()])
+    node = graph_node(graph, "looker_studio.report.tl-abc123")
+    assert node["node_kind"] == "report"
+    assert node["resolved"] is True
+    # BI-side node: resolved but doc-less (no machine doc exists for it).
+    assert "doc" not in node
+    edge = graph_edge(graph, VIEW, "looker_studio.report.tl-abc123")
+    assert edge["operation"] == "ingest"
+    assert edge["trust"] == "pipeline-tool"
+    assert edge["evidence"] == [{"tier": "pipeline-tool", "ref": "gateway:audit-1"}]
+    assert [i for i in graph["inputs"] if i["kind"] == "gateway"] == [
+        {"kind": "gateway", "attestations": 1}
+    ]
+
+
+def test_gateway_attestations_are_deterministic_and_additive():
+    plain = build_graph([load_fixture(CUSTOMER)])
+    once = build_graph([load_fixture(CUSTOMER)], gateway_attestations=[gateway_attestation()])
+    twice = build_graph([load_fixture(CUSTOMER)], gateway_attestations=[gateway_attestation()])
+    assert once == twice  # FG-1 spirit: identical inputs, identical graph
+    assert plain["generated_at"] == once["generated_at"]  # snapshots alone stamp time
+    assert {n["id"] for n in plain["nodes"]} < {n["id"] for n in once["nodes"]}
+    assert len(once["edges"]) == len(plain["edges"]) + 1
+
+
+def test_gateway_attestations_via_cli(tmp_path, capsys):
+    import shutil
+    snap = FIXTURES_DIR / CUSTOMER
+    att = tmp_path / "attestations.json"
+    att.write_text(json.dumps([gateway_attestation()]), encoding="utf-8")
+    kb = tmp_path / "kb"
+    assert lineage_cli([str(snap), "--kb", str(kb), "--attestations", str(att)]) == 0
+    graph = json.loads((kb / "lineage" / "graph.json").read_text(encoding="utf-8"))
+    assert any(n["id"] == "looker_studio.report.tl-abc123" for n in graph["nodes"])

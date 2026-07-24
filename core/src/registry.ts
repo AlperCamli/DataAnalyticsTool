@@ -54,7 +54,8 @@ export const JOB_TYPES: ReadonlyMap<string, JobTypeSpec> = new Map(
       // CP-6: the execution gateway is the producer; results are relayed
       // inline to the blocked caller (§6.4).
       { type: "execute", class: "interactive", implemented: true },
-      { type: "publish", class: "interactive", implemented: false },
+      // CP-7: the publish gateway (MCP §6.8) is the producer.
+      { type: "publish", class: "interactive", implemented: true },
     ] as JobTypeSpec[]
   ).map((spec) => [spec.type, spec]),
 );

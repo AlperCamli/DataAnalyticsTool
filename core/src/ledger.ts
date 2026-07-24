@@ -308,7 +308,7 @@ export async function sweepWindowRules(pool: pg.Pool): Promise<number> {
       `SELECT result_meta->>'system' AS system, result_meta->>'guardrail_code' AS code,
               count(*) AS n, max(ts) AS latest
          FROM audit_records
-        WHERE tool = 'execute_sql'
+        WHERE tool IN ('execute_sql', 'publish_report')
           AND result_meta->>'guardrail_code' = ANY($1)
           AND ts > now() - make_interval(hours => $2)
         GROUP BY 1, 2

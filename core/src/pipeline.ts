@@ -404,10 +404,26 @@ export async function executeRun(deps: RunDeps): Promise<string> {
     }
     const changed = included.filter((s) => !diffs.get(s.system)!.empty);
 
+    // ---- gateway attestations (CP-7, F-3/F-4) -----------------------------
+    // Publishes since the last regeneration are graph inputs in their own
+    // right: any attestation whose edge is not in the HEAD graph makes a
+    // regeneration pending, even when no snapshot moved.
+    const gatewayRows = await gatewayAttestations(deps.pool);
+    const gatewayPending = await (async () => {
+      if (gatewayRows.length === 0) return false;
+      const headText = await readFile(path.join(kbDir, "lineage", "graph.json"), "utf-8")
+        .catch(() => null);
+      const headEdges = headText
+        ? ((JSON.parse(headText) as { edges?: { id?: string }[] }).edges ?? [])
+        : [];
+      const ids = new Set(headEdges.map((e) => e.id));
+      return gatewayRows.some((row) => !ids.has(gatewayEdgeId(row)));
+    })();
+
     // ---- wheel plan + no-op short-circuit (§5.3, §10) ---------------------
     const wheelCarry = await planWheelCarry(cfg.sync, kbDir);
     const manual = pending.some((p) => p.triggers.some((t) => t.kind === "manual"));
-    if (changed.length === 0 && !(wheelCarry && manual)) {
+    if (changed.length === 0 && !(wheelCarry && manual) && !gatewayPending) {
       return await finish("no-op", {
         systems: systemsRecord,
         kbRef,
@@ -433,17 +449,19 @@ export async function executeRun(deps: RunDeps): Promise<string> {
         headGraphFile,
         headGraph ?? JSON.stringify({ graph_version: "1", nodes: [], edges: [] }),
       );
-      const required = lineageRequired(
-        [...diffs.values()],
-        headGraph ? (JSON.parse(headGraph) as { nodes: { id: string }[] }) : null,
-      );
+      const required =
+        lineageRequired(
+          [...diffs.values()],
+          headGraph ? (JSON.parse(headGraph) as { nodes: { id: string }[] }) : null,
+        ) || gatewayPending;
       if (required) {
         const pinDir = path.join(kbDir, ".contextlayer", "snapshots");
         const inputs = (await readdir(pinDir))
           .filter((f) => f.endsWith(".json"))
           .sort()
           .map((f) => path.join(pinDir, f));
-        const argv = ["-m", "lineage", ...inputs, "--kb", kbDir];
+        const argv = ["-m", "lineage", ...inputs, "--kb", kbDir,
+          ...(await attestationArgs(gatewayRows, workdir))];
         const { code, stderr } = await runCli(
           [...cfg.sync.pythonCmd, ...argv],
           cfg.sync.workdir,
@@ -509,6 +527,28 @@ export async function executeRun(deps: RunDeps): Promise<string> {
           "error",
           { product_bug: true },
         );
+      }
+    } else if (gatewayPending) {
+      // ---- graph-only regeneration (CP-7, F-4) --------------------------
+      // No snapshot moved, but publishes happened since the last graph:
+      // land the report nodes and gateway edges as their own PR. No
+      // contamination scan or renders — there is no diff to scan and no
+      // machine doc to re-render; the additive BI-side nodes cannot
+      // contaminate anything.
+      const pinDir = path.join(kbDir, ".contextlayer", "snapshots");
+      const inputs = (await readdir(pinDir).catch(() => [] as string[]))
+        .filter((f) => f.endsWith(".json"))
+        .sort()
+        .map((f) => path.join(pinDir, f));
+      if (inputs.length > 0) {
+        const argv = ["-m", "lineage", ...inputs, "--kb", kbDir,
+          ...(await attestationArgs(gatewayRows, workdir))];
+        const { code, stderr } = await runCli([...cfg.sync.pythonCmd, ...argv], cfg.sync.workdir);
+        if (code !== 0) {
+          throw new StageFailure("lineage", stderr.trim() || `exited ${code}`, "error", {
+            named_definition: stderr.trim().slice(0, 500),
+          });
+        }
       }
     }
 
@@ -651,6 +691,53 @@ export async function executeRun(deps: RunDeps): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+
+interface GatewayAttestationRow {
+  source_fqn: string;
+  target_fqn: string;
+  operation: string;
+  evidence: Record<string, unknown>;
+  source_meta: Record<string, unknown> | null;
+  target_meta: Record<string, unknown> | null;
+}
+
+/** Ordered export of the publish-gateway attestations (F-3/F-4). */
+async function gatewayAttestations(pool: pg.Pool): Promise<GatewayAttestationRow[]> {
+  const { rows } = await pool.query<GatewayAttestationRow>(
+    `SELECT source_fqn, target_fqn, operation, evidence, source_meta, target_meta
+       FROM lineage_attestations
+      ORDER BY source_fqn, target_fqn, operation`,
+  );
+  return rows;
+}
+
+/** F-1 edge id, TS side — must match lineage/graph.py `edge_id`. */
+function gatewayEdgeId(row: GatewayAttestationRow): string {
+  const digest = createHash("sha256")
+    .update(`${row.source_fqn}\n${row.target_fqn}\n${row.operation}`, "utf-8")
+    .digest("hex");
+  return `sha256:${digest}`;
+}
+
+/** Write the attestation export and return the `--attestations` argv. */
+async function attestationArgs(rows: GatewayAttestationRow[], workdir: string): Promise<string[]> {
+  if (rows.length === 0) return [];
+  const file = path.join(workdir, "gateway-attestations.json");
+  await writeFile(
+    file,
+    JSON.stringify(
+      rows.map((row) => ({
+        source: row.source_fqn,
+        target: row.target_fqn,
+        operation: row.operation,
+        evidence: row.evidence,
+        ...(row.source_meta ? { source_meta: row.source_meta } : {}),
+        ...(row.target_meta ? { target_meta: row.target_meta } : {}),
+      })),
+    ),
+  );
+  return ["--attestations", file];
+}
 
 /** §5.5: re-derivation required iff a hash-included definition changed,
  * or an object participating in the current graph was added/removed
