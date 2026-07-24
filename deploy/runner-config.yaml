@@ -10,6 +10,9 @@ connectors:
   - connectors.postgres.connector:connector
   - connectors.ga4.connector:connector
   - connectors.gsc.connector:connector
+  # CP-7: publisher adapter — publish jobs ride the same interactive
+  # lane as execute; template_link needs no credentials at all.
+  - connectors.looker_studio.connector:connector
 # `interactive` is the execute/publish lane (CP-6). Without it this
 # runner claims snapshot work only and execute_sql has nobody to serve it.
 classes: [batch, interactive]
