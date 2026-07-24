@@ -77,17 +77,19 @@ roles:
 `;
 
 // Mirrors the product Reporter profile (KB reporter.yaml): execution was
-// granted at CP-6/M2 (execute_sql:<sql-system>), so the fixture reporter
-// carries execute_sql:drill. Keeping the fixture reporter frozen at its
-// M1 read+validate shape would exercise a profile the product no longer
-// ships — the divergence D-79.2 flags.
+// granted at CP-6/M2 (execute_sql:<sql-system>), publish at CP-7/M3
+// (publish_report:<target>), so the fixture reporter carries both,
+// target-qualified. Keeping the fixture reporter frozen at an older
+// shape would exercise a profile the product no longer ships — the
+// divergence D-79.2 flags.
 const REPORTER_PROFILE = `name: Reporter
-description: Read + validate + execute for business users (execution added CP-6)
+description: Read + validate + execute + publish for business users (publish added CP-7)
 roles: [reporter, salesonly]
 skills: [report]
 tools:
   allow: [search_context, get_entity, get_table, get_metric, get_lineage,
-          validate_sql, execute_sql:drill, report_freshness, flag_gap]
+          validate_sql, execute_sql:drill, publish_report:looker_studio,
+          report_freshness, flag_gap]
 limits: { row_cap: 50000, timeout_s: 60 }
 `;
 

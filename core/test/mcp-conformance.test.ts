@@ -36,6 +36,7 @@ const REPORTER_TOOLS = [
   "get_lineage",
   "get_metric",
   "get_table",
+  "publish_report",
   "report_freshness",
   "search_context",
   "validate_sql",
