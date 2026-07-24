@@ -24,6 +24,11 @@ COPY snapshot ./snapshot
 COPY connectors ./connectors
 COPY generator ./generator
 COPY lineage ./lineage
+COPY sqlval ./sqlval
+# benchmark landed as a declared package in the task/2 harness merge; the
+# wheel build enumerates every package in pyproject, so its dir must be
+# present even though the core runtime does not import it.
+COPY benchmark ./benchmark
 RUN pip wheel --no-deps --no-cache-dir -w /wheels .
 
 FROM node:22-slim
@@ -40,6 +45,7 @@ RUN python3 -m venv /opt/validator \
 COPY snapshot /opt/contextlayer/snapshot
 COPY generator /opt/contextlayer/generator
 COPY lineage /opt/contextlayer/lineage
+COPY sqlval /opt/contextlayer/sqlval
 COPY --from=wheelbuild /wheels /opt/contextlayer/wheels
 
 WORKDIR /app

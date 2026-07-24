@@ -1,4 +1,5 @@
-# Local dev stack (CP-3a ruling A1): core + Postgres + one runner.
+# Local dev stack (CP-3a ruling A1): core + Postgres + one runner, plus
+# (CP-4) the dev OIDC provider for the MCP surface.
 #
 #   docker compose up -d --build
 #   make stack-demo        # enqueue the no-credentials demo jobs
@@ -7,8 +8,15 @@
 #   docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d
 #   make stack-live
 #
-# One token, bound to the one local runner (J-8); override via
-# CL_RUNNER_TOKEN in the shell environment.
+# One runner token bound to the one local runner (J-8) and, since the
+# P-A auth split (D-66.1), a distinct ops service token for the
+# enqueue/read surface — override via CL_RUNNER_TOKEN / CL_OPS_TOKEN.
+#
+# MCP (CP-4): CORE_MCP_ENABLED=1 arms /mcp + OAuth against the devidp
+# service (DEV ONLY — a real deployment points CORE_OIDC_ISSUER at the
+# customer IdP). For a second-machine demo set CL_HOST_ADDR to this
+# machine's LAN IP and CL_BIND=0.0.0.0 so the issuer in the discovery
+# metadata is reachable from both the containers and the remote client.
 
 services:
   postgres:
@@ -34,10 +42,19 @@ services:
     environment:
       CORE_DATABASE_URL: postgres://postgres:contextlayer@postgres:5432/cl_ops
       CORE_RUNNER_TOKENS: runner-local=${CL_RUNNER_TOKEN:-dev-runner-token}
+      # P-A (D-66.1): the ops/read surface takes its own service-token
+      # set; the CLI below authenticates with it, not the runner token.
+      CORE_OPS_TOKENS: ops-local=${CL_OPS_TOKEN:-dev-ops-token}
       CORE_MIGRATE_ON_START: "1"
       # for `node dist/cli.js enqueue` runs inside the container
       CORE_URL: http://127.0.0.1:8100
-      CORE_TOKEN: ${CL_RUNNER_TOKEN:-dev-runner-token}
+      CORE_TOKEN: ${CL_OPS_TOKEN:-dev-ops-token}
+      # MCP server (CP-4) — off unless armed; devidp is DEV ONLY.
+      CORE_MCP_ENABLED: ${CORE_MCP_ENABLED:-0}
+      CORE_OIDC_ISSUER: http://${CL_HOST_ADDR:-host.docker.internal}:8180
+      CORE_PUBLIC_URL: http://${CL_HOST_ADDR:-localhost}:8100
+      CORE_OIDC_CLIENT_ID: core
+      CORE_OIDC_CLIENT_SECRET: dev-introspect-secret
       # CP-3b sync orchestrator — off in the plain dev stack (no KB
       # remote here). The live overlay's env file supplies SYNC_ENABLED,
       # SYNC_GIT_REMOTE, SYNC_GIT_TOKEN (fine-grained PAT, ruling D2)
@@ -49,7 +66,9 @@ services:
       SYNC_TICK_S: ${SYNC_TICK_S:-3600}
       SYNC_PLATFORM_COMMIT: ${SYNC_PLATFORM_COMMIT:-}
     ports:
-      - "127.0.0.1:8100:8100"
+      - "${CL_BIND:-127.0.0.1}:8100:8100"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,6 +81,22 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  # DEV-ONLY OIDC provider for the CP-4 MCP surface (no customer IdP in
+  # the pilot). Users/roles in deploy/oidc/users.json; roles are mutable
+  # at runtime via POST /admin/roles — the MT-9 live-revocation lever.
+  devidp:
+    build:
+      context: .
+      dockerfile: core/Dockerfile
+    command: ["node", "dist/devidp.js", "/etc/contextlayer/idp-users.json"]
+    environment:
+      DEVIDP_PORT: 8180
+      DEVIDP_HOST: ${CL_HOST_ADDR:-host.docker.internal}
+    volumes:
+      - ./deploy/oidc/users.json:/etc/contextlayer/idp-users.json:ro
+    ports:
+      - "${CL_BIND:-127.0.0.1}:8180:8180"
 
   runner:
     build:

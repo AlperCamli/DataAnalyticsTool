@@ -1188,11 +1188,439 @@ fence otherwise unchanged):**
   should gain the "commit the accepted snapshot to
   `.contextlayer/snapshots/`" step; next onboarding session.
 
+---
+
+# DECISIONS — task 1.8 (customer entity drafts, `AlperCamli/DataAnalyticsTool`)
+
+The CP-1 exit deliverable: the cross-system routing hubs (`entities/`) an
+agent uses to decide which system answers which question and how sources
+join. Landed as KB PR #13 (`enrich/entities` → `main`, single commit
+`4e47c55`, merge `ccda04f`; +251, 3 files, 0 deletions).
+
+## D-50 — Task 1.8 landed / CP-1 closed
+
+Three entity docs merged: `entities/user.md`, `entities/page.md`,
+`entities/conversion.md`. **All three landed `status: draft`,
+`last_verified: null` — no mapping was customer-certified to verified.**
+The grounded mappings are cited but uncertified: user's
+`supabase.public.users` (system-of-record, ✅ structural); page's
+`gsc.standard.page` ↔ `ga4.standard.pagePath` path blend (✅ config-derived
+— single-domain property `sc-domain:example-estate.com` makes host constant);
+conversion's `ga4.standard.purchase`/`keyEvents:purchase` +
+`supabase.public.subscriptions` (✅ config + structural). Certification
+(draft → verified) is the customer step; it did not run — it is blocked on
+five open customer questions (D-52), so every doc stays draft **by design,
+not omission**. Review/merge trail: PR #13 opened and merged by `AlperCamli`
+(all playbook roles collapse to one in the pilot, D-47) ~3.5 min apart
+(11:34→11:37Z), **no reviews, no review comments, never draft-flipped** —
+the steward's by-hand merge (D-47's review-flow rehearsal), with no
+independent review recorded. Local KB CI on the vendored 0.3.0 wheel: 0
+errors, 0 warnings. CP-1 closes here.
+
+## D-51 — OB-2 evidence (skill-drafted / customer-certified path)
+
+OB-2's stated default — "skill-drafted, R5-paired review, always
+customer-certified" — was exercised in its **draft half only**; PR #13 is
+one register-grade data point toward the "after 2–3 onboardings" revisit.
+What the trail evidences:
+
+- **Draft quality is high under strictest grounding.** Every mapping is
+  cited to a machine-doc FQN, an app-code config fact, or a customer doc, or
+  it is **dropped and recorded** under Ungrounded gaps — nothing
+  plausible-but-unattested was asserted (the bodies say so in-line: "Do not
+  invent one"). The join keys that do not exist were dropped, not guessed:
+  user's Supabase↔GA4 identity (app sends no GA4 `user_id`; User-ID off; no
+  `userId`/`clientId` dimension) and conversion's `purchase`↔`subscriptions`
+  row join (no shared key). CI clean, 0/0.
+- **Gaps flagged honestly, not papered over.** Four ungrounded gaps carry
+  explicit unblock notes; five customer questions are posed. This is the
+  strong signal: the drafting discipline surfaces its own limits.
+- **Mappings needing correction at review: none surfaced — but the trail
+  cannot evidence review efficacy.** No reviewer comments, no inline
+  corrections, and R5-paired review is untestable in the pilot because R1–R5
+  all map to `AlperCamli` (D-47). So this point evidences *drafting*
+  discipline, not *review* catch-rate, and does not exercise the
+  customer-certification half at all (everything draft). Weigh accordingly
+  when OB-2 is revisited — it is data point 1 of the promised 2–3.
+
+## D-52 — Standing gaps at CP-1 close (future ledger / enrich items)
+
+Recorded so they are visible items, not silent losses (the D-18 pattern).
+From PR #13's Ungrounded gaps + open questions:
+
+1. **user — Supabase↔GA4 identity.** No cross-system user key exists.
+   Unblock: enable GA4 User-ID + app sends `user_id = users.id`, or a
+   customer statement that a server-side/GTM identity stitch exists (cited).
+2. **page — Supabase leg.** No DB-backed public page found. Unblock: a table
+   carrying a slug/URL column, or customer confirmation that all public
+   pages are frontend-static (closes it as "intentionally no Supabase leg").
+3. **conversion — GA4 `purchase` population.** App emits `payment_completed`,
+   not `purchase`; whether `purchase` is produced server-side / GTM /
+   provider is unknown. Unblock: customer states the population path + its
+   `transaction_id`.
+4. **conversion — `purchase`↔subscription row join.** No shared key; only
+   aggregate reconciliation supported. Unblock: a shared identifier
+   (`checkout_session_id`/`transaction_id` on the subscription row, or GA4
+   `user_id = users.id`).
+
+Five open customer questions gate the draft→verified certification of these
+docs (GA4 User-ID config; `purchase` population + `transaction_id`;
+static-vs-DB public pages; whether `subscriptions` is the only
+paid-conversion record / a per-payment ledger exists; any Supabase column
+holding a GA4/Stripe checkout id). Answers certify the grounded mappings and
+may close gaps 1–4.
+
+**Validation-coverage gap (flagged by PR #13, HARD RULE 4; confirmed in
+platform code).** The vendored 0.3.0 validator does not schema-validate
+entity front-matter — `generator/schemas.py` registers no `entity`
+`doc_class` (only machine-object/group/index + human-object/group/notes)
+and `generator/validate.py` skips every path outside `systems/`
+(`parts[0] != "systems"`), so entity docs receive KB-5 link/anchor checks
+only; `depends_on ⊇ maps[].object` resolution is deferred to the sync engine
+(CP-3). The three docs' `maps`/`depends_on` were verified by hand this
+session, not by CI — a real gap to close when CP-3 lands the server-side
+resolver, or sooner via an additive validator amendment (register-item
+candidate).
+
+---
+
+# DECISIONS — task 2 (CP-2 benchmark harness, `benchmark/`)
+
+The CP-2 deliverable: the CVBuilder golden-benchmark harness — suite
+ingestion/validation, the three R1 context conditions, a dual-backend
+journey runner + journey-prompt v1, R4-R6 scoring, the R7 CI integrity gate,
+and the R8/R9 results+report machinery. Landed on branch
+`task/2-benchmark-harness` (commits `d2a81b1`..`cec5347`). Full platform
+suite green (87 benchmark tests + the existing suite).
+
+## D-53 — Suite is execution-deferred; correctness scores same-run goldens
+
+`benchmark-seed-v0.yaml` shipped `execution_status: draft-pending-execution`:
+every `verified_result` is a stub (checksum/rows `null`) because the
+authoring session had no source access. Resolved **without mutating the
+fenced seed**:
+
+- The CP-2 exit criterion "all packet checksums reproduce" has nothing to
+  reproduce. Reinterpreted: the canonical-CSV checksum machinery is proven by
+  unit test (`tests/test_benchmark_canonical.py`), and byte-stable cases
+  produce a reproducible checksum **in-run**, recorded in the results
+  artifact — never written back to the seed.
+- R5 correctness executes each golden leg **once per run** (`GoldenCache`) and
+  compares agent-vs-same-run-golden for every case (the R5 unstable path,
+  applied uniformly since no frozen results exist). Byte-stable cases use
+  checksum identity; time-unstable cases use shape + tolerant values (exact
+  ints, 1e-9 rel floats; live-mutation integer drift flagged, not absorbed).
+- Env reconciliation: this machine has live Supabase/GA4/GSC (verified
+  2026-07-13, `connections.md`), so the seed's deferral is resolvable — the
+  handoff resume-checklist executions run inside the harness.
+
+## D-54 — R3 amended: dual runner backends; baseline runs Backend B **[user ruling, applied]**
+
+The runner supports two backends behind one interface; `JourneyRecord` is the
+backend-agnostic contract (carries `backend` id + `cost_usd`; backend joins
+the R8 key). **Backend A** (`api`) = direct Anthropic tool loop. **Backend B**
+(`claude-code`) = headless Claude Code (`claude -p`, `--output-format
+stream-json`, pinned `--model`, fresh session per journey; executors as a
+local MCP server `benchmark.mcp_executor`; `--allowedTools` = `Read` +
+`mcp__executor` only, no Bash; credentials scoped to the MCP server's
+`.mcp.json` env, never in the agent process). Comparability: one backend per
+baseline; cross-backend comparison out of scope. Auth via the VS Code
+extension's Claude Code binary (`CLAUDE_CODE_EXECPATH`, subscription); the
+CLI is not otherwise on PATH here.
+
+- **Subscription-policy note (ruling):** subscription coverage of `claude -p`
+  is current Anthropic policy under review (support.claude.com article
+  15036540). Re-verify before future large runs.
+
+## D-55 — Smoke evidence; full baseline held
+
+Smoke (RB-01 × 3 conditions × 1 rep, Backend B, `claude-opus-4-8`) —
+`results/smoke-2026-07-15/`:
+
+- Selection precision/recall **1.0** and first-try executable **1.0** in all
+  three conditions; **cost $0.85** total (~$0.28/journey); **GA4 executions
+  0** (RB-01 is Supabase-only); golden executed once.
+- Correctness **0** everywhere — a *real grain/window divergence*, not a header
+  artifact: golden is daily-over-June (6 rows); agents chose weekly/monthly
+  all-time (11 / 4 rows). That resolution lives in the seed
+  `resolution_notes` (customer intent), not in schema or either KB, so no
+  condition can hit it from context alone. The benchmark is cleanly
+  separating "found the right source" (perfect) from "matched the customer's
+  exact intent" (context-bounded).
+- The full 90-journey baseline is **held pending go** (user, this session).
+  Launch: `python -m benchmark.baseline --backend claude-code --reps 3 --out
+  results/ --workdir <scratch> --enriched-kb ~/Desktop/kb`.
+
+## D-56 — Evidence pointers (MC-1 / FM-2 / SP-4·FM-4)
+
+From the suite + the smoke report (`results/smoke-2026-07-15/report.md`):
+
+- **MC-1** (retrieval recall, lexical default — no embeddings): per-journey
+  selection-recall table, labeled MC-1. Smoke: recall 1.0 on RB-01 in all
+  conditions.
+- **FM-2** (visual registry): **5/5** registry kinds
+  (`table|line|bar|scorecard|pivot`) exercised + one `other:funnel` (RB-07).
+- **SP-4 / FM-4** (recurring/parameterized): **10/10** cases `recurring:
+  true`; the suite exercises the re-journey path SP-4 leaves as the v1 answer.
+
+## D-57 — Suite-format change proposals (back to the author; seed unchanged)
+
+Surfaced by building/scoring; none applied to the fenced seed (JC — format
+changes are proposals, never silent mutations):
+
+1. **Execution-deferred `verified_result`.** The stubs mean the suite cannot
+   self-check numeric correctness in CI. Proposal: on the next live session,
+   fill `verified_result` (rows/checksum/executed_at) for the byte-stable
+   cases (RB-01/06/07) so those gain a frozen anchor; unstable cases stay
+   same-run.
+2. **API contract-object precision (RB-05).** A golden-faithful agent scores
+   selection precision **0.556** on RB-05 because GSC returns 4 metrics by
+   contract and the GA4 golden pulls `activeUsers`, while `expected_objects`
+   lists a curated subset. Options: (a) list every contract-returned object in
+   `expected_objects`, or (b) score API contract metrics as a bundle.
+   Reported per-case meanwhile; recommend (a), consistent with R4's "score
+   what the executed statement actually pulls."
+3. **Customer resolution not in context.** Cases whose golden encodes an
+   arbitrary customer grain/window (RB-01) make correctness near-unhittable
+   from context. Not a defect; recorded so the baseline's low-correctness rows
+   read as *intent-gap*, not *competence-gap*. The full run should show the
+   enriched KB's edge on cases where the resolution *is* KB-encoded
+   (conventions `dataState`, entity join rules) vs. arbitrary like RB-01.
+
+## D-58 — CP-2 exit-criteria status
+
+**Met:** suite validates; the R7 CI integrity gate is green on the current
+suite and the staged-defect (a golden referencing a dropped column against a
+doctored snapshot) fails it; the machine-kb builder is deterministic
+(byte-identical rebuilds); scoring covers R4-R6 with the four required
+fixture paths (perfect / wrong-table / unexecutable / unstable); the
+dual-backend runner + prompt v1 exist; results/report machinery emits the
+R9 report; GA4-count and golden-execution caching are observable (smoke:
+GA4=0, golden executed once). **Pending:** the 90-journey baseline (held by
+the user) and its committed results — the harness + the three-journey smoke
+prove the path end-to-end.
+
+## D-59 — Manual-baseline kit (operator-driven CP-2 baseline) **[user ruling, applied]**
+
+The CP-2 baseline runs as human-operated *interactive* Claude Code sessions
+(one fresh session per journey, subscription-billed), executing through
+`benchmark.mcp_executor`. Transport-ruling points applied: **(2)
+record-to-file** — the executor's JSONL log is the authoritative trace,
+ingested into R3 records; **(3) executor guardrails** — unchanged
+(SELECT-only SQL, one API call per tool call, credentials only in the MCP
+server env); **(5) isolation** — three sibling condition dirs containing
+only an identical `.mcp.json` + `records/` (+ `./kb` for the KB
+conditions); **(7) per-journey autonomy** — one paste, no steering, one
+sanctioned verbatim nudge max (OPERATOR.md §4). Kit = `benchmark/manual.py`
+(+ Makefile targets), dev tooling under the dev-runner boundary; no product
+code or spec changed.
+
+- **Condition dirs live OUTSIDE the repo** (default `~/Desktop/cp2-runs`,
+  `make conditions RUNS=…` to override), *deviating from the task's literal
+  `runs/` path*: interactive Claude Code auto-loads `CLAUDE.md` from the
+  cwd's directory ancestry, so an in-repo `runs/` would inject the repo's
+  `CLAUDE.md` into every journey — violating the same ruling's isolation
+  point. The builder/preflight hard-refuses roots with a `CLAUDE.md`
+  ancestor, a `~/.claude/CLAUDE.md`, or stray/nested-memory files;
+  `/runs/`+`/cp2-runs/` are git-ignored as belt-and-braces.
+- **The identical `.mcp.json`** stays secret-free and per-journey-variable
+  via Claude Code `${VAR}` env expansion: `${SUPABASE_DSN}` (operator
+  sources `.secrets/env.sh`), `${BENCHMARK_JOURNEY_LOG}` (exported per
+  journey; no default, so a forgotten export fails the server loudly
+  instead of silently dropping the record), `${PWD}/kb` (context root;
+  resolves to nothing in no-kb).
+- **Backend id `claude-code-interactive`** joins the R8 key — a distinct
+  key from headless `claude-code`, so manual and headless results never
+  silently merge (R9: one backend per baseline). Fields the transport
+  cannot measure are null (tokens, cost, session id); `tool_calls` counts
+  executor calls, not turns; timestamps come from the log file's
+  birth/mtime. Scoring is the unchanged harness: R4 selection stays
+  parser-extracted from executed statements (test pins that a bogus
+  self-declared list cannot leak into the scored set), R5 same-run goldens
+  (executed once per scoring run), R6 first-try. `score` refuses to run if
+  any condition tree or `.mcp.json` drifted from `manifest.json`
+  (machine-kb tree ref, enriched tree sha, mcp sha).
+- **Manifest** (`<runs>/manifest.json`) records kb_refs (machine-kb content
+  ref `sha256:400e359d…`, enriched pinned at kb_ref
+  `ccda04f499fc056ef324b51454d009ad7f8ea0fb`), snapshot_refs, prompt file
+  sha, model pin (`claude-opus-4-8`), repo ref. Rebuild reproduces the
+  machine-kb ref byte-identically (verified).
+- **No-kb discovery path verified (kit deliverable 3):** the SQL guard and
+  the live read-only executor both pass `information_schema` SELECTs
+  (live: 17 public tables, matching the snapshot); GA4 metadata **is
+  exposed** to no-kb via `mcp__executor__discover_schema("ga4")` — 466
+  objects (376 dimensions / 89 metrics / 1 event) served from the pinned
+  snapshot, the sanctioned introspection stand-in (runner.snapshot_discovery,
+  D-53-deterministic); GSC likewise (6 dimensions / 4 fixed metrics, plus
+  `run_gsc_query`'s fixed return schema). The live GA4 `getMetadata`
+  endpoint is *not* exposed (`run_ga4_report` is runReport-only) and is not
+  needed for no-kb — recorded so nobody expects live metadata.
+- **Prompt:** `journey-prompt-v1-manual.md` is a v1 *variant* (version
+  string stays `v1`; variant filename recorded in run notes). Deltas are
+  transport wording only: `mcp__executor__*` names, KB reads via built-in
+  `Read` (the server has no `read_context`; v1's kb-variant named a
+  nonexistent tool for this transport), `run_sql(statement)` (v1 wrote
+  `run_sql(system, statement)` — matches no executor surface; flagged), and
+  one added tool-surface-pinning Rules bullet (Backend B equivalent).
+  **Leak flags (recorded, not changed — R2 intact):** the shared Finishing
+  example FQNs name *real* estate objects — `supabase.public.users` exists
+  (17-table estate) and `ga4.standard.keyEvents:purchase` is the live key
+  event — pre-seeding two real ids into every condition including no-kb.
+  Condition-neutral (identical text in all three, and no-kb gets the full
+  schema via discover_schema anyway) but a v2 prompt should use
+  non-estate example ids. No KB *structure* (paths, doc layout) leaks into
+  any condition; each kb variant describes only its own condition's KB.
+- `backends.py` refactor: the JSONL→record fold extracted as
+  `apply_journey_log()` (shared by Backend B and `ingest`); Backend B now
+  also records `list_context` calls in `context_reads` (was silently
+  dropped). Interactive-transport limitation recorded: kb-condition *file*
+  reads (built-in `Read`) are not observable from the executor log, so
+  `context_reads` under-reports in kb conditions (scoring never consumes
+  `context_reads`; unaffected).
+
+## D-60 — Readiness verification; no-kb property-grounding gap found & fixed
+
+Pre-baseline readiness pass (user request). One **correction to D-59's
+deliverable-3 verdict**, one empirical verification, both recorded:
+
+- **Gap (fixed):** GA4/GSC *object* metadata was exposed to no-kb via
+  `discover_schema`, but the **property identity was not** —
+  `snapshot_discovery` omitted the snapshot's `source_properties`, and no
+  case request names `properties/000000000` / `sc-domain:example-estate.com`.
+  A no-kb agent therefore could not ground the `property` argument of
+  `run_ga4_report`/`run_gsc_query` at all: RB-03/04/05/08 were unwinnable
+  under no-kb *by construction* (never caught because the D-55 smoke ran
+  only supabase-only RB-01). Both KB conditions document the ids (verified
+  in the built trees). Fix: the discovery payload now includes
+  `source_properties` (`runner.snapshot_discovery`; harness change, uniform
+  across Backend A/B/manual — faithful to the introspection stand-in, since
+  the service account inherently knows which property it queries). Test
+  pins it. Condition trees were **not** rebuilt (the fix is code-side;
+  KB trees are unaffected).
+- **Interactive MCP path verified end-to-end, empirically** (the "will
+  Claude Code run the mcp?" question): (1) pinned binary (VS Code
+  extension, Claude Code 2.1.211) supports every OPERATOR.md flag;
+  (2) stdio JSON-RPC probe against `benchmark.mcp_executor`, launched
+  exactly as `.mcp.json` does from the real `no-kb` dir: handshake OK, all
+  6 tools listed, `discover_schema(ga4)` returns the property id,
+  `list_context` correctly returns no documents in no-kb, both calls land
+  in the journey log; (3) one minimal one-shot `claude -p` probe with the
+  exact operator flags (`--model claude-opus-4-8 --mcp-config .mcp.json
+  --strict-mcp-config --allowedTools "Read,mcp__executor" …`) from the real
+  condition dir: `${VAR}` expansion proven (journey log materialized at the
+  exported `BENCHMARK_JOURNEY_LOG` path with the `list_context` entry), the
+  agent called the tool and echoed `{"documents": []}`, and the
+  `claude-opus-4-8` pin launches on this subscription. Nuance: *without*
+  `--mcp-config`, project `.mcp.json` servers sit "pending approval" until
+  approved once interactively — the operator command bypasses this via
+  `--strict-mcp-config` (verified), and OPERATOR.md covers the
+  approve-if-asked case.
+- **Starter prompts:** five pre-rendered paste files (per user request:
+  a handful, not the full 30) at `<runs>/prompts/{case}.{condition}.prompt.md`
+  — RB-01 in all three conditions, RB-04 no-kb (exercises the new property
+  grounding), RB-05 enriched-kb (three-system blend). Convenience copies of
+  `manual prompt` output; the versioned template stays the source of truth.
+  Remaining journeys render on demand.
+
+## D-61 — Five-journey parallel smoke through the manual kit (headless transport)
+
+The five starter journeys ran in parallel (user request; five Sonnet-driven
+subagents as orchestrators only — each journey itself was one fresh
+headless `claude -p` on the pinned `claude-opus-4-8`, exact operator flags,
+real condition dirs, live data). **Not baseline records** — headless, not
+the interactive protocol — so after scoring they were moved out of the
+grid to `<runs>/smoke-2026-07-16/`; the baseline grid is back to 0/90.
+Scored artifact committed: `results/manual-20260716T103207Z/` (sanitized;
+its `run.notes` transport line is inaccurate for this one run — these were
+headless smoke, recorded here as the authoritative correction).
+
+- **All 5 journeys clean**: correct per-condition tool shapes (no-kb:
+  discover→exec→finish; kb: list_context→exec→finish), `finish` in every
+  log, zero failed executions, zero secret leakage, all within one 600s
+  invocation. **First live GA4 traffic through the harness**: 6 agent
+  `runReport`s (RB-04) + 3 more in RB-05, all ok; 2 GA4 golden legs
+  executed. The D-60 property fix held in real journeys (no-kb agents
+  grounded `properties/000000000` from discovery).
+- **Scores** (1 rep, 3 cases): first-try executable **1.00 everywhere**;
+  RB-01 selection P/R **1.00 in all three conditions**; correctness 0
+  across the board — every zero traces to a *known suite gap*, not the
+  harness: RB-01 grain intent-gap (agents chose weekly/monthly vs the
+  golden's daily-June; D-57 §3), RB-05 contract-object precision 0.44
+  (D-57 §2), and one **new suite finding → RB-04's GA4 golden returns
+  (5 cols, 0 rows) live** — the property has Google Signals/demographics
+  disabled, so `userAgeBracket`/`userGender` yield no rows; the golden is
+  correctness-unwinnable until Signals is enabled or the golden is
+  re-scoped (proposal for the seed author, D-57-style; the agent itself
+  detected and disclosed the empty demographics).
+- **Kit fix from the run:** Finder dropped `.DS_Store` into the KB trees
+  and tripped the drift guard (proving it fires); `.DS_Store`/`._*` are OS
+  noise, now ignored by `_tree_ref` and the stray-file invariant (test
+  added). Grain divergence across conditions (weekly in no-kb vs monthly
+  in both KB conditions for RB-01) recorded as an early signal for the
+  baseline read.
+
+## D-62 — CP-2 gate amendment: baseline deferred to CP-5 **[user ruling, applied]**
+
+Ruling (2026-07-16), applied to the plan (§4.1 exit gate, §6.1 exit gate),
+the open-decisions register (MC-1, SP-4/FM-4, FM-2 re-pointed), and the
+committed smoke artifact (non-citability README sidecar):
+
+1. **CP-2 exit criteria amended.** Retained: suite validates + packet
+   checksums reproduce; R7 CI integrity green + staged-defect fires;
+   harness proven end-to-end on the manual journeys (file-ingested records,
+   R4–R6 scoring, both scoring paths, ≥1 journey per condition); FM-2 and
+   SP-4/FM-4 evidence from packet fields; results artifact committed keyed
+   per R8 with the manual-interactive transport. Removed: the 90-journey
+   (and reduced 30-journey) baseline.
+2. **The 5 journeys are transport-proof, not baseline numbers** — never
+   comparable with future runs (prompt variant differs, n too small), never
+   citable as with/without-KB evidence.
+   `results/manual-20260716T103207Z/README.md` carries the notice.
+3. **Baseline v1 moves to CP-5** as an added exit criterion of the packaged
+   benchmark skill (10 × 3 × ≥1 rep, via the skill in Claude Code under
+   subscription/Agent SDK credit); MC-1's recall table and the
+   enriched-vs-machine-vs-none comparison land there. Until then: **no
+   quantitative KB-value claims in any customer or demo material.**
+4. **Watch-points recorded as binding for CP-5:** the CP-5 prompt inherits
+   R2 fairness, R4–R6 scoring, R8 keying, and the harness's file-ingestion
+   path unchanged; CP-6's JP-2 latency measurement unaffected.
+5. **Coverage check (ruling pt 5) — nothing unexercised; no additional
+   journeys required.** Evidence mapping against the retained gate, all
+   from committed artifacts:
+   - Suite validates (D-58); checksum-reproduction stands on D-53's
+     recorded reading (execution-deferred stubs → machinery unit-proven;
+     in-run checksums recorded: 13 draft checksums + golden checksums in
+     the artifact).
+   - R7 green + staged-defect fires (D-58).
+   - End-to-end: 5 file-ingested records scored R4–R6; **both** correctness
+     paths exercised (RB-01 = checksum mode ×3 conditions; RB-04/RB-05 =
+     structural same-run-golden mode); **≥1 journey per condition**
+     (no-kb 2, machine-kb 1, enriched-kb 2) (D-61).
+   - FM-2 + SP-4/FM-4 sections emitted from packet fields (D-56; present
+     in the committed report).
+   - Artifact committed keyed per R8: `results/manual-20260716T103207Z`,
+     backend key `claude-code-interactive` — read as the ruling's
+     "manual-interactive" transport key (the kit's R8 id for
+     operator-driven runs). D-61's honesty caveat stands: these five ran
+     headless over the identical executor/record/scoring path; the
+     interactive session leg itself was verified by the D-60 probe. If the
+     gate is read to require journeys through literal interactive sessions,
+     the minimum top-up is 3 (one per condition) — flagged, not assumed.
+
+**CP-2 status: exit criteria met under the amended gate** (supersedes
+D-58's "Pending: the 90-journey baseline").
+
+---
+
+# DECISIONS — CP-3a core bootstrap (`core/`)
+
 ## D-63 — CP-3a core bootstrap: job API + queue + runner (implementation decisions)
 
-**Numbering note:** D-50..D-62 are allocated on the unmerged
-`task/2-benchmark-harness` branch (CP-2 work); this entry takes D-63 to
-avoid collision at merge.
+**Numbering note:** D-50..D-62 were allocated on the then-unmerged
+`task/2-benchmark-harness` branch (CP-2 work), so this entry took D-63 to
+avoid collision. That branch merged into `cp5-skills` at CP-5 start; the
+CP-2 records now sit above this one, in number order, and the numbering
+is collision-free as intended.
 
 Scope: the CP-3a pre-rulings (A1 stack, B1 protocol scope, C1 no-ports,
 D1 thin Python runner, E1 ops schema) executed as issued. Everything
@@ -1535,3 +1963,822 @@ byte-exact golden (`fixtures/drill/expected/changelog.md`) is unchanged.
 lookups) keep the raw string; only display values are neutralized. Full TS
 suite 50 passing (incl. drill golden, both JC-8 paths, SO-1 413), Python
 391 passing.
+
+---
+
+# DECISIONS — CP-4 (M1): MCP server, fault ledger, P-A split
+
+## D-68 — CP-4 build decisions, KB-F resolution, register closures
+
+Scope: the CP-4/M1 build under ruling D-66 — per-call OIDC identity,
+profile enforcement, content tools with trust blocks, validate_sql with
+signed validation tokens (issuance + verification library; enforcement
+at an executor is CP-6), fault ledger with flag_gap/list_gaps, audit,
+rate limits, and the P-A auth split. The four authorized spec
+amendments led the diff (job spec §6 + JP-6 [P-A/D-66.1], MCP spec §4
+[MCP-R9/D-66.4], MCP spec §6.5 [P-E/D-66.3], ledger spec §3.3/§10
+[LED-R2/D-66.5]); the amendment fence held otherwise.
+
+**KB-F resolved (register updated):** repo-level human docs
+(`index.md`, `conventions.md`, `_notes.md`) keep the default — no
+`status` front-matter, no trust block. They are search-indexed and
+visibility-checked exactly like every doc (MCP-R15), their search
+one-liners derive from title/first line only (matched body text is
+never echoed), and no v1 tool serves their full body — so absence of a
+trust block cannot mislead an agent about repo-level content it never
+receives wholesale. Test: `mcp-conformance.test.ts` MCP-R15 pair.
+
+**Register closures (per D-66.8):** MC-5 **closed** — MCP-R9 landed
+(trust-block `snapshot_ref` + `render_lag` + warn-user; test MCP-R9).
+FL-E **closed** — LED-R2 (storage scrub + visibility + length bounds)
+and LED-R5 (render neutralization via the F4 `neutralize()`) landed
+with named tests. SP-2 **closed conditional on the M1 live demo**: the
+benchmark waiver keys on the server-resolved profile only — MCP-R2 +
+MT-1 + the SP-2 closure test are green (client asserting `benchmark`
+without the role → connection refused, audited).
+
+**Implementation decisions (flagged):**
+
+1. **Dev IdP is an in-repo minimal OIDC provider** (`core/src/devidp.ts`,
+   compose service `devidp`, marked DEV ONLY), not Keycloak: Claude
+   Code's remote-MCP OAuth needs RFC 8414 discovery + RFC 7591 dynamic
+   client registration + PKCE, which Keycloak only allows after
+   client-registration-policy surgery, and MT-9 needs a deterministic
+   role-revocation lever (`POST /admin/roles`, introspection reads live
+   roles). The deployment shape is unchanged — a real customer IdP via
+   `CORE_OIDC_ISSUER`; the pilot has no customer IdP, so the dev
+   provider *is* the pilot IdP. Tests run it in-process.
+2. **Identity is per-call token introspection** (RFC 7662) at the IdP,
+   never local JWT verification alone — forced by MCP §3 ("revocation
+   takes effect immediately") and the MT-9 live variant. Discovery-doc
+   caching only; nothing token-derived is cached.
+3. **P-A ops surface** accepts two platform identities per D-66.1's
+   "OIDC user or service identity": OIDC roles ∩ `CORE_OPS_ROLES`
+   (default `ops,steward`), or a static service-token set
+   `CORE_OPS_TOKENS` — distinct from runner tokens, hash-compared with
+   the same no-early-break discipline. A valid runner token on the ops
+   surface is 403 (authenticated, insufficient); garbage is 401. The
+   compose CLI (`enqueue`) now authenticates with the ops token.
+4. **Profile binding** rides `?profile=` on `/mcp` (the compiled-config
+   convenience); the transport is stateless (one SDK server+transport
+   per request), so identity and the roles→profile check re-run on
+   every request — MCP-R2's "fails the connection" is the 403 on
+   initialize and on every later call alike, and MCP-R3 session
+   fixation is impossible by construction (no session state exists).
+5. **MCP-R2's "roles ⊇ profiles roles:"** is implemented as non-empty
+   intersection — platform-architecture §5 defines `roles:` as "who may
+   use it (OIDC groups)", so any listed group suffices.
+6. **KB read consistency:** merged-HEAD is re-checked at most every
+   `CORE_KB_REFRESH_MS` (default 5000; tests 0 = the §3 letter). A
+   pilot-scale concession, env-tunable to strict.
+7. **Facts serving (MC-5):** the workspace is a HEAD clone with the
+   latest accepted snapshots written over the pins and the generator
+   re-run (full render — the D-64.4 KB-C precedent). KB-8 makes the
+   workspace byte-identical to HEAD when there is no lag; render-lag is
+   pin-bytes ≠ latest accepted body, and lagging systems serve facts
+   from the new snapshot with `render_lag: true` + warn-user (MCP-R9).
+8. **Validation tokens:** HMAC-SHA256, keys in ops Postgres
+   (`signing_keys`, kid-rotating, old keys verify until expiry);
+   `core/src/vtoken.ts` is issuance *and* the verification library the
+   CP-6 gateway must call — every §5 binding check lives there once.
+9. **sqlval** is a new Python package (0.5.0): the validate_sql SQL
+   dialect as a C1/C2-pattern stage CLI (sqlglot 30.12.0, the D-38 pin;
+   AST-decided refusals, never regex). No KB-CI validation-rule
+   changes; the version bump makes the §10 wheel carry honest — the
+   next sync PR carries 0.5.0 automatically (SO-10).
+10. **Ledger mechanics:** `distinct_subjects` recomputed from events on
+    ingest; reopen preserves the prior `resolution` (LED-R6 "history"
+    on the spec's fixed DDL); flag_gap's "per session" rate limit keys
+    per identity/hour on the stateless transport; CL-Resolves detection
+    is a merged-PR poll through the PR provider (GitHub API / local
+    store; cursor in `mcp_state`) on the ledger sweep cadence — the
+    ledger spec's "webhook it already has" does not exist yet, and the
+    poll is provider-uniform. list_gaps is server-gated to the
+    steward/benchmark **server-resolved profiles** over and above the
+    profile allowlist (LED-R1 cannot be widened by a mis-authored
+    custom profile).
+11. **Rate limits** are in-memory per core process (single-process
+    deployment shape; MC-4 stays open on pilot telemetry).
+12. **Search (M-6):** tiered deterministic ranking (exact FQN/alias ≫
+    title ≫ front-matter tokens ≫ body), query stopwords dropped,
+    entity/metric routing boost, total order with path tie-break.
+
+**Conformance status:** MT-1..MT-9 green (`core/test/mcp-*.test.ts`);
+MT-3/MT-4 exercised at the verification-library level plus the
+never-executes tool path (execution is CP-6; MT-5 adapted to the
+validate-time guardrail echo); MT-10 is CP-6/CP-7 scope (publish).
+FL-4/5/6/7/10 green. Every MCP-R1..R15 and LED-R1..R7 item has a named
+test — the requirement→test map is in `PR-CP4-M1.md`. Full suites: TS
+168 (11 files + 3 MCP files), Python 406. Customer-KB profiles landed
+as PR #18 (reporter/steward + roles.yaml OIDC wiring; steward merges).
+
+**Open for the M1 gate (not code):** the live two-machine demo (OAuth
+as reporter, contamination surfacing, token issue/refusals, flag_gap /
+list_gaps split, MT-9 live revocation, render-lag live, audit review)
+— runbook in `PR-CP4-M1.md`; and P-H (the `contextlayer-sync` PAT
+least-privilege assertion, D-66.7 — recorded with the SP-2 sign-off).
+
+## D-69 — CP-6/M2 governed execution: build decisions, JP-1/JP-2 closure
+
+**Context.** M2 is the direct-on-OLTP checkpoint the plan classes as the
+pilot-ending risk (plan §6.2). The pre-rulings adopted for the build were
+G1 (contract path first — `execute` jobs through the queue), G2 (defense
+in depth at gateway *and* executor), G3 (OLTP protection by database
+role), G4 (full MCP-R5 token enforcement). All four are implemented as
+stated; no relaxation was needed anywhere, and no scope-fence item was
+touched.
+
+### Closures
+
+1. **JP-2 — closed, measured, passes.** Budget: ≤500 ms p95 claim-to-start
+   on a warm runner. Measured over 100 warm validated executes against a
+   real Postgres through the real Python runner
+   (`core/test/execute-e2e.test.ts`, which asserts the budget so a
+   regression fails CI):
+
+   | metric | p50 | p95 | max |
+   |---|---|---|---|
+   | claim-to-start (normative JP-2) | 7.2 ms | **10.9 ms** | 23.1 ms |
+   | end-to-end `execute_sql` (non-normative) | 220 ms | 288 ms | — |
+
+   Both numbers are recorded because they measure different things and
+   only the first is the committed budget: JP-2 is defined (job spec §11,
+   plan §6.5) as *claim-to-start overhead excluding query time*, which is
+   `jobs.created_at → jobs.started_at`. End-to-end wall time additionally
+   includes the `validate_sql` call (which spawns the `sqlval` stage CLI —
+   the dominant term), HTTP, and the query itself. Reporting only the
+   end-to-end figure against a claim-to-start budget would have been a
+   category error in our favor, which is why it is labelled.
+
+2. **JP-1 — closed: runner routing stands; no short-circuit built.** The
+   pre-ruling pre-authorized the core-native Postgres short-circuit *if*
+   the queue path missed budget. It does not miss: 10.9 ms against a
+   500 ms budget is a 46× margin, and the LISTEN/NOTIFY claim path (CP-3a)
+   plus the new JOB_DONE producer wake are what make it so. Building the
+   alternative transport would have added a second execution path, a
+   second audit shape, and a second thing to security-review, to buy
+   latency headroom already there by two orders of magnitude. One path.
+
+### Implementation decisions
+
+3. **Producer wake is LISTEN/NOTIFY (`cl_job_done`), not an in-process
+   emitter.** §6.4 says the core "relays the result to the blocked
+   producer via internal notification" without specifying the mechanism.
+   An `EventEmitter` would be simpler and would work today, on one core
+   replica — and would silently stall the moment a second replica exists,
+   because the runner delivers to whichever replica it claimed against,
+   not necessarily the one holding the waiting MCP request.
+   `awaitJobResult` waits on the notification but re-reads job state on
+   every wake *and* on a 250 ms poll, so a dropped or coalesced
+   notification costs latency, never correctness.
+
+4. **Interactive `deadline_s` derived, per §4.2** (`interactiveDeadlineS`
+   = guardrail `timeout_s` + 30 s margin). The margin covers claim,
+   connect, and delivery — everything the statement timeout does not
+   bound. Without it a query using its full budget would race its own job
+   deadline and surface as a lease expiry rather than the honest
+   `timeout` guardrail.
+
+5. **G2 in practice: `Guardrails.parse` floors, never trusts.** The
+   executor's guardrail parsing treats an absent, partial, or oversized
+   payload envelope as a request for the *conservative default*
+   (row_cap 1000, timeout 30 s), with hard ceilings above. `statement_class`
+   is never read from the payload as a widening signal — select-only is
+   the only class this SDK executes, so a forged value cannot unlock DML.
+   This is what makes CC-3 pass rather than being a comment claiming it
+   would.
+
+6. **One parser, two call sites.** `sqlval.check_statement_class` was
+   extracted from `validate_statement` so the executor re-runs the
+   *identical* refusal set locally (QE-1) without needing a snapshot. A
+   second implementation in the executor would have been the obvious
+   place for the two layers to drift apart.
+
+7. **G3 role wall, checked twice.** `check_role_is_readonly` verifies role
+   attributes (SUPERUSER/CREATEDB/CREATEROLE/BYPASSRLS), every table write
+   grant reachable through role membership, and schema CREATE. It runs at
+   runner startup (`execution_preflight` in the runner config) *and*
+   before every query — grants can change under a long-lived runner, and
+   the per-query check is the one that cannot be stale. On startup failure
+   the runner **withholds `execute` from its claim declaration**: it does
+   not offer to do the work at all, while metadata sync for the same
+   connector continues. Provisioning SQL + verification queries:
+   `deploy/execution-role.sql` (applied by the operator, not by us).
+
+8. **Row cap enforced during streaming.** A named (server-side) cursor
+   fetches in batches to `row_cap + 1`; the extra row is how truncation is
+   *detected* without pulling the remainder, and it is dropped rather than
+   returned. A post-hoc trim would have satisfied CC-4's assertion while
+   leaving memory unbounded — the property worth having is the bounded
+   fetch, not the trimmed list.
+
+9. **API dialect: two different honest guarantees.** GSC's vocabulary is a
+   fixed constant table (D-30), so its executor does the full MT-8 check
+   locally and an undocumented dimension never reaches the wire. GA4's
+   surface is property-specific and lives in the snapshot, which the
+   executor does not hold; there the local check is the documented
+   *operation* allowlist, and GA4's own rejection of an unknown field is
+   mapped to `schema_mismatch` rather than surfacing as an opaque 400.
+   Between gateway and source, an undocumented GA4 dimension is refused
+   twice; it is not claimed to be refused locally when it is not.
+
+10. **Connectors 0.1.0 → 0.2.0** (postgres, ga4, gsc) for the additive
+    `query` capability. Canonical snapshot bodies exclude `connector`
+    (S-3), so C-2/C-4 hashes and every fixture are unaffected — the bump
+    is invisible to determinism by design. Job version constraints in
+    `deploy/jobs/*` updated to `>=0.2 <0.3`.
+
+11. **GA4/GSC `api.py` extraction.** Both connectors' shared manifest,
+    endpoints, credentials, and status mapping moved out of `connector.py`
+    so the executor can import them without a cycle (the connector module
+    registers the executor). `connector.py` re-exports every moved name;
+    no caller changed.
+
+### Interpretive rulings (flagged, not silent)
+
+12. **Fault-ledger §5 contradicts itself on `schema_mismatch_at_execute`**,
+    calling it a "shipped-but-disabled rule" and then, in the same
+    sentence, "enabled by default actually — it is deterministic and
+    severe." Taken as **enabled**, following the parenthetical and its
+    stated rationale. This is not a new choice: migration 0006 already
+    seeded it `enabled = true` at M1, so the ruling confirms the shipped
+    reading rather than changing behavior. The gateway honors the row's
+    flag, so an operator can still disable it. **Recommend the spec
+    sentence be amended to say one thing** — filed as a proposal, not
+    fixed here (amendment fence).
+
+13. **`statement_class` used as a capability code.** Capability §6
+    enumerates `syntax_error, permission_denied_at_source, timeout,
+    row_cap, quota_exhausted, schema_mismatch`. A local statement-class
+    refusal (the CC-3 canary) is none of these: calling it `syntax_error`
+    would misreport a policy refusal as malformed SQL. Emitted as
+    `capability_code: statement_class` under the unchanged outer
+    `guardrail` code, consistent with CI-8 (outer taxonomy fixed,
+    capability precision underneath) and the additive-growth norm.
+    **Proposed as an additive entry to the §6 capability-code list.**
+
+### Bug found and fixed in M1 code
+
+14. **Audit dropped the statement text for execute.** `mcp.ts` wrote
+    `statementText` only when `tool === "validate_sql"`, but spec §8
+    requires full statement/intent text for **validate, execute, and
+    publish** (reads carry `args_digest` only). Correct while execute was
+    stubbed, wrong the moment it landed — and it would have produced an
+    audit trail that looked complete while omitting exactly the calls that
+    touch customer data. Now keyed on a named `STATEMENT_TEXT_TOOLS` set.
+
+15. **Credential scoping for execute jobs (found in self-review).** The
+    connection registry (`sync_systems`) is shared with snapshot jobs and
+    therefore holds the *introspection* credential. The gateway initially
+    passed the registration's credential list through verbatim, which
+    handed the introspection DSN to every execute job. Nothing read it —
+    the postgres executor resolves `execute_dsn` only — but it widened
+    what a compromised execute job could reach for no benefit, and it is
+    exactly the kind of latent hole G3's role wall exists to close.
+    The gateway now passes only credentials the registration marks
+    `required_for: ["query"]` (the manifest's own vocabulary, capability
+    §3), and **fails closed** with an actionable message when none is
+    marked — rather than silently falling back to the broader credential.
+    Regression test in `core/test/mcp-execute.test.ts`.
+
+16. **`deploy/execution-role.sql` shipped with a syntax error**
+    (`GRANT CONNECT ON DATABASE current_database()` — GRANT needs a
+    literal identifier), caught by the operator in the Supabase SQL
+    editor. Root cause: the file had never been executed. Fixed with a
+    `DO`/`format(%I)` block that works whatever the database is called,
+    and the file is now **run as a test**
+    (`test_deploy_execution_role_sql_provisions_a_role_that_cannot_write`)
+    rather than being documentation that resembles SQL.
+
+    Running it surfaced a second, more interesting point: with the script
+    applied, *every* write was refused by `ReadOnlySqlTransaction` — the
+    `default_transaction_read_only` session setting — which is the
+    barrier the role can switch off itself. The test now defeats that
+    flag first and then asserts the GRANTs refuse writes with
+    `InsufficientPrivilege`, because the grants are what G3 actually
+    rests on. A check that stopped at the first refusal would have passed
+    while leaving a write path one `SET` away. The file now says so in
+    the comment at step 5. Also corrected there: the
+    `ALTER DEFAULT PRIVILEGES` note (default privileges are recorded per
+    *creating role*, not per schema — the original comment overclaimed),
+    and an explicit warning not to grant Supabase's `auth`, `vault`, or
+    `storage` schemas.
+
+### Conformance status
+
+MT-3/MT-4 upgraded from issuance-only to **enforcement**: no token,
+tampered statement, forged signature, re-signed payload, expired token,
+foreign subject, and superseded snapshot each return
+`revalidate_required` *and* are asserted to enqueue no job
+(`core/test/mcp-execute.test.ts`). MT-5 asserts client-supplied guardrails
+are dropped and the profile's appear in the job payload. CC-3 (canary
+DML/DDL/CTE-write/multi-statement/locking refused with guardrails stripped
+from the payload), CC-4 (streaming cap + `truncated`), CC-5 (QE-2 comment
+tag observed in Postgres' own statement log), CC-6 (interactive quota
+terminal, never deferred) green in `tests/test_postgres_executor.py` and
+`tests/test_api_executors.py`. The staged-bypass test drives the driver
+directly, past every parser, and the role still refuses the write.
+
+Full suites: Python 447 + 13 skipped, TypeScript 127 (13 files).
+
+**Live evidence captured.** GA4 `runReport` and GSC `searchAnalytics.query`
+execute against the real example estate for documented fields, and an
+undocumented dimension is refused on both
+(`tests/test_live_execute.py`, env-gated).
+
+### Live evidence against the example estate (2026-07-20)
+
+`deploy/execution-role.sql` was applied to the pilot Supabase by the
+operator (with a syntax fix — see D-70). Verified live:
+
+- **G3 startup check passes**: role `contextlayer_exec`, engine 17.6.
+- **Role posture confirmed through the introspection connection**: zero
+  write grants reachable through role membership; `public` is the only
+  schema with USAGE — `auth`, `vault`, `storage`, `realtime`, and
+  `extensions` are all closed, so the Supabase schemas holding password
+  hashes, refresh tokens, and decrypted secrets are unreachable by any
+  agent query; role holds none of SUPERUSER/CREATEDB/CREATEROLE/BYPASSRLS;
+  all three session defaults applied.
+- **Real SELECT over live customer data**: 17 rows from
+  `pg_stat_user_tables`, executed under the execution role, 1021 ms.
+- **Write refused at the role** driven straight at the driver, past every
+  parser we own; **row cap truncates** on an over-cap query.
+- **Startup refusal demonstrated live**: pointing execution at the
+  introspection DSN is refused — *"execution role 'postgres' holds
+  CREATEDB, CREATEROLE, BYPASSRLS; execution requires a role with none of
+  these (G3). Refusing to serve execution."* — at startup **and** per
+  query. At the runner level the effect is the declaration itself: with
+  the execution role it offers `['execute', 'snapshot']`; with the
+  write-capable role it offers `['snapshot']` only. Execution is withheld
+  while metadata sync continues, as designed.
+- **GA4 `runReport` and GSC `searchAnalytics.query`** return live data for
+  documented fields; undocumented dimensions refused on both.
+
+**Finding raised, not fixed here (out of M2 scope).** The *introspection*
+connection runs as `postgres`, which holds CREATEDB, CREATEROLE, and
+BYPASSRLS. Snapshot introspection reads catalogs and needs none of those.
+G3 scoped the execution role because that is the path an agent drives,
+but the same least-privilege argument applies to introspection — and
+BYPASSRLS in particular means the introspection role sees through row
+level security. **Proposed as a register item**: a dedicated
+least-privilege introspection role, with the same provisioning-file
+treatment. Not changed under the M2 fence.
+
+**Open for the M2 gate (not code):** the two-machine reporter demo
+against the customer Supabase (needs the second machine; M1's live demo
+is still open too and shares the setup), and security review #2 (plan
+task 6.6).
+
+## D-70 — `deploy/execution-role.sql` shipped broken; the artifact is now executed by tests
+
+**What happened.** The first version of the execution-role provisioning
+script contained `GRANT CONNECT ON DATABASE current_database()`, which is
+not valid SQL — `GRANT ... ON DATABASE` takes a literal identifier. The
+file was written, reviewed, committed, and handed to the operator without
+ever being run. The operator hit the error in the Supabase SQL editor and
+fixed it with a `DO` block using `format(%I, current_database())`.
+
+**Why the M2 suite did not catch it.** Every other execution test
+provisions its roles with inline SQL written in the test — precise, fast,
+and completely disconnected from the artifact a human actually runs. The
+tests proved the *executor* enforces G3; nothing proved the *file that
+creates the role G3 depends on* would execute. The shipped artifact was
+the one piece of the checkpoint with no coverage, and it was also the
+piece with the highest blast radius, since it runs as a superuser against
+the customer's production database.
+
+**Fix (`tests/test_execution_role_sql.py`).** The real file is applied to
+a real Postgres through `psql`, with only the documented `<PASSWORD>`
+placeholder substituted, and the resulting role is then held to the
+executor's own check: it can read business data; it cannot write by any
+of five routes driven straight at the driver; its session defaults are
+set; later tables created by the provisioning role stay readable; and the
+three VERIFY queries the file instructs the operator to run are parsed
+back **out of the file** and asserted empty — so the instructions are
+tested, not just the statements. Confirmed as a genuine regression test
+by restoring the broken `GRANT`: 13 errors before the fix, 13 passes
+after.
+
+**The general lesson, recorded because it will recur.** Operator-run
+artifacts — provisioning SQL, runbooks, migration scripts, compose files
+— are code, and shipping them untested is shipping untested code. The
+convenience of writing setup inline in a test is exactly what leaves the
+real artifact uncovered. Where a file is meant to be run by a human
+against something that matters, a test should run that file.
+
+**Secondary defect, same class (mine).** The `.secrets/wire-exec-dsn.sh`
+helper built the DSN by re-encoding an already-encoded password, so a
+literal `%` became `%25` and the stored credential silently did not match
+the role; it also wrote the value without testing it, so the failure
+surfaced two layers later as an opaque `AuthError`. Both are fixed: the
+helper now carries the Supabase pooler's tenant suffix (which lives in
+the username as `<role>.<project_ref>` and is required by the pooler),
+tests the connection *before* writing, and a companion
+`reset-exec-password.sh` generates a URL-safe password and writes both
+sides from that one value — the two-sided secret is never hand-carried,
+which removes the encoding-mismatch class rather than documenting it.
+
+## D-71 — Security review #2 F2/F3 landed: visibility governs execution; introspection gets its own role
+
+Ruling **D-71** (owner, 2026-07-21) disposed of security review #2. This
+record closes its **points 1 and 2** — findings **F2** and **F3** — with
+tests as the definition of done. Points 3–8 are recorded there and are
+not touched here.
+
+**Numbering note.** The ruling was handed down labelled *D-67*, which was
+already taken by the security-review-**#1** landing record (also its
+F2/F3/F4 — the collision is a genuine hazard, since both entries are
+"security review, findings F2/F3"). Renumbered to **D-71** on the owner's
+call; the review #1 record keeps D-67 because landed commits and code
+comments already point at it. Every reference this work introduced reads
+`D-71.1` / `D-71.2`.
+
+### F2 — the visibility map now governs validate_sql and execute_sql
+
+**Spec first, per the fence.** One additive amendment to the MCP tool
+reference, in three places: §3 strikes the words "for content tools" from
+the per-call decision; §6.6 specifies resolution against the caller's
+visible surface; §5 adds the `objects` allow-set to the validation token.
+Conformance rows MT-11/MT-12/MT-13 added. No other spec touched.
+
+**The implementation choice that carries the non-disclosure property.**
+The visible surface is the *input* to resolution, not a filter over its
+output: `valsql.ts` builds the object list handed to `sqlval` from the
+objects the caller can see, so a hidden table is refused by the same code
+path, with the same `unknown_object` finding, as a table that was never
+there. There is no second error message to keep in sync and no branch
+that could leak which case occurred. The alternative — resolve against
+everything, then reject hits that are hidden — needs the two messages to
+stay byte-identical forever, and would have been a plausible way to ship
+an enumeration oracle. The same ordering applies to the API dialect and,
+importantly, to column resolution: a hidden object's columns are hidden
+with it, so no column check can confirm a hidden object's shape.
+
+The true reason is recovered afterwards, server-side only, by asking
+whether a refused ref resolves in the *full* snapshot. That feeds the
+audit record (`decision: filtered`, `hidden_objects`) and nothing else —
+M-4's second half, the one that keeps this debuggable for a steward while
+opaque to the caller.
+
+**Carrying the decision to execute, and which check catches what.** The
+token now carries `objects`, the allow-set validation resolved against,
+and `execute_sql` re-checks every member against the caller's *current*
+scopes before enqueue. This is not redundant with the `snapshot_ref` pin
+and does not overlap it: `snapshot_ref` pins the **facts** surface, and
+visibility is not in the snapshot — the map lives in the KB at `kb_ref`.
+A revocation therefore moves no snapshot, advances no `snapshot_ref`, and
+a token minted a moment earlier verifies against every other §5 binding
+cleanly. **The allow-set recheck is the only mechanism that catches a
+mid-token visibility change.** MT-13 asserts exactly that, and asserts
+the snapshot rows are unchanged across the case so the claim cannot be
+satisfied accidentally by the pin.
+
+Refusal at execute is `not_found` with validation's wording, not
+`revalidate_required` — holding a token must not become a way to learn
+that an object exists. It is built without the module's `fail()` helper,
+which copies its extras into the caller-visible `detail` as well as the
+audit `meta`; the hidden FQNs go to the audit only. A token with no
+`objects` claim is refused (`revalidate_required`) rather than trusted:
+fail-closed, bounded by the 300 s TTL to one re-validation.
+
+*Tests* (`core/test/mcp-visibility.test.ts`, 12): hidden-table SELECT
+refused with no token; **the hidden and the absent responses compared
+field-by-field after normalising the object name**, which is the actual
+property rather than a proxy for it; the identical statement passing for
+a steward; a JOIN with one hidden side refused, asserting the visible
+side is not mentioned at all; a hidden GA4 custom dimension refused in
+the same words an undocumented one gets; both audited as `filtered` with
+the true reason; the mid-token revocation case above; a still-visible
+statement getting *past* the check (so the case above is not a blanket
+refusal); and the missing-allow-set token refused. Confirmed as genuine
+regression tests by mutation: disabling the surface filter fails 6 of 12,
+disabling the allow-set recheck fails MT-13 alone.
+
+### F3 — introspection moves to `contextlayer_introspect`
+
+`deploy/introspection-role.sql` provisions LOGIN + CONNECT + USAGE on the
+introspected schemas and **no SELECT on anything**, with none of the four
+role attributes. That looks too narrow until the reason lands: the
+connector reads `pg_catalog` only, and `pg_catalog` is world-readable and
+*not* privilege-filtered — so the role reads the full shape of the estate
+and the contents of none of it. That asymmetry is also why the swap is
+snapshot-neutral: the catalog answers the same regardless of who asks.
+
+`check_introspection_role` refuses SUPERUSER or BYPASSRLS at the start of
+every **live** snapshot job (not ddl-file mode — that container is ours
+and applying customer DDL requires the superuser the check would refuse).
+Failing the whole job is correct under S-6.
+
+**A fact worth recording, measured rather than assumed.** The review
+described the pilot's `postgres` as superuser-class. It is not: on
+Supabase `rolsuper = false`, while `rolcreatedb`, `rolcreaterole` and
+**`rolbypassrls`** are all true. A check written to look only for
+SUPERUSER — the obvious way to write it — would have passed the exact
+connection F3 was filed about. Both attributes are tested for that
+reason, and it is BYPASSRLS that actually fires on the pilot.
+
+*Tests.* `tests/test_introspection_role_sql.py` (15) applies the real
+file through `psql` per D-70 and holds it to both claims: introspection
+through the provisioned role is **byte-identical** to introspection as
+the container superuser on the same database, and all four read paths
+raise `InsufficientPrivilege`. The file's own VERIFY queries are parsed
+back out of it and asserted empty. Controls: a superuser connection and a
+BYPASSRLS-only role are each refused.
+
+Beyond the new file, the connector's own live-mode fixtures now run
+through this role (`tests/test_postgres_connector.py`), which upgrades
+**C-3 mode invariance** into direct evidence for the swap: ddl-file mode
+introspects as superuser, live mode as a role with no table privileges,
+and the canonical bodies must still match byte for byte. Provisioning
+goes through one shared helper that runs the shipped artifact — there is
+no test-only variant of this role.
+
+**Config swap.** `env://SUPABASE_DSN` → `env://CL_INTROSPECT_DSN` in the
+example job and connection registrations and in the onboarding skill. The
+rename is the point, not cosmetics: the old name said which *database* it
+reached while the value behind it was the estate's BYPASSRLS role, and
+renaming forces the operator to set a new variable to a new credential
+rather than leave the old one in place under a name that no longer
+describes it.
+
+**Not done, and why.** The live example swap is unfinished: applying
+`introspection-role.sql` is DDL against the customer estate and is the
+operator's to run, never ours. The pilot is wired and **fails closed**
+today — verified end-to-end through the real CLI, which now exits
+`config_error` naming the file to run. The byte-identity comparison is
+pre-loaded for that moment: baseline `canonical_body_sha256 =
+6fcfc976ce104e33ca56a16670d78e57ab44950bdf6ee4b106dad8c20ce3463c` (29
+objects, last pull under `postgres`, 2026-07-20T21:24:54Z), recorded in
+`.secrets/connections.md` with the two remaining steps. This is D-71
+point 8(c), already named there as an M2 sign-off condition.
+
+*Suites at landing:* Python 486 passed / 13 skipped; core 140 passed
+across 14 files (MT, FL, SO, drill, JP-2); `tsc --noEmit` clean.
+
+## D-72 — Task 6.1 accepted; playbook deploy-gate amendment authorized
+
+Ruling **D-72** (owner, 2026-07-21) accepted the D-71 points 1–2 build,
+authorized one additive playbook amendment, and filed the pairing motion.
+
+**1. Renumbering affirmed.** Review #1's landing record keeps **D-67**;
+the review-#2 dispositions ruling is **D-71** everywhere, including in
+the owner's own prior references.
+
+**2. F2 accepted as landed** — the resolution-input design and the
+allow-set answer for mid-token revocation both, the latter noted as
+consistent with MCP-R1's per-call re-resolution (roles are resolved from
+the token on every call and never session-cached; the allow-set recheck
+is that same principle reaching the objects a token authorized rather
+than the identity holding it). MT-13 plus the mutation evidence are
+recorded as the property's tests: disabling the surface filter fails 6 of
+12 in `mcp-visibility.test.ts`, disabling the recheck fails MT-13 alone.
+
+*Design rationale recorded at the owner's instruction — the `fail()`
+near-miss.* The first draft of the execute-side refusal was built with
+`execute.ts`'s local `fail()` helper, which spreads its `extra` argument
+into **both** `meta` (the audit record) and `detail` (the caller-visible
+error payload). Passing the hidden FQNs through it would have shipped, in
+the one refusal whose entire purpose is non-disclosure, a response naming
+exactly what was hidden and why. Caught before it ran, but it is worth
+recording *why* it was easy to write: the helper's two sinks are a
+convenience that reads as one, and every prior refusal in that function
+wanted both. The shipped refusal is constructed inline for that reason,
+with a comment saying so at the call site. **General shape:** a helper
+that fans one input out to an internal sink and an external sink is
+comfortable until the first value that may only reach one of them —
+non-disclosure paths should not use fan-out helpers.
+
+**3. F3 accepted as landed:** the dual-attribute startup check
+(`rolsuper`, `rolbypassrls`), the catalog-only introspection role, and
+C-3 mode invariance upgraded from a determinism check into evidence for
+the swap (ddl-file as superuser vs live as a role with no table
+privileges, canonical bodies byte-identical).
+
+**4. Playbook amendment authorized (additive) — applied here.**
+`customer-onboarding-playbook.md` §13 gains gate item 9: three
+role/credential assertions — `contextlayer_exec` read-only at the
+database level, `contextlayer_introspect` neither SUPERUSER nor
+BYPASSRLS, and the `contextlayer-sync` PAT fine-grained/single-repo/
+contents+PR-write-only (P-H, D-66.7) — as three distinct identities with
+distinct secrets, none of them the estate's default `postgres`. The
+item's closing note makes the Supabase finding normative guidance:
+**check attributes, not role names**, because `rolsuper = false` alongside
+`rolbypassrls = true` is a real configuration and a name-based check
+passes exactly the connection the item exists to catch. Draft text from
+`PR-D71-F2-F3.md` adopted; spec diff leads its own PR
+(`PR-D72-PLAYBOOK-GATE.md`). No other spec touched.
+
+**5. Pairing motion filed** as playbook register item **OB-5**: a profile
+granting `execute_sql` must be paired with a database role scoped no
+wider than that profile's visible surface. Stated as a deployment
+obligation, not yet a mechanical gate item — D-71.1 made the KB map
+govern the execution surface, but the map is the gate and the database
+role is the wall, and nothing checks that the wall matches the gate.
+Wording at the next playbook revision; **load-bearing at the first
+customer with more than one execute-granted profile**, which is the first
+point at which the two surfaces can diverge.
+
+**6. M2 sign-off conditions restated.** (a) The two flagged spec
+contradictions pasted back for ruling — **still outstanding**, and the
+only one of the three that is neither landed nor an operator action; the
+items are D-69 interpretive rulings 12 (fault-ledger §5 self-contradiction
+on `schema_mismatch_at_execute`) and 13 (`statement_class` proposed as an
+additive capability §6 code). (b) Task 6.1 landed — **cleared** by D-71
+points 1–2. (c) Introspection role swapped live with byte-identity
+verified — **on the owner**; the pilot fails closed until then, and the
+baseline hash is recorded in `.secrets/connections.md`.
+
+---
+
+# DECISIONS — CP-5 (the loop closes): shipped skills + baseline v1
+
+## D-74 — CP-5 premise resolution: branch, integration debt, condition realization
+
+**Numbering note:** D-73 is unallocated. The owner's ruling arrived
+labelled D-74 and is recorded under that number rather than renumbered —
+a gap in the sequence is cheaper than a label that disagrees with the
+ruling it records.
+
+**1. The premise did not hold on `cp4-m1-mcp`.** CP-5's deliverables 4, 6
+and 7 build on the CP-2 harness. That harness had never left
+`task/2-benchmark-harness`: neither `main` nor `cp4-m1-mcp` carried
+`benchmark/`, `benchmark/suite/benchmark-seed-v0.yaml`, the eleven
+`tests/test_benchmark_*.py` modules, or **ruling D-62** — the CP-2 gate
+amendment that defers baseline v1 into CP-5 and is the authority for
+CP-5's added exit criterion. On `cp4-m1-mcp` the plan still listed the
+baseline under task 2.3 at CP-2, and the register's MC-1 trigger still
+read without its CP-5 re-point. What made this hard to see from the
+working tree: `benchmark/` existed on disk containing **only a stale
+`__pycache__/`** left by an earlier checkout of that branch, so the
+directory looked present while `git ls-files benchmark` was empty.
+
+Flagged rather than patched, per the CP-5 fence. Resolution accepted:
+`cp5-skills` cut from `cp4-m1-mcp`, `task/2-benchmark-harness` merged in.
+Six conflicts, all append-shaped, resolved as unions; CI keeps the `core`
+job and gains `benchmark-integrity` (R7); `DECISIONS.md`'s CP-2 records
+(D-50..D-62) reordered ahead of D-63..D-72 so the file runs in number
+order.
+
+**The fence is now verifiable and holds.** `benchmark/`,
+`tests/test_benchmark_*.py` and `results/` diff clean against
+`task/2-benchmark-harness` — harness code is byte-identical, not merely
+believed unchanged. Suites green post-merge: 588 Python (486 + 102
+benchmark), 140 core, R7 integrity GREEN.
+
+**2. Integration debt — standing convention (process ruling).** At CP-5
+completion `cp5-skills` PRs to `main`, and `main` becomes current through
+M2 + CP-5 in one reviewed landing. From then on: **every checkpoint
+sign-off includes its branch landing on `main` — a checkpoint is not
+closed while its work is unmerged.** The plan's gate definitions read
+accordingly (§1, "The checkpoint model").
+
+The convention exists because of what point 1 cost. Five task branches
+had accumulated unmerged; the CP-2 work sat unmerged for the whole of
+CP-3/CP-4/CP-6 and was silently absent from the branch that depended on
+it. The failure mode is not lost work — it is a *premise* believed true
+because the work was done, when the branch doing the depending never
+received it.
+
+**3. Uncommitted D-71/D-72 work committed** (`2ff056d`, `e0c4f43`) as a
+precondition of the merge — `DECISIONS.md` was the one dirty file the
+merge touched. Affirmed by the owner as the correct call on the evidence
+(finished PR bodies, both suites green, described as live in the task
+premise). `DECISIONS.md`'s addition covers both rulings and rides in the
+D-71 commit rather than being split across the two: interactive staging
+is unavailable in this environment. **Accepted as-is by ruling — history
+purity is not load-bearing; the DECISIONS text is.**
+
+**4. Condition realization (deliverable 5).** The three benchmark
+conditions are realized as **three dev-core instances**, one per
+condition, each pointed at a different KB remote, with the profile fixing
+the tool surface. R2 holds: identical journey prompt, identical execution
+access, context access the only difference.
+
+The load-bearing correction to the owner's sketch: the varying axis must
+be the **core instance**, not the profile. `kb_ref` is per-instance
+config (`SYNC_GIT_REMOTE`, `core/src/config.ts`), not a profile field, so
+three profiles against one core would all resolve against the same KB and
+the conditions would be indistinguishable — the experiment would report a
+difference it never actually created.
+
+| Condition | KB the instance serves | Tool surface |
+|---|---|---|
+| `enriched-kb` | customer KB clone at pinned `kb_ref` | full read set + validate + execute |
+| `machine-kb` | `benchmark.conditions` render (deterministic, byte-stable → keys cleanly under R8) pushed to a scratch repo | full read set + validate + execute |
+| `no-kb` | scratch repo containing **only the profile files** | validate + execute only |
+
+Three additions by ruling:
+
+- **(a) `no-kb` spans all three systems.** The seed suite has GA4 and GSC
+  cases, and CP-2's R1 defined no-kb discovery as `information_schema` +
+  the GA4 metadata endpoint + GSC's fixed schema. Grant validate/execute
+  for supabase, ga4 *and* gsc — a supabase-only grant would score the
+  GA4/GSC cases as failures of the condition rather than of the KB.
+- **(b) Visibility must be verified permissive for `no-kb`.** D-71.1 made
+  `validate_sql` visibility-governed. A default-hidden visibility map
+  would refuse every statement and **silently destroy the condition** —
+  it would look like a no-kb agent that cannot write valid SQL, which is
+  exactly the headline finding the baseline is meant to produce honestly.
+  Guarded by a fixture test: the no-kb profile validates a statement
+  against a example estate table successfully.
+- **(c) The `no-kb` instance's KB carries no content.** The tool surface
+  already prevents content reads; pointing the instance at content it
+  must not serve is a second thing that has to stay true. Defense in
+  depth, and it makes the R8 condition keying honest.
+
+**5. Baseline spend gated.** Return before the baseline run with: smoke
+journey evidence (one case, one condition), on-subscription billing
+verified per the preflight (`ANTHROPIC_API_KEY` unset, auth route
+checked), the pinned model id, and the three instances' R8 keys
+(`kb_ref` / render hash / profile) for the owner's check.
+
+## D-78 — AS-9/10/12 conformance layering; the falsifiability rule
+
+**The question.** The three CP-5 conformance items (AS-9 gap-vs-guess,
+AS-10 contamination reaching the artifact, AS-12 CP-E4 front-matter) all
+assert on what an agent *did*. They could be built as rule validators
+over staged artifacts — cheap, deterministic, CI-resident — or as
+behavioral scenarios against a fixture deployment, which is what
+skill-spec SK-1 ("verified behaviorally through the audit stream") and §9
+("executed against a fixture deployment") actually specify.
+
+**Ruling: both, layered.** (a) Validators ship as CI-resident regression
+tests over staged good/bad artifacts; they pin the rules cheaply and
+permanently. (b) The three behavioral scenarios run against the fixture
+deployment — fixture KB, fixture snapshots, stub connectors — asserting
+on the audit stream and the resulting files. **(b), not (a), is the
+AS-9/10/12 conformance evidence for the CP-5 gate.**
+
+**The standing rule this establishes** — general, not CP-5-local, and
+recorded alongside the fan-out-helper rule above:
+
+> **A conformance item may only be reported green on evidence that could
+> have failed if the behavior were absent.**
+
+Validators over staged artifacts cannot fail when the skill misbehaves:
+the fixtures are hand-written, so the test would stay green if the enrich
+skill never wrote a purpose in its life. It tests the checker, not the
+skill. Reporting such a suite as "AS-9/10/12 green" would claim
+behavioral conformance that was never observed — the failure is not a
+weak test but a **false claim about what was verified**.
+
+The same principle, wearing different clothes, is why the CP-5 benchmark
+driver refuses to synthesize a journey record when the skill emitted
+none (deliverable 4): a fabricated record would be ingested and scored as
+though a real journey happened, and the resulting number would look
+exactly like a real one. Evidence that cannot fail, and evidence that was
+manufactured, are the same defect at different points in the pipeline.
+
+**Re-runnability.** The scenarios ship as an invocable target against the
+fixture deployment, with their journey records and audit extracts
+committed as gate evidence. Re-run on any skill edit — cheap enough to be
+the norm, since the fixture deployment needs no example estate and no
+credentials. CI marks them gate-evidence tests, not per-commit tests.
+
+**Sequencing** (correcting D-76.4's "in parallel", which was wrong on the
+spec): fixture deployment → three scenarios → rig prep per D-76.3 →
+smoke journey → packet. The scenarios precede the baseline instances and
+need neither pilot credentials nor the scratch repos.
+
+## D-79 — CP-5 behavioral scenarios accepted; fixture reporter refreshed
+
+**Gate evidence accepted.** The AS-9/10/12 behavioral scenarios (D-78
+layer (b)) are the CP-5 conformance evidence: real skills in real headless
+Claude Code sessions against the standalone fixture deployment, asserting
+on the audit stream and produced files. Both journeys pass under
+`claude-opus-4-8`; the agent-produced `enrich-orders.md` and
+`report-artifact.json` are committed verbatim under `results/cp5-scenarios/`.
+
+**The falsifiability demonstration D-78.2 required is on record, observed
+not presumed.** The AS-10 journey *failed* on its first run: the profile
+in use exposed no `execute_sql`, the loop stopped at validation, and the
+"validated and executed" assertion went red. The suite has now been seen
+to discriminate — a conformance item reported green because its assertion
+could, and once did, fail. This is the general rule from D-78 made
+concrete: evidence that cannot fail cannot green an item.
+
+**Fixture reporter refreshed to the product shape (D-79.2).** The first
+AS-10 pass ran under the steward profile, because the fixture's reporter
+was frozen at its M1 read+validate shape while the product Reporter gained
+`execute_sql` at CP-6/M2. Accepted for that run (AS-10 asserts disclosure
+reaching the artifact, not profile identity), but the root cause was
+fixed: `REPORTER_PROFILE` now carries `execute_sql:drill`, `REPORTER_TOOLS`
+gains `execute_sql`, and the stale MT-3 assertion ("execute never runs at
+M1 — profile-denied for reporters") was rewritten to the CP-6 reality (the
+reporter passes the profile gate; token binding still turns away a
+non-matching request). AS-10 re-run under the refreshed reporter: pass.
+
+**Watch-note filed (register-style, home: skill spec / test fixtures):**
+*fixture profiles must track product profiles.* Silent divergence makes
+scenario evidence quietly weaker — a scenario can pass against a profile
+the product no longer ships, and nobody is told. There is no mechanism
+today that fails when a fixture profile drifts from its KB counterpart;
+until there is, the coupling is a review responsibility.
+
+**Two fixture-side choices, both accepted (D-79.2/3).** The report
+scenario seeds the reporting-view chain (`v_order_totals` → `v_net_sales`)
+so execution returns real rows rather than a `schema_mismatch`; the
+seeding is fixture-side only. And `helpers.ts` loads vitest `inject`
+lazily (gated on `CORE_TEST_DATABASE_URL`) so the module also loads
+outside vitest under vite-node for the standalone launcher — vitest path
+unchanged, suite green.

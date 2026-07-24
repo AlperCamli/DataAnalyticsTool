@@ -60,6 +60,24 @@ class QuotaExceeded(ConnectorError):
         self.retry_after_s = retry_after_s
 
 
+class GuardrailViolation(ConnectorError):
+    """Interactive execution hit a guardrail (job §6.7 `guardrail`).
+
+    Not a system fault: the caller is waiting and gets the guardrail
+    verdict back as the answer. `capability_code` carries the capability
+    spec §6 precision (`timeout`, `row_cap`, `quota_exhausted`,
+    `syntax_error`, `permission_denied_at_source`, `schema_mismatch`)
+    underneath the one outer taxonomy code (CI-8).
+    """
+
+    code = "guardrail"
+    retryable = False
+
+    def __init__(self, message: str, *, capability_code: str, detail: dict | None = None):
+        super().__init__(message, detail={**(detail or {}), "capability_code": capability_code})
+        self.capability_code = capability_code
+
+
 class EmissionError(ConnectorError):
     """Snapshot rejected by the pre-delivery gate (J-6 connector-side).
 

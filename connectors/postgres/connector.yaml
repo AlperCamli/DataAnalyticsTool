@@ -1,9 +1,10 @@
 name: postgres
-version: 0.1.0
+version: 0.2.0
 protocol_version: 1
 snapshot_version: "1"
 capabilities:
   metadata: { modes: [ddl-file, live] }
+  query: { dialect: postgresql }
 config_schema: ./config.schema.json
 credentials:
   - key: dsn
@@ -12,4 +13,12 @@ credentials:
       Read-only-role DSN for live mode, as a vault reference once the job
       transport resolves credentials (J-4). Local/CLI runs supply
       config.dsn or config.dsn_env instead (DECISIONS.md D-14).
+  - key: execute_dsn
+    required_for: [query]
+    description: >-
+      DSN for the dedicated execution role - read-only at the database
+      level and distinct from the introspection role (G3). The executor
+      verifies the role's grants at startup and per query, and refuses
+      to serve execution if the role can write. Provisioning SQL and
+      runbook: deploy/execution-role.sql.
 rate_limit: { strategy: none }

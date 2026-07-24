@@ -268,13 +268,63 @@ async function runSync(args: string[]): Promise<number> {
   return 2;
 }
 
+/**
+ * `compile PROFILE --kb DIR --url URL [--out DIR]` — platform-architecture
+ * §5's one-line Claude Code setup. The profile is read from the KB clone
+ * (customer-owned); the skills bundle comes from the core image and never
+ * from the KB (D-75.1). Needs no database: compilation is a pure function
+ * of the profile YAML plus this release's skills.
+ */
+async function runCompile(args: string[]): Promise<number> {
+  const positional = args.filter((a) => !a.startsWith("--"));
+  const flag = (name: string): string | undefined => {
+    const i = args.indexOf(`--${name}`);
+    return i >= 0 ? args[i + 1] : undefined;
+  };
+  const profileName = positional[0];
+  const kbDir = flag("kb");
+  const publicUrl = flag("url");
+  const outDir = flag("out") ?? `./contextlayer-${profileName ?? "profile"}`;
+
+  if (!profileName || !kbDir || !publicUrl) {
+    console.error("usage: cli.js compile PROFILE --kb DIR --url URL [--out DIR]");
+    return 2;
+  }
+
+  const { readFile } = await import("node:fs/promises");
+  const { existsSync } = await import("node:fs");
+  const pathMod = await import("node:path");
+  const YAML = (await import("yaml")).default;
+  const { compileProfile, writeSetup, listShippedSkills } = await import("./compile.js");
+
+  let file = pathMod.join(kbDir, ".contextlayer", "profiles", `${profileName}.yaml`);
+  if (!existsSync(file)) file = pathMod.join(kbDir, ".contextlayer", "profiles", `${profileName}.yml`);
+  if (!existsSync(file)) {
+    console.error(`no profile "${profileName}" in ${kbDir}/.contextlayer/profiles/`);
+    return 1;
+  }
+
+  const raw = YAML.parse(await readFile(file, "utf-8")) as Record<string, unknown>;
+  const setup = await compileProfile(profileName, raw, { publicUrl });
+  const written = await writeSetup(setup, outDir);
+
+  for (const warning of setup.warnings) console.error(`warning: ${warning}`);
+  if (setup.warnings.length) {
+    console.error(`this release ships: ${(await listShippedSkills()).join(", ") || "(no skills)"}`);
+  }
+  console.log(`compiled ${setup.displayName} -> ${outDir}`);
+  for (const rel of written) console.log(`  ${rel}`);
+  return 0;
+}
+
 const [, , command, ...rest] = process.argv;
 const run =
   command === "migrate" ? runMigrate() :
   command === "enqueue" ? runEnqueue(rest) :
   command === "sync" ? runSync(rest) :
+  command === "compile" ? runCompile(rest) :
   Promise.resolve().then(() => {
-    console.error("usage: cli.js migrate | enqueue [--wait] FILE... | sync …");
+    console.error("usage: cli.js migrate | enqueue [--wait] FILE... | sync … | compile PROFILE --kb DIR --url URL");
     return 2;
   });
 

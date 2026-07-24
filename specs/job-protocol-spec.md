@@ -113,6 +113,8 @@ Transitions are effected only via the wire calls in §6 plus two core-side event
 
 HTTP/1.1+ over TLS. All requests carry `Authorization: Bearer <runner-token>` and `X-CL-Protocol-Version: 1`. Bodies are JSON (`Content-Type: application/json`). Unknown response fields must be ignored (additive evolution, mirrors snapshot S-7).
 
+**Amendment (D-66.1 / security review #1 P-A, 2026-07-17) — authentication split.** Runner bearer tokens authorize **only** the runner protocol: `claim` (§6.1), `start` (§6.2), `heartbeat` (§6.3), `complete` (§6.4), `fail` (§6.5), `defer` (§6.6). The producer/ops/read surface — job enqueue and cancellation, job reads, `/v1/snapshots*`, `/v1/health-events`, `/v1/runs`, and every other operational read — requires a **platform identity**: an OIDC identity resolved per call against the customer IdP (MCP spec §3) carrying an operator role, or a statically configured service identity distinct from the runner token set. A runner token presented to any producer/ops/read endpoint is denied. Rationale: a leaked runner token's blast radius is bounded to job claims within its declared connectors — it can no longer enqueue or cancel work, nor read stored snapshot bodies, run records, or health events (review finding F1). The J-8 rotation property applies to both token sets. Additive: the runner-protocol surface and its semantics are unchanged.
+
 ### 6.1 `POST /v1/jobs/claim` — long-poll claim
 
 ```json
@@ -219,3 +221,4 @@ The `payload.credentials` array contains vault **references** (`vault://…` or 
 | JP-3 | Result size cap & storage: inline delivery into Postgres, retain last N=10 snapshots per system | 64 MB cap; Postgres storage (no object store — minimal moving parts) | First estate whose snapshot approaches the cap |
 | JP-4 | Webhook ingestion (CI → enqueue) endpoint shape and authentication | Core exposes `/v1/hooks/{system}` with per-hook shared secret; normatively out of this spec, owned by the sync orchestrator spec | When sync-engine spec is written |
 | JP-5 | Runner autoscaling semantics under K8s (HPA on queue depth) | Manual replica count in v1 | Enterprise deployment sizing |
+| JP-6 | Runner-token scope vs producer/ops surface (review #1 P-A) | **Closed** — D-66.1: runner tokens authorize the runner protocol only; producer/ops/read surface behind platform identity (§6 amendment) | — |

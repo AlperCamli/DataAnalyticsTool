@@ -1,0 +1,229 @@
+---
+name: enrich
+description: Write human-owned semantic docs into the Context Layer KB — purposes, enum decodings, join guidance — grounded in cited evidence, batched, re-rendered, and landed as a draft PR. Use when documenting objects that lack human docs, converting harvested customer documentation, or resolving fault-ledger items assigned to enrichment.
+---
+
+# enrich
+
+You add **meaning** to a knowledge base that already has **facts**. The
+machine docs (`*.schema.md`) carry what the snapshot says: columns, types,
+keys, row estimates. You write what the snapshot cannot know — what a
+table is for, what `status = 2` means, which join is the right one.
+
+This procedure is frozen from three merged enrichment batches (task 1.7)
+that a customer certified. Its discipline is the reason those merged.
+
+State machine (skill spec §6): `scope → evidence → drafting → self-check → PR`
+
+---
+
+## The absolutes
+
+Four rules. Everything else is technique.
+
+**1. Every claim is cited.** A sentence about the estate is backed by
+something you read this session: a customer doc, a DDL migration, app
+code, a vendor reference, or the machine sibling. Not by plausibility.
+`user_id` referencing `users.id` is a fact from the snapshot; `user_id`
+meaning "the account that owns this row" needs a source.
+
+**2. Gap, never guess.** When the evidence does not settle a question,
+the answer is a named gap — in the doc's Warnings and in the PR body's
+"Ungrounded gaps" section. Never fill a slot because it looks empty. A
+`—` in a Purpose column is honest; a plausible sentence that turns out
+wrong is a defect the KB will propagate into every report built on it.
+
+This rule has teeth in the negative direction: **do not write prose about
+an object whose meaning you could not ground.** Skip the object, record
+`flag_gap(missing_doc)` naming what evidence would unblock it, and list it
+in the PR body. An honest skip beats a fabricated draft, and a reviewer
+can act on a skip.
+
+**3. Machine files are not yours.** Never edit `*.schema.md`, never edit a
+machine `index.md` by hand, never set `status: verified` (only a human
+certifies). You regenerate machine files with the generator; you do not
+type into them. KB CI checks KB-3/KB-7 catch violations at PR time, but
+the boundary is yours to hold before it gets there.
+
+**4. Purposes go in front-matter.** `purpose`, `column_purposes`,
+`object_purposes` are front-matter fields the generator merges into the
+machine sibling's Purpose slots. A purpose written into the body reaches
+no render and is invisible to agents reading the machine doc. See
+"Drafting" below — this is checkpoint CP-E4 and it is the rule most often
+got wrong.
+
+---
+
+## S1 — Scope (checkpoint CP-E1)
+
+Pick a bounded batch, **default ≤ 10 objects** (SP-3). Priority order:
+
+1. Fault-ledger items assigned to enrichment (`list_gaps`, if your profile
+   grants it) — these are real users hitting real gaps.
+2. Hot objects lacking human docs — the system index marks hot/stub.
+3. Harvested customer documents awaiting conversion.
+
+**State the batch and why, before writing anything.** If the request names
+no specific objects, apply a defensible default and say what you applied:
+batch 2 took "users, CVs/documents, orders/subscriptions if present" as a
+tight FK-connected core, named the 5 tables it covered and the 12 it left,
+and justified including `jobs` because the join guidance required it.
+
+Prefer a coherent FK-connected slice over a scattered ten. Docs that
+reference each other are reviewable together.
+
+## S2 — Evidence
+
+Gather before drafting. Per object:
+
+- **Machine doc** — `get_table` (preferred) or the `*.schema.md` file.
+  Use MCP tools rather than raw file reads where you can: the response
+  carries the trust block, so you learn the doc's status and freshness at
+  the same time you learn its columns. `search_context` to find objects,
+  `get_entity` to route, `get_table` for the facts.
+- **Customer documentation** — the provided data-model docs, wikis,
+  harvested sources.
+- **App DDL** — migrations are the *authoritative* source for enums. A
+  `CHECK` constraint is ground truth; a value list in a customer doc is
+  weaker, and a value list in app code is weaker still.
+- **App code** — for JSON/JSONB shapes and app-level status vocabularies
+  the database does not constrain.
+- **Usage evidence** — `join_pairs` where present, which upgrades join
+  guidance from inference to observation.
+- **Existing entity docs** — so your doc agrees with the routing hubs.
+
+**Maturity ladder (HLR §8 P4).** The evidence tier you actually had
+dictates the `sources` grading: `customer doc: <uri>` · `observed in N
+queries` · `inferred from column names`. Never upgrade inference to
+observation. The grading is what a reviewer trusts; inflating it destroys
+the only signal they have.
+
+Watch for the DDL-vs-doc conflict: batch 2 found a migration that had
+renamed `interviewing/offered` → `interview/offer` *and rewritten existing
+rows*. The migration won, and the doc said so. Where DDL and customer docs
+disagree, DDL is authoritative for what the database enforces — and the
+disagreement itself is worth a sentence.
+
+## S3 — Drafting (checkpoints CP-E2, CP-E3, CP-E4)
+
+One human doc per object (`<object>.md`), or group-doc edits for API
+kinds. Canonical section order per KB §7.
+
+**Front-matter — complete on every draft (CP-E2):**
+
+```yaml
+doc_class: human-object
+object: public.orders              # source-native name
+status: draft                      # never `verified` — CP-E3
+sources:                           # graded, per the ladder
+  - "customer doc: cv-data-model-kb/tables/orders.md"
+  - "app DDL: backend/supabase/migrations/20260418123000_status_rename.sql"
+depends_on:                        # every FQN the content relies on
+  - supabase.public.orders
+  - supabase.public.users
+purpose: "One row per checkout; the commerce fact table."
+column_purposes:
+  user_id: "The account that placed the order."
+  status: "Fulfilment state; see Warnings for the enum."
+```
+
+`depends_on` is the K-2 declaration duty: list the FQN of every object
+whose structure your content relies on — tables you explain joins to,
+columns whose enums you decode. This list is the contamination scan's
+primary input. An undeclared dependency means a breaking change to that
+object will not flag your doc, and the KB will keep serving text that
+quietly went wrong.
+
+**CP-E4 — one-liners in front-matter, body for the rest.** If it fits on
+one line, it belongs in `purpose`/`column_purposes`. The body carries only
+what a one-line, newline-free value structurally cannot hold:
+
+- enum decodings (`status: 1 = pending, 2 = shipped, 3 = cancelled`)
+- JSON/JSONB structure documentation, one subsection per column
+- multi-condition join caveats
+- the reasoning behind a warning
+
+**Do not write a body section that restates a front-matter one-liner.**
+Two sources for one claim drift, and once they do the KB asserts two
+different meanings with nothing to arbitrate. A doc whose meaning is fully
+carried by its front-matter ships with an empty body — that is a complete
+doc, not a stub. Drop the section rather than pad it.
+
+**The JSON rule.** Every `json`/`jsonb` column gets documented structure
+with a citation, or an explicit named gap. Never left un-attempted. Batch
+2 documented three JSON columns by citing the TypeScript type that
+produces them, and named the open `type`/`fields` vocabularies as gaps in
+the same doc.
+
+## S4 — Self-check
+
+Run the KB CI validation locally **before** opening the PR. Two commands,
+both from the KB clone root:
+
+```bash
+python -m generator.render .contextlayer/snapshots/<system>.json --out .
+python -m generator.validate .
+```
+
+The render is the **regeneration duty**: your front-matter purposes only
+reach the machine docs when the generator merges them. Enrichment without
+a re-render leaves the KB internally inconsistent and KB-8 fails the PR.
+Purpose-slot-confined changes keep the old `generated_at` stamp (the D-49
+§4.1 date rule) — if the date moves, something other than purposes moved
+and you should know what.
+
+Validation must be **0 errors, 0 warnings** — including KB-8 (render
+consistency) and KB-10 (every `column_purposes` key resolves against the
+snapshot). A KB-10 warning means you wrote a purpose for a column that
+does not exist: usually a typo, sometimes a column that was dropped, and
+either way it must be fixed, not shipped.
+
+Fix or drop failing drafts. Dropping one is fine; shipping a red one is
+not.
+
+## S5 — PR (checkpoint K-IDENT)
+
+One PR per batch, under **your own identity** — never a shared or bot
+identity. The body is how a reviewer checks your grounding without redoing
+your research, so it carries, in this order:
+
+1. **Docs in this batch** — a table of doc → evidence grade.
+2. **Grounding sources** — what you actually read, with paths/URLs, and
+   what each settled. Name the authoritative source per enum.
+3. **JSON columns** — structure + citation per column, or the named gap.
+4. **Machine re-renders** — the exact command, what slots filled, and the
+   validate result (`0 errors, 0 warnings`).
+5. **Ungrounded gaps** — every question the evidence did not close, named
+   specifically. Not "some values unclear" but "`subscriptions.status` has
+   no DB CHECK; only `active`/`trialing`/`canceled` are grounded — do not
+   treat as a closed enum."
+6. **Grounding sufficiency** — an honest paragraph: what the sources fully
+   covered, and what they did not. This is the reviewer's summary judgment
+   on whether the batch is trustworthy.
+
+Ledger-originated items carry `CL-Resolves: <issue-id>` trailers so the
+merge closes the loop automatically (ledger spec §9).
+
+Keep `status: draft` throughout. A human certifies to `verified` — you
+prepare, they certify. Batch 3's entity docs all landed `draft` with
+`last_verified: null` precisely because no mapping had been
+customer-certified yet, and saying so was more useful than looking done.
+
+---
+
+## Failure exits (K-FAIL)
+
+At any dead end: say plainly what is missing and why it blocks the work,
+call `flag_gap` with the most specific kind, relay `routed_to`, and stop.
+
+- Insufficient evidence for a scoped object → skip it, `flag_gap(kind:
+  missing_doc)` noting what evidence would unblock it, list it in the PR.
+- Machine doc contaminated or stale → say so before building on it; a
+  `refuse-unless-override` guidance means do not build on it at all
+  without the user's explicit, informed instruction.
+- Validation red twice after repair attempts → stop and flag (SK-7). Do
+  not thrash.
+
+Never silently narrow the batch to the objects that happened to be easy.
+If you covered 5 of 10, the PR says which 5 and why the other 5 are not
+there.

@@ -43,6 +43,14 @@ class Transport(Protocol):
     def get(self, url: str, params: dict | None = None) -> tuple[int, dict, dict | None]:
         """Return (HTTP status, headers, parsed-JSON body or None)."""
 
+    def post(self, url: str, json_body: dict) -> tuple[int, dict, dict | None]:
+        """Return (HTTP status, headers, parsed-JSON body or None).
+
+        Needed by the QueryExecutor: the Data API's `runReport` is a
+        POST, while every metadata endpoint the connector reads is a
+        GET. Same status mapping applies to both (`GA4Client`).
+        """
+
 
 class AuthorizedTransport:
     """Live transport over google-auth's AuthorizedSession."""
@@ -52,8 +60,18 @@ class AuthorizedTransport:
         self._timeout_s = timeout_s
 
     def get(self, url: str, params: dict | None = None) -> tuple[int, dict, dict | None]:
+        return self._send("GET", url, params=params)
+
+    def post(self, url: str, json_body: dict) -> tuple[int, dict, dict | None]:
+        return self._send("POST", url, json_body=json_body)
+
+    def _send(
+        self, method: str, url: str, params: dict | None = None, json_body: dict | None = None
+    ) -> tuple[int, dict, dict | None]:
         try:
-            response = self._session.get(url, params=params, timeout=self._timeout_s)
+            response = self._session.request(
+                method, url, params=params, json=json_body, timeout=self._timeout_s
+            )
         except GoogleAuthError as exc:
             # Token acquisition/refresh failed — the re-auth flow, not a retry.
             raise AuthError(
@@ -107,10 +125,18 @@ class GA4Client:
 
     def get_json(self, url: str, params: dict | None = None) -> dict:
         """One logical GET, paced and retried per the manifest policy."""
+        return self._json_call(lambda: self._transport.get(url, params), url)
+
+    def post_json(self, url: str, json_body: dict) -> dict:
+        """One logical POST (the Data API's `runReport`), same pacing,
+        backoff, and status mapping as `get_json`."""
+        return self._json_call(lambda: self._transport.post(url, json_body), url)
+
+    def _json_call(self, send, url: str) -> dict:
         delays = backoff_delays(self._policy, rng=self._rng)
         while True:
             self._bucket.acquire()
-            status, headers, body = self._transport.get(url, params)
+            status, headers, body = send()
             path, api_status = _path(url), _api_status(body)
 
             if status == 200:

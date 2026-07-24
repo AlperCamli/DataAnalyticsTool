@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contextlayer/benchmark/seed.schema.json",
+  "title": "CVBuilder golden-benchmark seed packet",
+  "description": "Schema for benchmark-seed-v0.yaml as authored (read-only input). Strict on the fields the harness reads; permissive where the packet varies (window keys, verified_result nulls, handoff narrative).",
+  "type": "object",
+  "required": ["suite_version", "customer", "authored_at", "execution_status", "cases"],
+  "additionalProperties": true,
+  "properties": {
+    "suite_version": {"type": "string"},
+    "customer": {"type": "string"},
+    "authored_at": {"type": "string"},
+    "execution_status": {"type": "string"},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/case"}
+    },
+    "handoff": {"type": "object"}
+  },
+  "$defs": {
+    "system": {"type": "string", "enum": ["supabase", "gsc", "ga4"]},
+    "case": {
+      "type": "object",
+      "required": [
+        "id", "request", "systems", "expected_objects", "visual_kind",
+        "recurring", "golden", "window", "verified_result"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "id": {"type": "string", "pattern": "^RB-[0-9]{2}$"},
+        "request": {"type": "string", "minLength": 1},
+        "origin": {"type": "string"},
+        "recurring": {"type": "boolean"},
+        "visual_kind": {
+          "type": "string",
+          "pattern": "^(table|line|bar|scorecard|pivot|other:[A-Za-z0-9_-]+)$"
+        },
+        "systems": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/system"}
+        },
+        "expected_objects": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "resolution_notes": {"type": "string"},
+        "window": {
+          "type": "object",
+          "required": ["phrasing"],
+          "additionalProperties": true,
+          "properties": {"phrasing": {"type": "string"}}
+        },
+        "golden": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/golden"}
+        },
+        "blend": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "required": ["kind"],
+              "additionalProperties": true,
+              "properties": {"kind": {"type": "string"}}
+            }
+          ]
+        },
+        "verified_result": {"$ref": "#/$defs/verified_result"},
+        "verified_by": {"type": "string"},
+        "notes": {"type": "string"}
+      }
+    },
+    "golden": {
+      "type": "object",
+      "required": ["system", "request"],
+      "additionalProperties": true,
+      "properties": {
+        "system": {"$ref": "#/$defs/system"},
+        "note": {"type": "string"},
+        "request": {
+          "type": "object",
+          "required": ["dialect"],
+          "additionalProperties": true,
+          "properties": {"dialect": {"type": "string", "enum": ["sql", "api"]}},
+          "allOf": [
+            {
+              "if": {"properties": {"dialect": {"const": "sql"}}},
+              "then": {
+                "required": ["statement"],
+                "properties": {"statement": {"type": "string", "minLength": 1}}
+              }
+            },
+            {
+              "if": {"properties": {"dialect": {"const": "api"}}},
+              "then": {
+                "required": ["operation", "property", "body"],
+                "properties": {
+                  "operation": {"type": "string", "minLength": 1},
+                  "property": {"type": "string", "minLength": 1},
+                  "body": {"type": "object"}
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "verified_result": {
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": true,
+      "properties": {
+        "status": {"type": "string"},
+        "row_count": {"type": ["integer", "null"]},
+        "rows": {"type": ["array", "null"]},
+        "checksum": {"type": ["string", "null"]},
+        "executed_at": {"type": ["string", "null"]},
+        "note": {"type": "string"}
+      }
+    }
+  }
+}

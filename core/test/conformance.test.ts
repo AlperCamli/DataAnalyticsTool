@@ -8,7 +8,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { sweepExpiredLeases } from "../src/queue.js";
 import { DEMO_DECLARATION, WireClient } from "./fake-runner.js";
-import { cliHarnessSnapshot, sleep, startCore, TEST_TOKEN, type TestCore } from "./helpers.js";
+import { cliHarnessSnapshot, sleep, startCore, TEST_OPS_TOKEN, TEST_TOKEN, type TestCore } from "./helpers.js";
 
 let core: TestCore;
 let client: WireClient;
@@ -55,7 +55,7 @@ async function forceLeaseExpiry(jobId: string): Promise<void> {
 
 beforeAll(async () => {
   core = await startCore();
-  client = new WireClient(core.baseUrl, TEST_TOKEN);
+  client = new WireClient(core.baseUrl, TEST_TOKEN, TEST_OPS_TOKEN);
 });
 
 afterAll(async () => {
@@ -491,7 +491,7 @@ describe("snapshot acceptance (J-6 pass path)", () => {
     expect(stored.status).toBe(200);
     // byte-identity: stored body === what the CLI harness emitted
     const raw = await fetch(`${core.baseUrl}/v1/snapshots/${meta.snapshot_id}/body`, {
-      headers: { authorization: `Bearer ${TEST_TOKEN}` },
+      headers: { authorization: `Bearer ${TEST_OPS_TOKEN}` },
     });
     expect(Buffer.from(await raw.arrayBuffer()).toString("utf-8")).toBe(bytes);
   });

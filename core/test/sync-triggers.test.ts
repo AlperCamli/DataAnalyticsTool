@@ -13,7 +13,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { schedulerTick } from "../src/scheduler.js";
 import { setHookSecret, upsertSyncSystem } from "../src/triggers.js";
 import { WireClient } from "./fake-runner.js";
-import { startCore, TEST_TOKEN, type TestCore } from "./helpers.js";
+import { startCore, TEST_OPS_TOKEN, TEST_TOKEN, type TestCore } from "./helpers.js";
 import { cleanupDir, initScratchKb, syncConfig, type ScratchKb } from "./sync-helpers.js";
 
 const CANARY = "hook-canary-9c41f7d2ab";
@@ -77,7 +77,7 @@ beforeAll(async () => {
   await setPolicy(BASE_POLICY);
   core = await startCore({});
   core.cfg.sync = syncConfig(kb, path.join(base, "workdir"));
-  client = new WireClient(core.baseUrl, TEST_TOKEN);
+  client = new WireClient(core.baseUrl, TEST_TOKEN, TEST_OPS_TOKEN);
   for (const system of Object.keys(BASE_POLICY)) {
     await upsertSyncSystem(core.pool, {
       system,

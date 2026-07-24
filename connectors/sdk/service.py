@@ -16,16 +16,28 @@ Config (YAML):
     runner_id: runner-a1           # default: cl-<hostname>-<pid>
     connectors:                    # MODULE:ATTR, as in the local CLI
       - connectors.postgres.connector:connector
-    classes: [batch]
+    classes: [batch, interactive]  # interactive = execute/publish lane
     wait_s: 25
     resolver: { kind: process-env }            # or env-file + path:
+    execution_preflight:           # G3 gate; see below
+      - connector: postgres
+        config: { system: supabase, execute_dsn_env: CL_EXEC_DSN }
 
 Credential injection: each payload credential `{ref, key}` resolves to a
 value held in a job-scoped environment variable; the connector receives
 only the *variable name* through its declared `*_env` config field
-(postgres `dsn_env`, ga4/gsc `credentials_env`), so connector code and
-config schemas stay exactly as shipped. Resolved values are scrubbed
-from any outgoing error detail as defense in depth (§7/JC-8).
+(postgres `dsn_env` and `execute_dsn_env`, ga4/gsc `credentials_env`), so
+connector code and config schemas stay exactly as shipped. Resolved
+values are scrubbed from any outgoing error detail as defense in depth
+(§7/JC-8).
+
+Execution preflight (CP-6 ruling G3): before offering to claim `execute`
+jobs, the runner asks each configured connector's QueryExecutor to prove
+its execution role cannot write. A connector that fails has `execute`
+**withheld from its claim declaration** — it never offers to do the work
+— while its metadata capability keeps running. Failing open here would
+mean serving governed execution against a role that can write, which is
+the one outcome the check exists to prevent.
 
 Cancellation (§6.3/JC-7): the heartbeat response's `cancel_requested`
 stops the runner within one heartbeat interval — the work thread is
@@ -56,6 +68,7 @@ from connectors.sdk.protocol import (
     ProtocolError,
 )
 from connectors.sdk.runner import Job, JobOutcome, run_job
+from connectors.sdk.redact import redact_text
 from connectors.sdk.vault import CredentialResolver, EnvResolver, VaultResolutionError
 
 logger = logging.getLogger("connectors.sdk.service")
@@ -65,11 +78,12 @@ logger = logging.getLogger("connectors.sdk.service")
 # runner; connectors themselves never change.
 CREDENTIAL_CONFIG_KEYS: dict[str, str] = {
     "dsn": "dsn_env",
+    "execute_dsn": "execute_dsn_env",
     "service_account": "credentials_env",
 }
 
-# Job types this SDK can execute (run_job has a snapshot engine only).
-EXECUTABLE_TYPES = ("snapshot",)
+# Job types this SDK can execute (run_job dispatches by type).
+EXECUTABLE_TYPES = ("snapshot", "execute")
 
 
 class RunnerConfigError(Exception):
@@ -88,6 +102,9 @@ class RunnerConfig:
     heartbeat_interval_s: float | None = None  # default: lease ttl / 2
     resolver_kind: str = "process-env"
     resolver_path: str | None = None
+    # G3 startup gate: per-connector execution configs to preflight
+    # before this runner offers to claim `execute` jobs.
+    execution_preflight: tuple[dict, ...] = ()
 
 
 def load_runner_config(path: str | Path) -> RunnerConfig:
@@ -143,6 +160,7 @@ def load_runner_config(path: str | Path) -> RunnerConfig:
         ),
         resolver_kind=kind,
         resolver_path=resolver.get("path"),
+        execution_preflight=tuple(raw.get("execution_preflight") or ()),
     )
 
 
@@ -215,6 +233,8 @@ class Runner:
     client: JobApiClient = None  # type: ignore[assignment]
     connectors: dict[str, Connector] = field(default_factory=dict)
     resolver: CredentialResolver = None  # type: ignore[assignment]
+    # connector name -> why execution is refused (G3 preflight).
+    execution_refused: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self):
         if self.client is None:
@@ -230,7 +250,12 @@ class Runner:
 
     def declared_connectors(self) -> list[dict]:
         """§6.1 declaration, plus the additive per-connector `types` field
-        (the job types this runner can actually execute for it)."""
+        (the job types this runner can actually execute for it).
+
+        A connector whose execution preflight failed (G3) has `execute`
+        withheld here: the runner does not merely reject execute jobs, it
+        never offers to claim them.
+        """
         declared = []
         for connector in self.connectors.values():
             manifest = connector.manifest
@@ -239,10 +264,51 @@ class Runner:
                 for cap in manifest.capabilities
                 if CAPABILITY_JOB_TYPES.get(cap) in EXECUTABLE_TYPES
             )
+            if manifest.name in self.execution_refused:
+                types = [t for t in types if t != "execute"]
             declared.append(
                 {"name": manifest.name, "version": manifest.version, "types": types}
             )
         return declared
+
+    # -- G3 execution preflight ---------------------------------------------
+
+    def preflight_execution(self) -> dict[str, str]:
+        """Run each configured execution preflight before serving.
+
+        A connector that cannot prove its execution role is read-only is
+        recorded in `execution_refused` and will not claim `execute`
+        jobs. The failure is loud and names the reason: silently serving
+        execution against a role that can write is the exact outcome the
+        check exists to prevent, so "fail open" is not an option here.
+        """
+        refused: dict[str, str] = {}
+        for entry in self.config.execution_preflight:
+            name = entry.get("connector")
+            config = dict(entry.get("config") or {})
+            connector = self.connectors.get(name)
+            if connector is None:
+                refused[name] = f"connector {name!r} is not hosted by this runner"
+                logger.error("execution preflight: %s", refused[name])
+                continue
+            executor = connector.handlers.get("query")
+            if executor is None:
+                refused[name] = f"connector {name!r} declares no query capability"
+                logger.error("execution preflight: %s", refused[name])
+                continue
+            try:
+                facts = executor.preflight(config)
+            except Exception as exc:
+                reason = redact_text(str(exc))
+                refused[name] = reason
+                logger.error(
+                    "execution preflight FAILED for %s: %s — this runner will NOT serve "
+                    "execution for it", name, reason,
+                )
+                continue
+            logger.info("execution preflight passed for %s: %s", name, facts)
+        self.execution_refused = refused
+        return refused
 
     # -- credential handling (J-4) ------------------------------------------
 
@@ -289,6 +355,17 @@ class Runner:
         connector = self.connectors.get(name)
         job_type = job_record.get("type")
 
+        if job_type == "execute" and name in self.execution_refused:
+            # G3: claimed anyway (a stale declaration, or another runner's
+            # job) — refuse with the reason rather than executing.
+            self._fail(job_id, lease_token, {
+                "code": "config_error",
+                "message": f"this runner refuses to serve execution for {name!r}: "
+                           f"{self.execution_refused[name]}",
+                "retryable": False,
+            }, [])
+            return
+
         if connector is None or job_type not in EXECUTABLE_TYPES:
             self._fail(job_id, lease_token, {
                 "code": "config_error",
@@ -298,7 +375,8 @@ class Runner:
             }, [])
             return
 
-        config = dict(job_record.get("payload", {}).get("config") or {})
+        payload = job_record.get("payload", {}) or {}
+        config = dict(payload.get("config") or {})
         env_names: list[str] = []
         secrets: list[str] = []
         try:
@@ -340,6 +418,11 @@ class Runner:
                         credentials=tuple(
                             job_record.get("payload", {}).get("credentials") or ()
                         ),
+                        # Interactive `execute` members (capability §6);
+                        # absent on snapshot jobs and ignored there.
+                        request=payload.get("request"),
+                        guardrails=payload.get("guardrails"),
+                        identity=payload.get("identity"),
                     ))
                 ),
                 daemon=True, name=f"work-{job_id}",
@@ -379,10 +462,18 @@ class Runner:
         outcome = outcome_box[0]
         if outcome.status == "succeeded":
             try:
-                self.client.complete_snapshot(
-                    job_id, lease_token, outcome.snapshot.serialized
-                )
-                logger.info("job %s: delivered snapshot", job_id)
+                if outcome.snapshot is not None:
+                    self.client.complete_snapshot(
+                        job_id, lease_token, outcome.snapshot.serialized
+                    )
+                    logger.info("job %s: delivered snapshot", job_id)
+                else:
+                    # Interactive capability result (§6.4): relayed to the
+                    # blocked producer, not stored as a snapshot.
+                    self.client.complete(
+                        job_id, lease_token, scrub_secrets(outcome.result, secrets)
+                    )
+                    logger.info("job %s: delivered result", job_id)
             except DeliveryRejected as exc:
                 # JC-6: 422 is final — the core has dead-lettered the job.
                 logger.error("job %s: delivery rejected by core (%s)", job_id, exc)
@@ -411,6 +502,7 @@ class Runner:
 
     def run_forever(self, *, once: bool = False, max_jobs: int | None = None) -> int:
         executed = 0
+        self.preflight_execution()
         declared = self.declared_connectors()
         logger.info(
             "runner %s: hosting %s against %s",

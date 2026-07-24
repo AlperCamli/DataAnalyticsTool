@@ -30,6 +30,7 @@ import {
   repoRoot,
   sleep,
   startCore,
+  TEST_OPS_TOKEN,
   TEST_TOKEN,
   type TestCore,
 } from "./helpers.js";
@@ -100,7 +101,7 @@ let runnerB: RunnerProc | null = null;
 
 beforeAll(async () => {
   core = await startCore({ leaseTtlS: 2, sweepIntervalMs: 200 });
-  client = new WireClient(core.baseUrl, TEST_TOKEN);
+  client = new WireClient(core.baseUrl, TEST_TOKEN, TEST_OPS_TOKEN);
   stopSweeper = startSweeper(core.pool, core.cfg, () => {});
 
   // Canary source: a real database on the test server, reachable only
@@ -159,7 +160,7 @@ it("fixture e2e: enqueue → runner → J-6 → accepted snapshot, byte-equal to
   const meta = job.result_meta as { snapshot_id: string; canonical_body_sha256: string };
 
   const stored = await fetch(`${core.baseUrl}/v1/snapshots/${meta.snapshot_id}/body`, {
-    headers: { authorization: `Bearer ${TEST_TOKEN}` },
+    headers: { authorization: `Bearer ${TEST_OPS_TOKEN}` },
   });
   const deliveredBytes = Buffer.from(await stored.arrayBuffer());
 
@@ -184,7 +185,7 @@ it("JC-8: canary secret appears in no protocol message, log, or stored row", asy
   const { status, json } = await client.enqueue({
     type: "snapshot",
     system: "supabase-canary",
-    connector: { name: "postgres", version_constraint: ">=0.1 <0.2" },
+    connector: { name: "postgres", version_constraint: ">=0.2 <0.3" },
     payload: {
       config: { system: "supabase-canary", mode: "live" },
       credentials: [{ ref: "env://CANARY_DSN", key: "dsn" }],
@@ -198,7 +199,7 @@ it("JC-8: canary secret appears in no protocol message, log, or stored row", asy
   // the introspection is real: the widgets table came through
   const meta = job.result_meta as { snapshot_id: string };
   const stored = await fetch(`${core.baseUrl}/v1/snapshots/${meta.snapshot_id}/body`, {
-    headers: { authorization: `Bearer ${TEST_TOKEN}` },
+    headers: { authorization: `Bearer ${TEST_OPS_TOKEN}` },
   });
   const body = Buffer.from(await stored.arrayBuffer()).toString("utf-8");
   expect(body).toContain('"name":"widgets"');

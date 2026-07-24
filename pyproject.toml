@@ -11,7 +11,10 @@ name = "contextlayer-snapshot"
 # lineage.scan (KB §6 contamination scan), generator.statuses
 # (front-matter status writes). No validation-rule changes; the version
 # bump makes the §10 wheel carry state the new surface honestly.
-version = "0.4.0"
+# 0.5.0: CP-4 sqlval — the validate_sql SQL dialect as a stage CLI
+# (MCP §6.6, MCP-R6/R7). No validation-rule changes to the KB CI
+# surface; the bump keeps the §10 wheel carry honest.
+version = "0.5.0"
 description = "Snapshot layer (task 1.1) + connector SDK (1.2-1.4) + generator (1.5) + lineage (1.9)"
 requires-python = ">=3.12"
 dependencies = [
@@ -40,9 +43,14 @@ dev = [
     "pytest>=8",
     "hypothesis>=6.100",
 ]
+# benchmark Backend B (headless Claude Code): the local MCP executor server.
+# Not needed by the core, CI integrity check, or Backend A.
+bench = [
+    "mcp>=1.0",
+]
 
 [tool.setuptools]
-packages = ["snapshot", "connectors", "connectors.sdk", "connectors.static_demo", "connectors.postgres", "connectors.ga4", "connectors.gsc", "generator", "lineage"]
+packages = ["snapshot", "sqlval", "connectors", "connectors.sdk", "connectors.static_demo", "connectors.postgres", "connectors.ga4", "connectors.gsc", "generator", "lineage", "benchmark"]
 
 [tool.setuptools.package-data]
 snapshot = ["schema/*.json"]
@@ -52,6 +60,7 @@ snapshot = ["schema/*.json"]
 "connectors.ga4" = ["connector.yaml", "*.json"]
 "connectors.gsc" = ["connector.yaml", "*.json"]
 generator = ["templates/*.j2"]
+benchmark = ["schema/*.json", "suite/*.yaml", "suite/snapshots/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -59,4 +68,5 @@ markers = [
     "postgres: needs Docker (spins ephemeral postgres containers); skipped when the daemon is unreachable",
     "ga4_live: live GA4 pull against the customer property; skipped unless CTXLAYER_GA4_LIVE is set (needs CTXLAYER_GA4_PROPERTY_ID + GOOGLE_APPLICATION_CREDENTIALS)",
     "gsc_live: live Search Console pull against the customer property; skipped unless CTXLAYER_GSC_LIVE is set (needs CTXLAYER_GSC_SITE_URL + GOOGLE_APPLICATION_CREDENTIALS)",
+    "postgres_live: live governed execution against the customer database under the dedicated read-only execution role (G3); skipped unless CTXLAYER_PG_EXEC_LIVE is set (needs CTXLAYER_PG_EXEC_DSN)",
 ]

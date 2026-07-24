@@ -8,6 +8,9 @@ the transient-retry policy for terminal calls.
 
 import json
 import threading
+import time
+
+import requests
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -144,3 +147,77 @@ def test_unexpected_status_is_protocol_error(stub):
     stub.scripts["/v1/jobs/J1/start"] = [(418, {})]
     with pytest.raises(ProtocolError):
         make_client(stub).start("J1", "L1")
+
+
+# --- transport resilience (found live: a core restart killed the runner) ---
+
+
+class _DeadTransport:
+    """A session whose connection is severed mid-call, as happens when the
+    core restarts under a long-poll claim."""
+
+    def __init__(self, exc=None):
+        self.calls = 0
+        self._exc = exc or requests.exceptions.ConnectionError(
+            "('Connection aborted.', RemoteDisconnected('Remote end closed connection'))"
+        )
+
+    def post(self, *args, **kwargs):
+        self.calls += 1
+        raise self._exc
+
+
+@pytest.mark.parametrize("call", ["claim", "start", "heartbeat"])
+def test_transport_failure_surfaces_as_protocol_error_not_a_crash(call):
+    """The runner's loop only knows ProtocolError. A raw
+    requests.ConnectionError escaping `claim` takes the process down —
+    which is exactly what happened when the core was restarted during the
+    M2 demo: every runner died and jobs sat queued until the sync run
+    timed out. Transport failures must arrive as ProtocolError so
+    `run_forever` backs off and reconnects (J-2)."""
+    transport = _DeadTransport()
+    client = JobApiClient("http://core", "tok", session=transport)
+
+    with pytest.raises(ProtocolError) as excinfo:
+        if call == "claim":
+            client.claim(runner_id="r", connectors=[], classes=["batch"], wait_s=1)
+        elif call == "start":
+            client.start("j1", "lease")
+        else:
+            client.heartbeat("j1", "lease")
+
+    assert call in str(excinfo.value)
+    assert "transport failure" in str(excinfo.value)
+    # Not a requests exception leaking through.
+    assert not isinstance(excinfo.value, requests.RequestException)
+
+
+def test_runner_loop_survives_a_core_restart_and_keeps_claiming():
+    """End of the same story: the loop must back off and carry on."""
+    from connectors.sdk.service import Runner, RunnerConfig
+
+    class FlakyClient:
+        def __init__(self):
+            self.attempts = 0
+
+        def claim(self, **kwargs):
+            self.attempts += 1
+            if self.attempts <= 3:
+                raise ProtocolError("claim: transport failure (connection aborted)")
+            return None  # nothing to do; loop continues
+
+    client = FlakyClient()
+    config = RunnerConfig(
+        core_url="http://core", token="t", runner_id="r1",
+        connector_specs=(), classes=("batch",), claim_backoff_s=0.0,
+    )
+    runner = Runner(config=config, client=client, connectors={}, resolver=object())
+    # max_jobs stops the loop; claim returning None never executes a job, so
+    # run it in a thread and stop once it has pushed past the failures.
+    import threading
+    t = threading.Thread(target=lambda: runner.run_forever(max_jobs=0), daemon=True)
+    t.start()
+    deadline = time.time() + 5
+    while client.attempts <= 4 and time.time() < deadline:
+        time.sleep(0.02)
+    assert client.attempts > 3, "runner stopped claiming after transport failures"

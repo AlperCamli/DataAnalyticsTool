@@ -16,7 +16,7 @@ import json
 
 import pytest
 
-from connectors.sdk import Connector, IntrospectionResult, Job, run_job
+from connectors.sdk import Connector, IntrospectionResult, Job, QueryExecutor, run_job
 from connectors.static_demo.connector import _emails_view, _users_table
 from connectors.static_demo.connector import connector as demo_connector
 from snapshot.canonical import canonical_body_bytes, canonical_json
@@ -238,11 +238,16 @@ def test_non_serializable_value_refused(tmp_path):
 # --- engine dispatch ---
 
 
+class _StubExecutor(QueryExecutor):
+    def execute(self, config, request, guardrails, identity):  # pragma: no cover
+        raise AssertionError("not reached: this connector declares no metadata capability")
+
+
 def test_metadata_capability_undeclared_is_config_error(tmp_path):
     path = write_manifest(
         tmp_path, {"capabilities": {"query": {"dialect": "postgresql"}}}
     )
-    connector = Connector(path, {"query": object()})
+    connector = Connector(path, {"query": _StubExecutor()})
     outcome = run_job(connector, Job.local(dict(DEMO_CONFIG)))
     assert outcome.status == "failed"
     assert outcome.error.code == "config_error"

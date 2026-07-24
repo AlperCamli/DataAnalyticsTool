@@ -1,7 +1,7 @@
 {
   "type": "snapshot",
   "system": "supabase-demo",
-  "connector": { "name": "postgres", "version_constraint": ">=0.1 <0.2" },
+  "connector": { "name": "postgres", "version_constraint": ">=0.2 <0.3" },
   "payload": {
     "config": { "system": "supabase-demo", "mode": "live" },
     "credentials": [{ "ref": "env://DEMO_DSN", "key": "dsn" }]

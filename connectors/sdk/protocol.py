@@ -72,10 +72,27 @@ class JobApiClient:
 
     # -- plumbing ---------------------------------------------------------
 
-    def _post(self, path: str, body: bytes, *, timeout_s: float) -> requests.Response:
+    def _send(self, path: str, body: bytes, *, timeout_s: float) -> requests.Response:
+        """Raw POST. Transport exceptions propagate — only `_deliver`,
+        which has its own retry ladder, calls this directly."""
         return self._session.post(
             f"{self.base_url}{path}", data=body, headers=self._headers, timeout=timeout_s
         )
+
+    def _post(self, path: str, body: bytes, *, timeout_s: float, call: str = "request") -> requests.Response:
+        """POST with transport failures mapped into the protocol taxonomy.
+
+        Without this, a core restart kills every runner: the long-poll
+        claim is cut mid-flight, `requests` raises `ConnectionError`, and
+        it escapes `run_forever` — which only knows about `ProtocolError`
+        — taking the process down. Runners are supposed to poll and
+        reconnect (J-2); a routine core deploy must not require restarting
+        the fleet. As `ProtocolError` this becomes an ordinary backoff.
+        """
+        try:
+            return self._send(path, body, timeout_s=timeout_s)
+        except requests.RequestException as exc:
+            raise ProtocolError(f"{call}: transport failure ({exc})") from exc
 
     @staticmethod
     def _json(response: requests.Response) -> dict:
@@ -116,7 +133,7 @@ class JobApiClient:
         while True:
             attempt += 1
             try:
-                response = self._post(path, body, timeout_s=timeout_s)
+                response = self._send(path, body, timeout_s=timeout_s)
             except requests.RequestException as exc:
                 if attempt > self.deliver_retries:
                     raise ProtocolError(f"{call}: transport failure ({exc})") from exc
@@ -146,14 +163,14 @@ class JobApiClient:
             "classes": classes,
             "wait_s": wait_s,
         }).encode("utf-8")
-        response = self._post("/v1/jobs/claim", body, timeout_s=wait_s + self.timeout_s)
+        response = self._post("/v1/jobs/claim", body, timeout_s=wait_s + self.timeout_s, call="claim")
         if response.status_code == 204:
             return None
         return self._check(response, "claim")
 
     def start(self, job_id: str, lease_token: str) -> dict:
         body = json.dumps({"lease_token": lease_token}).encode("utf-8")
-        response = self._post(f"/v1/jobs/{job_id}/start", body, timeout_s=self.timeout_s)
+        response = self._post(f"/v1/jobs/{job_id}/start", body, timeout_s=self.timeout_s, call="start")
         return self._check(response, "start")
 
     def heartbeat(self, job_id: str, lease_token: str, progress: dict | None = None) -> dict:
@@ -161,7 +178,7 @@ class JobApiClient:
         if progress is not None:
             payload["progress"] = progress
         body = json.dumps(payload).encode("utf-8")
-        response = self._post(f"/v1/jobs/{job_id}/heartbeat", body, timeout_s=self.timeout_s)
+        response = self._post(f"/v1/jobs/{job_id}/heartbeat", body, timeout_s=self.timeout_s, call="heartbeat")
         return self._check(response, "heartbeat")
 
     def complete_snapshot(self, job_id: str, lease_token: str, serialized: bytes) -> dict:
@@ -170,6 +187,20 @@ class JobApiClient:
             b'{"lease_token":' + json.dumps(lease_token).encode("utf-8")
             + b',"result":' + serialized.strip() + b"}"
         )
+        return self._deliver(
+            f"/v1/jobs/{job_id}/complete", body, "complete",
+            timeout_s=max(self.timeout_s, 120.0),
+        )
+
+    def complete(self, job_id: str, lease_token: str, result: object) -> dict:
+        """§6.4 for the interactive capabilities, whose `result` is the
+        capability's own envelope (a dict), not canonical snapshot bytes.
+
+        The core relays it to the blocked producer verbatim, so the
+        serialization here is ordinary JSON — the byte-fidelity concern
+        that shapes `complete_snapshot` applies to snapshot hashing only.
+        """
+        body = json.dumps({"lease_token": lease_token, "result": result}).encode("utf-8")
         return self._deliver(
             f"/v1/jobs/{job_id}/complete", body, "complete",
             timeout_s=max(self.timeout_s, 120.0),

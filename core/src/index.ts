@@ -7,6 +7,7 @@
 import { loadConfig } from "./config.js";
 import { createPool, JobsNotifier, SYNC_CHANNEL } from "./db.js";
 import { createProvider } from "./gitkb.js";
+import { sweepResolutions, sweepRetention, sweepWindowRules } from "./ledger.js";
 import { defaultMigrationsDir, migrate } from "./migrate.js";
 import { failStaleRunningRuns, runPendingRuns } from "./pipeline.js";
 import { startScheduler } from "./scheduler.js";
@@ -50,10 +51,31 @@ async function main(): Promise<void> {
     })();
   }
 
+  // Ledger sweeps (CP-4): class-1 window rules, event retention (§10),
+  // and CL-Resolves loop closure (§9, LED-R4) on one cadence.
+  let stopLedgerSweeps = () => {};
+  if (cfg.mcp.enabled) {
+    const provider = cfg.sync.gitRemote ? createProvider(cfg.sync) : null;
+    const timer = setInterval(() => {
+      void (async () => {
+        try {
+          await sweepWindowRules(pool);
+          await sweepRetention(pool, cfg.mcp.ledgerRetentionDays);
+          if (provider) await sweepResolutions(pool, provider);
+        } catch (err) {
+          log("ledger sweep failed", err);
+        }
+      })();
+    }, cfg.mcp.ledgerSweepMs);
+    timer.unref();
+    stopLedgerSweeps = () => clearInterval(timer);
+  }
+
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, "shutting down");
     stopSweeper();
     stopScheduler();
+    stopLedgerSweeps();
     syncLoopStopped = true;
     await syncNotifier?.stop();
     await app.close();

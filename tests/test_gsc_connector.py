@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 from connectors.gsc.connector import MANIFEST, FIXED_DIMENSIONS, FIXED_METRICS, GscMetadata
+from connectors.gsc.executor import GscExecutor
 from connectors.sdk import Connector, Job, run_job
 from connectors.sdk.local import main as local_main
 from snapshot.canonical import canonical_body_bytes
@@ -80,7 +81,7 @@ def make_connector(transport) -> Connector:
         sleep=lambda seconds: None,  # tests never really sleep
         rng=random.Random(7),
     )
-    return Connector(manifest=MANIFEST, handlers={"metadata": provider})
+    return Connector(manifest=MANIFEST, handlers={"metadata": provider, "query": GscExecutor()})
 
 
 def run_recorded(transport=None, **kwargs):
@@ -267,7 +268,7 @@ def test_missing_permission_field_is_source_unavailable():
 def test_unset_credentials_env_is_config_error(monkeypatch):
     monkeypatch.delenv("CTXLAYER_GSC_TEST_UNSET", raising=False)
     outcome = run_job(
-        Connector(manifest=MANIFEST, handlers={"metadata": GscMetadata()}),
+        Connector(manifest=MANIFEST, handlers={"metadata": GscMetadata(), "query": GscExecutor()}),
         Job.local(dict(CONFIG, credentials_env="CTXLAYER_GSC_TEST_UNSET")),
     )
     assert outcome.status == "failed"

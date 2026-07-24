@@ -31,6 +31,8 @@ A session is established over streamable HTTP with OAuth against the customer Id
 
 Per-call decision: `allowed(tool, args) ⇔ tool ∈ profile.tools.allow ∧ system/target qualifiers match (execute_sql:supabase grants supabase only) ∧ visibility(roles, object) for content tools`. Profile `limits` (row_cap, timeout_s) are injected into the guardrail envelope (capability spec §4) — the client never supplies guardrails.
 
+**Amendment (D-71.1 / security review #2 F2, 2026-07-21) — visibility governs the execution surface.** The qualifier "for content tools" above is **struck**: `visibility(roles, object)` applies to every tool that names an object, `validate_sql` and `execute_sql` included. The M-4 map is therefore an access control over data, not only over documentation — a caller who cannot read *about* an object cannot read *from* it. Rationale: the pilot's only execute-granted profile is Steward with `visibility: ["**"]`, so the two surfaces coincide today and diverge the moment M3 gives a Reporter-class profile execute (plan §6.3); an operator reading `roles.yaml` should not have to know that the file governs one surface and not the other. Enforcement is specified in §6.6 (validation) and §5 (carried to execution). This narrows the surface only — no statement that passed before passes less, for any caller whose scopes already covered it. **This does not relieve the deployment obligation** that a profile granting execute be paired with a database role scoped no wider: the KB map is our gate, the database role is the wall, and a wall is not replaced by a gate.
+
 **Read consistency (M-5):** each call reads the KB at the default branch's merged HEAD and the latest accepted snapshot per system. Responses carry both refs. `execute_sql` additionally cross-checks the validation token's pinned `snapshot_ref` (§5) — the one place where staleness blocks rather than warns.
 
 ## 4. Common response envelopes
@@ -48,6 +50,8 @@ Per-call decision: `allowed(tool, args) ⇔ tool ∈ profile.tools.allow ∧ sys
 
 `agent_guidance` ∈ `use-freely | warn-user | refuse-unless-override`, computed server-side from status per KB spec §5 — the skill trust behaviors (HLR §7.3) key off this field, so the mapping lives in exactly one place. `hash_match: false` on a `verified` doc means drift landed after the last sync classification run (rare race); served as `warn-user`.
 
+**Amendment (D-66.4 / security review #1 MCP-R9, 2026-07-17) — snapshot provenance and render-lag.** The trust block of every machine doc carries `snapshot_ref` — the canonical-body hash of the snapshot the served facts come from. When those facts come from a snapshot **newer than the one pinned at the merged render** (`.contextlayer/snapshots/<system>.json` at KB HEAD — i.e. a sync PR is still unmerged), the block MUST signal it: `render_lag: true` and `agent_guidance` at least `warn-user`. Rationale: snapshot acceptance (runner + J-6) is the only gate on the facts surface and bypasses human PR review; the provenance and the lag must be visible to the consuming agent, not inferable. Additive to the §4 block; absence of `render_lag` reads as `false`.
+
 ## 5. Validation-token flow (M-2)
 
 ```
@@ -60,6 +64,14 @@ execute_sql(sql, system, validation_token)                  snapshot_ref, subjec
 ```
 
 Tokens are server-signed (key in ops Postgres, rotated), single-system, and bound to the subject — not transferable between users or sessions. Expiry/`revalidate_required` is cheap by design: re-validating is one call. The token also rides into the audit record, linking every execution to the exact validation verdict that authorized it.
+
+**Amendment (D-71.1 / security review #2 F2, 2026-07-21) — the token carries the resolved allow-set.** The signed payload gains `objects`: the exact set of object FQNs `validate_sql` resolved the statement against (§6.6). Before enqueue, `execute_sql` re-checks **every** member of that set against the caller's *current* visibility scopes; any member now hidden refuses the call with `not_found`, worded as in §6.6, and audits `decision: filtered` with the true reason.
+
+Why a recheck rather than the existing pin: `snapshot_ref` pins the **facts** surface, and visibility is not in it. The map lives in the KB (`.contextlayer/roles.yaml` at `kb_ref`), so revoking a caller's access to an object changes no snapshot and advances no `snapshot_ref` — a token minted a moment before the revocation would verify cleanly against every §5 binding and execute. **The allow-set recheck is the mechanism that catches a mid-token visibility change; the `snapshot_ref` check cannot and is not asked to.** The two are complementary: `snapshot_ref` catches the schema moving, `objects` catches the caller's rights moving.
+
+Re-resolving the statement at execute would be the alternative and is deliberately not done — §6.7 executes tokens, it does not form second opinions about SQL. Re-checking a signed list of names is not re-validation.
+
+A token whose payload carries no `objects` claim is **not honoured** (`revalidate_required`): the claim is required, not optional, so a token minted before this amendment cannot outlive it. The TTL bounds that to one re-validation within 300 s.
 
 ## 6. Tool reference
 
@@ -87,15 +99,27 @@ Metric doc with `implementations` per system and certification trail. Only `stat
 
 Walks `lineage/graph.json` from the FQN. Returns nodes + edges with `{operation, columns?, evidence_tier}` and, per node, doc trust where docs exist. Depth capped at 10; cycles reported, not traversed. Dangling edges (capability LP-3) are served flagged. This is the "why doesn't this match the source system" tool.
 
+**Amendment (D-66.3 / security review #1 P-E, 2026-07-17) — visibility applies node-by-node.** The M-4 visibility map applies to **every node and every edge in the walk**, not just the entry object: a node the caller's roles cannot see is **omitted** from the response together with all edges touching it — never masked-but-revealed (no placeholder nodes, no redacted FQNs, no edge stubs into hidden territory). The walk does not continue *through* a hidden node. An entry object the caller cannot see returns `not_found` per M-4. The audit record carries the true filtered reason.
+
 ### 6.6 `validate_sql(system, request)` — V
 
 `request`: `{dialect: sql, statement}` or `{dialect: api, operation, body}` per capability CI-6; dialect must match the system's class. Deterministic checks against the latest snapshot: every referenced object/column exists (SQL: parse + resolve; API: dimensions/metrics ∈ documented surface, compatibility rules from connector docs), statement class is SELECT-only (SQL), and per-system conventions (`conventions.md` machine-readable guardrail section) hold.
 
 Response: `{verdict: pass|fail, findings: [{severity, code, ref, message}], validation_token?}` — token only on `pass`. Repeated failures against the same object emit the class-1 doc/schema-mismatch fault event.
 
+**Amendment (D-71.1 / security review #2 F2, 2026-07-21) — resolution runs against the caller's visible surface.** `validate_sql` resolves the request against the objects the caller can see, not against the whole snapshot: the visible surface is the input to resolution, not a filter applied to its output. Consequences, all of them deliberate:
+
+- A statement referencing an object hidden from the caller **fails**, and no token is issued. The failure is `unknown_object` (SQL) or `unknown_dimension`/`unknown_metric` (API dialect, applied to the documented GA4/GSC field surface exactly as MT-8 applies it to undocumented fields).
+- The refusal is **indistinguishable from the object not existing** — same `code`, same `ref`, same `message`, byte for byte. This is M-4's non-disclosure rule reaching validation: `validate_sql` must not become the enumeration oracle that `get_table` refuses to be. It follows that the caller is told an object "does not exist in the latest accepted snapshot" when it does exist; that wording is the point, not an inaccuracy to be fixed later.
+- A statement touching several objects is refused if **any one** of them is hidden — a JOIN of one visible and one hidden table is refused, citing the hidden one exactly as it would cite a misspelled one. There is no partial validation and no hint that the rest of the statement was fine.
+- Column resolution never widens the surface: a hidden object's columns are hidden with it, so no column check can confirm a hidden object's shape.
+- The **audit record carries the true reason** — `decision: filtered`, the hidden FQNs, and the fact that they resolve in the full snapshot. M-4's second half is what keeps this debuggable: the caller cannot tell the two cases apart, the steward always can.
+
+The resolved set is signed into the validation token as `objects` (§5), which is what carries this decision to `execute_sql`.
+
 ### 6.7 `execute_sql(system, request, validation_token)` — X
 
-Verifies the token (§5), injects profile guardrails, enqueues an interactive `execute` job, awaits the result (job JC-10 latency budget). Response: the capability §6 result shape + refs; `truncated` passed through untouched (CI-7). Errors surface the capability code (`timeout`, `row_cap`, `quota_exhausted`, `schema_mismatch` → also fault-ledger).
+Verifies the token (§5) — including the allow-set recheck against current visibility added by the D-71.1 amendment — injects profile guardrails, enqueues an interactive `execute` job, awaits the result (job JC-10 latency budget). Response: the capability §6 result shape + refs; `truncated` passed through untouched (CI-7). Errors surface the capability code (`timeout`, `row_cap`, `quota_exhausted`, `schema_mismatch` → also fault-ledger).
 
 ### 6.8 `publish_report(artifact, target)` — P
 
@@ -135,6 +159,9 @@ One record per call: `{ts, subject, roles, profile, tool, args_digest, refs, dec
 | MT-8 | API-dialect validate rejects an undocumented GA4 dimension; SQL-dialect rejects a dropped column, citing the object | M-1 |
 | MT-9 | Role revocation at the IdP takes effect on the next call (no cached-role window) | §3 |
 | MT-10 | `publish_report` with an artifact citing a nonexistent metric fails before enqueue | §6.8 |
+| MT-11 | `validate_sql` on a table hidden from the caller fails with the *same* finding a nonexistent table produces (code, ref, message) and issues no token; the identical statement from a caller who can see it passes | §6.6 amendment, M-4 |
+| MT-12 | A JOIN of one visible and one hidden table is refused; an API request citing a hidden custom dimension is refused; the audit records `filtered` with the true reason in both | §6.6 amendment, M-4, M-8 |
+| MT-13 | A token issued while an object was visible is refused at `execute_sql` after the map hides it — caught by the §5 allow-set recheck, with the snapshot unmoved — and a token carrying no `objects` claim is not honoured | §5 amendment |
 
 ## 10. Amendments to other specs (additive)
 
@@ -152,4 +179,4 @@ One record per call: `{ts, subject, roles, profile, tool, args_digest, refs, dec
 | MC-2 | Validation-token TTL | 300 s | If long drafting sessions cause revalidation friction (it's one cheap call) |
 | MC-3 | `get_table` response size for very wide tables (500+ columns) | Full column table always (facts are facts); wide tables paginate columns at 300 with continuation | First SAP-scale estate |
 | MC-4 | Read-tool rate limits per profile class vs global per-identity | Global per-identity defaults, profile-overridable | Pilot telemetry |
-| MC-5 | Serving machine facts from snapshot vs rendered file when a sync PR is unmerged | Snapshot is authority for §6.3 facts (as ruled); revisit if customers expect strict "KB = merged HEAD only" semantics | Security review feedback |
+| MC-5 | Serving machine facts from snapshot vs rendered file when a sync PR is unmerged | **Closed** (D-66.4) — snapshot authority affirmed by security review #1; MCP-R9 render-lag signal added to §4 as the condition of closure | — |

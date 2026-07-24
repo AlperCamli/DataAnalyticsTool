@@ -1,0 +1,92 @@
+# Baseline v1 condition overlay (CP-5 deliverable 6, rulings D-74.4 /
+# D-75.4 / D-76.3). Three cores serving three KBs, differing in exactly
+# one thing — the context each one carries. Layered on the base stack for
+# postgres + devidp, and on the live overlay for the runner's pilot
+# execution credentials:
+#
+#   docker compose -f docker-compose.yml -f deploy/compose.live.yml \
+#                  -f deploy/compose.baseline.yml up -d --build
+#
+# | Condition   | Service      | Port | KB served                        |
+# |-------------|--------------|------|----------------------------------|
+# | enriched-kb | core         | 8100 | customer KB (public) at main     |
+# | machine-kb  | core-machine | 8101 | cl-baseline-machine-kb (private) |
+# | no-kb       | core-nokb    | 8102 | cl-baseline-nokb (private)       |
+#
+# SYNC IS OFF ON ALL THREE (D-75.4). They serve MCP + the gateway only.
+# A sync-off core still reads and serves its KB from SYNC_GIT_REMOTE
+# (kbread clones regardless of sync.enabled); only the orchestrator —
+# scheduler, webhook, run loop — is what SYNC_ENABLED gates. The
+# production live stack, if running elsewhere, remains the sole sync
+# writer. Three schedulers sharing one queue pushing PRs at scratch repos
+# is the failure mode the ruling names, and it cannot occur here.
+#
+# LOCALHOST-BOUND (D-76.3b): CL_BIND=127.0.0.1, and the OIDC issuer +
+# public URLs resolve on 127.0.0.1 — no baseline core is exposed off-box.
+# Bring the stack up with CL_HOST_ADDR=127.0.0.1.
+#
+# The private scratch repos need a read token (CL_BASELINE_GIT_TOKEN); the
+# public customer KB does not, but the same token is harmless there.
+
+services:
+  core:
+    environment:
+      # Enriched condition: the customer KB, sync OFF, localhost.
+      CORE_MCP_ENABLED: "1"
+      SYNC_ENABLED: "0"
+      SYNC_GIT_REMOTE: https://github.com/AlperCamli/DataAnalyticsTool.git
+      SYNC_GIT_TOKEN: ${CL_BASELINE_GIT_TOKEN:-}
+      CORE_OIDC_ISSUER: http://devidp:8180
+      CORE_PUBLIC_URL: http://127.0.0.1:8100
+
+  core-machine:
+    build:
+      context: .
+      dockerfile: core/Dockerfile
+    environment:
+      CORE_DATABASE_URL: postgres://postgres:contextlayer@postgres:5432/cl_ops
+      CORE_OPS_TOKENS: ops-machine=${CL_OPS_TOKEN:-dev-ops-token}
+      CORE_RUNNER_TOKENS: runner-local=${CL_RUNNER_TOKEN:-dev-runner-token}
+      # Migrations are the enriched core's job; a second instance racing
+      # them on the shared DB is a needless failure mode.
+      CORE_MIGRATE_ON_START: "0"
+      CORE_MCP_ENABLED: "1"
+      SYNC_ENABLED: "0"
+      SYNC_GIT_REMOTE: https://github.com/AlperCamli/cl-baseline-machine-kb.git
+      SYNC_GIT_TOKEN: ${CL_BASELINE_GIT_TOKEN:-}
+      CORE_OIDC_ISSUER: http://devidp:8180
+      CORE_PUBLIC_URL: http://127.0.0.1:8101
+      CORE_OIDC_CLIENT_ID: core
+      CORE_OIDC_CLIENT_SECRET: dev-introspect-secret
+    ports:
+      - "127.0.0.1:8101:8100"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  core-nokb:
+    build:
+      context: .
+      dockerfile: core/Dockerfile
+    environment:
+      CORE_DATABASE_URL: postgres://postgres:contextlayer@postgres:5432/cl_ops
+      CORE_OPS_TOKENS: ops-nokb=${CL_OPS_TOKEN:-dev-ops-token}
+      CORE_RUNNER_TOKENS: runner-local=${CL_RUNNER_TOKEN:-dev-runner-token}
+      CORE_MIGRATE_ON_START: "0"
+      CORE_MCP_ENABLED: "1"
+      SYNC_ENABLED: "0"
+      SYNC_GIT_REMOTE: https://github.com/AlperCamli/cl-baseline-nokb.git
+      SYNC_GIT_TOKEN: ${CL_BASELINE_GIT_TOKEN:-}
+      CORE_OIDC_ISSUER: http://devidp:8180
+      CORE_PUBLIC_URL: http://127.0.0.1:8102
+      CORE_OIDC_CLIENT_ID: core
+      CORE_OIDC_CLIENT_SECRET: dev-introspect-secret
+    ports:
+      - "127.0.0.1:8102:8100"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy

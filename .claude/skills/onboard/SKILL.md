@@ -38,12 +38,19 @@ moving on. A completed example of this whole flow exists:
 Create (or extend) these files, `chmod 600` each:
 
 - `sa-key.json` — the service-account key, verbatim.
-- `env.sh` — `export SUPABASE_DSN='postgresql://…'`
+- `env.sh` — `export CL_INTROSPECT_DSN='postgresql://…'`
 - `supabase-live.json` —
-  `{"system":"supabase","mode":"live","dsn_env":"SUPABASE_DSN","schemas":["public"]}`
+  `{"system":"supabase","mode":"live","dsn_env":"CL_INTROSPECT_DSN","schemas":["public"]}`
   — **always scope `schemas`**: without it, Supabase-internal
   `auth`/`storage`/`realtime` schemas flood the KB. Ask which schemas
   hold the customer's estate; `["public"]` is the usual answer.
+  — the DSN must be the **`contextlayer_introspect` role**, not the
+  estate's `postgres` (D-71.2). Have the customer run
+  `deploy/introspection-role.sql` first; the connector refuses to
+  introspect over a SUPERUSER or BYPASSRLS connection and the snapshot
+  job will fail closed if you point this at `postgres`. Note Supabase's
+  `postgres` is *not* SUPERUSER but *does* hold BYPASSRLS — it is the
+  second half of the check that catches it.
 - `ga4-live.json` —
   `{"system":"ga4","mode":"api","property_id":"<id>","credentials_file":"<abs path to sa-key.json>"}`
 - `gsc-live.json` —

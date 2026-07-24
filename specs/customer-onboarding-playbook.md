@@ -155,6 +155,17 @@ The gate is a checklist, every item mechanically verifiable:
 7. A staged drift drill: introduce a breaking change in a test object → sync PR appears with correct contamination flag → R2 runs `review-sync` → repair PR → docs re-verified. (Rehearses journey J2 end-to-end before it happens for real.)
 8. First real journey J3: a pilot business user, Reporter profile, one of the seed requests, through resolution → validation → execution → confirmation — with publish per the P5 ceiling set in step 0.
 
+**Amendment (D-72.4 / security review #2 F3, 2026-07-21) — credential assertions at the gate.** Item 9 below is additive. It exists because every other item on this list checks something the *platform* does, and these three check what the **customer's own infrastructure** grants us — the layer where a mistake is invisible from inside the product and unrecoverable by any amount of correct code. Each is verified by attribute, never by role name.
+
+9. **Role and credential least-privilege, all three identities.** For every SQL system in the estate:
+   - **Execution** (`contextlayer_exec`, `deploy/execution-role.sql`) — read-only *at the database level*: none of SUPERUSER/CREATEDB/CREATEROLE/BYPASSRLS, no write grant reachable through role membership, no schema CREATE. *Evidence:* the executor's startup check passes against the configured `execute_dsn` (G3), and the file's VERIFY queries return empty.
+   - **Introspection** (`contextlayer_introspect`, `deploy/introspection-role.sql`) — neither SUPERUSER nor BYPASSRLS, and no SELECT grant on customer tables (it reads `pg_catalog`, which needs none). *Evidence:* one accepted live snapshot under the dedicated role, byte-identical to the previous role's on unchanged source state (D-71.2).
+   - **KB sync** (`contextlayer-sync` PAT, P-H / D-66.7) — fine-grained, scoped to the single KB repository, with contents + pull-request write and nothing else.
+
+   The three are **distinct identities with distinct secrets**, and no DSN is the estate's default `postgres`.
+
+   *Check attributes, not names.* A managed-Postgres `postgres` role may report `rolsuper = false` and still hold BYPASSRLS — observed on Supabase, where it is the BYPASSRLS half of the check that fires (D-71.2). A gate item written against "is it the superuser?" would pass the exact connection this item exists to catch.
+
 **Handover:** R2 owns the steward loop (sync PRs, ledger triage in KB Health, certification); R3 owns Connections health and profiles; R5 drops to release-driven upgrade support. The fault ledger is now the growth engine: every agent dead-end from real usage lands in R2's triage queue and becomes the next enrichment batch — onboarding doesn't end so much as hand its motor to the customer.
 
 ## 14. Open decisions (playbook-local register)
@@ -165,3 +176,4 @@ The gate is a checklist, every item mechanically verifiable:
 | OB-2 | Who authors entity drafts in step 6 — enrich skill vs R5 hand-drafting for the first customer(s) | Skill-drafted, R5-paired review, always customer-certified | After 2–3 onboardings show which is faster |
 | OB-3 | Staged drift drill (gate item 7) as a shipped fixture vs per-customer improvisation | Ship a standard drill fixture (test schema + scripted change) with the product | Build during phase 4 (sync engine) |
 | OB-4 | Onboarding duration targets per topology class | Measure the first three; no promises before data | Third onboarding |
+| OB-5 | Profile↔database-role pairing: a profile granting `execute_sql` must be paired with a database role scoped no wider than that profile's visible surface (filed by D-72.5; origin security review #2 F2) | Stated as a deployment obligation, not yet a mechanical gate item — D-71.1 makes the KB visibility map govern the execution surface, but the map is our gate and the database role is the wall, and nothing today checks that the wall matches the gate | Next playbook revision for wording; **load-bearing at the first customer with more than one execute-granted profile**, where the two surfaces can first diverge |

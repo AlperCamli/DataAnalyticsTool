@@ -25,6 +25,7 @@ from urllib.parse import urlsplit
 import pytest
 
 from connectors.ga4.connector import MANIFEST, GA4Metadata
+from connectors.ga4.executor import GA4Executor
 from connectors.ga4.connector import connector as live_connector
 from connectors.sdk import Connector, Job, run_job
 from snapshot.canonical import canonical_body_bytes
@@ -104,7 +105,7 @@ def make_connector(transport) -> Connector:
         sleep=lambda seconds: None,  # tests never really sleep
         rng=random.Random(7),
     )
-    return Connector(manifest=MANIFEST, handlers={"metadata": provider})
+    return Connector(manifest=MANIFEST, handlers={"metadata": provider, "query": GA4Executor()})
 
 
 def run_recorded(responses: dict | None = None, transport=None, **kwargs):
@@ -126,7 +127,7 @@ def test_recorded_pull_emits_valid_snapshot():
     assert validate_snapshot(doc, check_hashes=True) == ([], [])
     assert doc["system_class"] == "api"
     assert doc["source_mode"] == "api"  # MP-1
-    assert doc["connector"] == {"name": "ga4", "version": "0.1.0"}
+    assert doc["connector"] == {"name": "ga4", "version": MANIFEST.version}
     assert doc["source_properties"] == {  # MP-2 / D-27, fixture-identical keys
         "property_id": "properties/313459823",
         "display_name": "Acme Store — Web",

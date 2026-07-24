@@ -31,6 +31,44 @@ export interface CoreConfig {
   /** Sync orchestrator (CP-3b). Disabled unless SYNC_ENABLED; the job
    * API runs identically either way. */
   sync: SyncConfig;
+  /** P-A auth split (D-66.1): service-identity tokens for the
+   * producer/ops/read surface — a set distinct from runnerTokens.
+   * token → service name (or null for an unnamed token). */
+  opsTokens: Map<string, string | null>;
+  /** OIDC roles that also unlock the ops surface (platform identity). */
+  opsRoles: string[];
+  /** MCP server (CP-4). Disabled unless CORE_MCP_ENABLED. */
+  mcp: McpConfig;
+}
+
+export interface McpConfig {
+  enabled: boolean;
+  /** Public base URL for OAuth protected-resource metadata (RFC 9728). */
+  publicUrl: string;
+  /** Customer IdP issuer; identity is resolved per call via token
+   * introspection so revocation is immediate (MCP-R1, MT-9). */
+  oidcIssuer: string;
+  oidcClientId: string;
+  oidcClientSecret: string;
+  /** Claim path holding the caller's roles (dotted; e.g.
+   * `realm_access.roles` for Keycloak-shaped IdPs). */
+  rolesClaim: string;
+  /** KB HEAD re-check TTL for the per-call read (0 = every call). */
+  kbRefreshMs: number;
+  /** Validation-token TTL (MC-2 default 300 s). */
+  vtokenTtlS: number;
+  /** §7 per-identity rate limits. */
+  limits: {
+    readPerMin: number;
+    validatePerMin: number;
+    executePerMin: number;
+    publishPerHour: number;
+    flagPerSession: number;
+  };
+  /** Ledger §10 event retention and the sweep cadence for window rules,
+   * retention, and CL-Resolves resolution polling. */
+  ledgerRetentionDays: number;
+  ledgerSweepMs: number;
 }
 
 export interface SyncConfig {
@@ -168,6 +206,36 @@ function loadSyncConfig(env: NodeJS.ProcessEnv): SyncConfig {
   };
 }
 
+function loadMcpConfig(env: NodeJS.ProcessEnv, host: string, port: number): McpConfig {
+  const enabled = env.CORE_MCP_ENABLED === "1" || env.CORE_MCP_ENABLED === "true";
+  const oidcIssuer = (env.CORE_OIDC_ISSUER ?? "").replace(/\/$/, "");
+  if (enabled && !oidcIssuer) {
+    throw new ConfigError("CORE_OIDC_ISSUER is required when CORE_MCP_ENABLED");
+  }
+  if (enabled && !env.SYNC_GIT_REMOTE) {
+    throw new ConfigError("SYNC_GIT_REMOTE (the KB remote) is required when CORE_MCP_ENABLED");
+  }
+  return {
+    enabled,
+    publicUrl: (env.CORE_PUBLIC_URL ?? `http://${host}:${port}`).replace(/\/$/, ""),
+    oidcIssuer,
+    oidcClientId: env.CORE_OIDC_CLIENT_ID ?? "",
+    oidcClientSecret: env.CORE_OIDC_CLIENT_SECRET ?? "",
+    rolesClaim: env.CORE_OIDC_ROLES_CLAIM ?? "roles",
+    kbRefreshMs: Number(env.CORE_KB_REFRESH_MS ?? 5000),
+    vtokenTtlS: intVar(env, "CORE_VTOKEN_TTL_S", 300),
+    limits: {
+      readPerMin: intVar(env, "CORE_MCP_READ_PER_MIN", 120),
+      validatePerMin: intVar(env, "CORE_MCP_VALIDATE_PER_MIN", 20),
+      executePerMin: intVar(env, "CORE_MCP_EXECUTE_PER_MIN", 6),
+      publishPerHour: intVar(env, "CORE_MCP_PUBLISH_PER_HOUR", 4),
+      flagPerSession: intVar(env, "CORE_MCP_FLAG_PER_SESSION", 10),
+    },
+    ledgerRetentionDays: intVar(env, "CORE_LEDGER_RETENTION_DAYS", 90),
+    ledgerSweepMs: intVar(env, "CORE_LEDGER_SWEEP_MS", 5 * 60 * 1000),
+  };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
   const databaseUrl = env.CORE_DATABASE_URL;
   if (!databaseUrl) throw new ConfigError("CORE_DATABASE_URL is required");
@@ -178,11 +246,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
     .split(/\s+/)
     .filter(Boolean);
 
+  const host = env.CORE_HOST ?? "0.0.0.0";
+  const port = intVar(env, "CORE_PORT", 8100);
   return {
     databaseUrl,
-    host: env.CORE_HOST ?? "0.0.0.0",
-    port: intVar(env, "CORE_PORT", 8100),
+    host,
+    port,
     runnerTokens: parseRunnerTokens(rawTokens),
+    opsTokens: env.CORE_OPS_TOKENS ? parseRunnerTokens(env.CORE_OPS_TOKENS) : new Map(),
+    opsRoles: (env.CORE_OPS_ROLES ?? "ops,steward").split(",").map((r) => r.trim()).filter(Boolean),
     validatorCmd,
     migrateOnStart: env.CORE_MIGRATE_ON_START === "1" || env.CORE_MIGRATE_ON_START === "true",
     logLevel: env.CORE_LOG_LEVEL ?? "info",
@@ -195,5 +267,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
     sweepIntervalMs: intVar(env, "CORE_SWEEP_INTERVAL_MS", 1000),
     claimPollMs: intVar(env, "CORE_CLAIM_POLL_MS", 300),
     sync: loadSyncConfig(env),
+    mcp: loadMcpConfig(env, host, port),
   };
 }

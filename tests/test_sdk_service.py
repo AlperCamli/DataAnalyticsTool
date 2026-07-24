@@ -301,10 +301,22 @@ def test_declared_connectors_carry_types():
 
 
 def test_credential_key_map_covers_shipped_connectors():
-    assert CREDENTIAL_CONFIG_KEYS == {
-        "dsn": "dsn_env",
-        "service_account": "credentials_env",
+    """Every credential key a shipped manifest declares must have an
+    env-indirection mapping, or the runner cannot inject it. Derived
+    from the manifests rather than pinned, so a new credential key on
+    any connector fails here instead of at first live job."""
+    from connectors.ga4.connector import connector as ga4_connector
+    from connectors.gsc.connector import connector as gsc_connector
+    from connectors.postgres.connector import connector as pg_connector
+
+    declared = {
+        entry["key"]
+        for connector in (pg_connector, ga4_connector, gsc_connector, demo_connector)
+        for entry in connector.manifest.credentials
     }
+    assert declared <= set(CREDENTIAL_CONFIG_KEYS), (
+        f"credential keys with no runner mapping: {sorted(declared - set(CREDENTIAL_CONFIG_KEYS))}"
+    )
 
 
 def test_load_runner_config(tmp_path, monkeypatch):

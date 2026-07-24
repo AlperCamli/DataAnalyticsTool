@@ -23,6 +23,7 @@ from connectors.sdk.errors import (
     ConfigError,
     ConnectorError,
     EmissionError,
+    GuardrailViolation,
     QuotaExceeded,
     SourceUnavailable,
 )
@@ -34,7 +35,15 @@ from connectors.sdk.manifest import (
     ManifestError,
     load_manifest,
 )
-from connectors.sdk.providers import IntrospectionResult, MetadataProvider
+from connectors.sdk.providers import (
+    ExecuteRequest,
+    ExecuteResult,
+    Guardrails,
+    Identity,
+    IntrospectionResult,
+    MetadataProvider,
+    QueryExecutor,
+)
 from connectors.sdk.quota import QuotaPolicy, TokenBucket, backoff_delays
 from connectors.sdk.runner import Job, JobError, JobOutcome, run_job
 
@@ -47,6 +56,11 @@ __all__ = [
     "ConnectorError",
     "EmissionError",
     "EmittedSnapshot",
+    "ExecuteRequest",
+    "ExecuteResult",
+    "Guardrails",
+    "GuardrailViolation",
+    "Identity",
     "IntrospectionResult",
     "Job",
     "JobError",
@@ -54,6 +68,7 @@ __all__ = [
     "Manifest",
     "ManifestError",
     "MetadataProvider",
+    "QueryExecutor",
     "QuotaExceeded",
     "QuotaPolicy",
     "RegistrationError",

@@ -20,8 +20,14 @@ from dataclasses import dataclass, field
 
 from connectors.sdk.connector import Connector
 from connectors.sdk.emission import EmittedSnapshot, config_problems, emit_snapshot
-from connectors.sdk.errors import ConnectorError, QuotaExceeded
-from connectors.sdk.providers import IntrospectionResult
+from connectors.sdk.errors import ConnectorError, GuardrailViolation, QuotaExceeded
+from connectors.sdk.providers import (
+    ExecuteRequest,
+    ExecuteResult,
+    Guardrails,
+    Identity,
+    IntrospectionResult,
+)
 from connectors.sdk.redact import redact_deep, redact_text
 
 logger = logging.getLogger("connectors.sdk.runner")
@@ -40,6 +46,10 @@ class Job:
     config: dict
     type: str = "snapshot"
     credentials: tuple = ()
+    # `execute` payload members (capability §6); unused by `snapshot`.
+    request: dict | None = None
+    guardrails: dict | None = None
+    identity: dict | None = None
 
     @classmethod
     def local(cls, config: dict) -> "Job":
@@ -66,6 +76,9 @@ class JobOutcome:
     snapshot: EmittedSnapshot | None = None
     error: JobError | None = None
     retry_after_s: int | None = None
+    # Set instead of `snapshot` when an interactive capability succeeds;
+    # delivered inline as the §6.4 `result` envelope.
+    result: dict | None = None
 
 
 def _job_error(code: str, message: str, retryable: bool, detail: dict | None = None) -> JobError:
@@ -84,7 +97,9 @@ def _failed(exc: ConnectorError) -> JobOutcome:
 
 
 def run_job(connector: Connector, job: Job, *, captured_at: str | None = None) -> JobOutcome:
-    """Execute one job. Only job type `snapshot` has an engine so far."""
+    """Execute one job, dispatched by type."""
+    if job.type == "execute":
+        return _run_execute(connector, job)
     if job.type != "snapshot":
         raise ValueError(f"no engine for job type {job.type!r} in this SDK version")
 
@@ -153,3 +168,89 @@ def run_job(connector: Connector, job: Job, *, captured_at: str | None = None) -
         job.job_id, len(emitted.document["objects"]), emitted.document["system"],
     )
     return JobOutcome(status="succeeded", snapshot=emitted)
+
+
+def _run_execute(connector: Connector, job: Job) -> JobOutcome:
+    """The `execute` engine (capability §6, job class interactive).
+
+    Two properties differ from the snapshot engine and both are
+    deliberate:
+
+    - guardrails are parsed through `Guardrails.parse`, which floors
+      rather than trusts. An absent or stripped `guardrails` member
+      yields the conservative default, never an unbounded run (CC-3);
+    - quota is terminal here, not a deferral (QE-4): the caller is
+      blocked awaiting this result, so a `defer` would hang them.
+    """
+    manifest = connector.manifest
+    executor = connector.handlers.get("query")
+    if executor is None:
+        return JobOutcome(
+            status="failed",
+            error=_job_error(
+                "config_error",
+                f"connector {manifest.name!r} does not declare the query capability",
+                retryable=False,
+            ),
+        )
+    try:
+        request = ExecuteRequest.parse(job.request)
+    except ValueError as exc:
+        return JobOutcome(
+            status="failed",
+            error=_job_error("config_error", str(exc), retryable=False),
+        )
+
+    guardrails = Guardrails.parse(job.guardrails)
+    identity = Identity.parse(job.identity)
+    logger.info(
+        "job %s: executing dialect=%s system=%s row_cap=%d timeout_s=%d subject=%s",
+        job.job_id, request.dialect, job.config.get("system"),
+        guardrails.row_cap, guardrails.timeout_s, identity.subject,
+    )
+    try:
+        result = executor.execute(job.config, request, guardrails, identity)
+        if not isinstance(result, ExecuteResult):
+            raise TypeError(
+                f"execute must return ExecuteResult, got {type(result).__name__}"
+            )
+    except QuotaExceeded as exc:
+        # QE-4: interactive quota is a terminal guardrail error carrying
+        # the retry-after, never the J-5 deferral batch jobs get.
+        logger.info("job %s: quota exhausted (%s)", job.job_id, exc)
+        return JobOutcome(
+            status="failed",
+            error=_job_error(
+                "guardrail",
+                str(exc),
+                retryable=False,
+                detail={
+                    **dict(exc.detail),
+                    "capability_code": "quota_exhausted",
+                    "retry_after_s": exc.retry_after_s,
+                },
+            ),
+        )
+    except GuardrailViolation as exc:
+        logger.info("job %s: guardrail %s (%s)", job.job_id, exc.capability_code, exc)
+        return _failed(exc)
+    except ConnectorError as exc:
+        logger.warning("job %s: failed %s (%s)", job.job_id, exc.code, redact_text(str(exc)))
+        return _failed(exc)
+    except Exception as exc:
+        logger.warning("job %s: failed internal (%s)", job.job_id, redact_text(repr(exc)))
+        return JobOutcome(
+            status="failed",
+            error=_job_error(
+                "internal",
+                f"{type(exc).__name__}: {exc}",
+                retryable=True,
+                detail={"traceback": traceback.format_exc()},
+            ),
+        )
+
+    logger.info(
+        "job %s: %d rows (truncated=%s) in %dms",
+        job.job_id, result.row_count, result.truncated, result.duration_ms,
+    )
+    return JobOutcome(status="succeeded", result=result.to_json())

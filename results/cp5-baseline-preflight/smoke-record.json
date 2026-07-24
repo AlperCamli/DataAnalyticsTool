@@ -1,0 +1,53 @@
+{
+  "case_id": "RB-01",
+  "condition": "enriched-kb",
+  "rep": 1,
+  "model_id": "claude-opus-4-8",
+  "backend": "benchmark-skill-v1",
+  "transport": "benchmark-skill-v1",
+  "started_at": "2026-07-21T16:58:00.070272Z",
+  "ended_at": "2026-07-21T16:59:16.709467Z",
+  "cost_usd": 0.686128,
+  "session_id": "8ad529f8-0836-4af4-877a-00a7b6216014",
+  "audit_tools": [
+    "search_context",
+    "get_table",
+    "get_entity",
+    "validate_sql",
+    "execute_sql",
+    "validate_sql",
+    "execute_sql",
+    "validate_sql",
+    "execute_sql"
+  ],
+  "validate_calls": 3,
+  "execute_calls": 3,
+  "execute_allowed": 3,
+  "loop_completed": true,
+  "agent_result": "There's no `finish` tool exposed in this session \u2014 only the contextlayer discovery/validate/execute tools \u2014 so here's the result directly.\n\n## Answer: zero \u2014 the `users` table is empty\n\nThe monthly trend query returned **no rows**, and a direct count confirms why:\n\n| total_users | first_signup | last_signup |\n|---|---|---|\n| 0 | null | null |\n\n`supabase.public.users` currently holds **0 rows**. There are no signups to trend, so I can't chart new users over time \u2014 not \"signups are low,\" but \"the table has nothing in it.\"\n\n**Query used** (ready to re-run once data lands):\n\n```sql\nSELECT signup_month,\n       new_users,\n       sum(new_users) OVER (ORDER BY signup_month) AS cumulative_users\nFROM (\n  SELECT date_trunc('month', created_at)::date AS signup_month,\n         count(*) AS new_users\n  FROM public.users\n  GROUP BY 1\n) m\nORDER BY signup_month;\n```\n\n**Objects used:** `supabase.public.users` (columns `created_at`, row count only \u2014 no PII selected).\n\n**Routing and assumptions:**\n- The `user` entity doc names `supabase.public.users` the system-of-record for accounts, so signups route to Supabase alone. GA4 sees anonymous devices with User-ID disabled and no `clientId` dimension, and GSC has no user concept \u2014 neither can substitute for an account-level signup count, and neither can be joined to it.\n- I treated \"new user\" as a row in `users` with `created_at` in the period, counted by `users.id` (the doc's stated dedup key). There's no soft-delete column on this table, so no exclu",
+  "executed_statements": [
+    "SELECT date_trunc('month', created_at)::date AS signup_month, count(*) AS new_users, sum(count(*)) OVER (ORDER BY date_trunc('month', created_at)) AS cumulative_users FROM public.users GROUP BY 1 ORDER BY 1",
+    "SELECT signup_month, new_users, sum(new_users) OVER (ORDER BY signup_month) AS cumulative_users FROM (SELECT date_trunc('month', created_at)::date AS signup_month, count(*) AS new_users FROM public.users GROUP BY 1) m ORDER BY signup_month",
+    "SELECT count(*) AS total_users, min(created_at) AS first_signup, max(created_at) AS last_signup FROM public.users"
+  ],
+  "drafts": [
+    {
+      "seq": 1,
+      "system": "supabase",
+      "executed": true,
+      "statement": "SELECT date_trunc('month', created_at)::date AS signup_month, count(*) AS new_users, sum(count(*)) OVER (ORDER BY date_trunc('month', created_at)) AS cumulative_users FROM public.users GROUP BY 1 ORDER BY 1"
+    },
+    {
+      "seq": 2,
+      "system": "supabase",
+      "executed": true,
+      "statement": "SELECT signup_month, new_users, sum(new_users) OVER (ORDER BY signup_month) AS cumulative_users FROM (SELECT date_trunc('month', created_at)::date AS signup_month, count(*) AS new_users FROM public.users GROUP BY 1) m ORDER BY signup_month"
+    },
+    {
+      "seq": 3,
+      "system": "supabase",
+      "executed": true,
+      "statement": "SELECT count(*) AS total_users, min(created_at) AS first_signup, max(created_at) AS last_signup FROM public.users"
+    }
+  ]
+}

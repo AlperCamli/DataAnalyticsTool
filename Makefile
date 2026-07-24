@@ -1,7 +1,11 @@
 # CP-3a core stack (core + Postgres + runner; see core/README.md).
+# CP-4 adds the MCP surface: `make stack-mcp` arms /mcp + the dev IdP.
 
 stack-up:    ## build + start the local job-protocol stack
 	docker compose up -d --build
+
+stack-mcp:   ## stack with the MCP server + dev OIDC provider armed (CP-4)
+	CORE_MCP_ENABLED=1 docker compose up -d --build
 
 stack-demo:  ## enqueue the no-credentials demo jobs and await results
 	docker compose exec core sh -c 'node dist/cli.js enqueue --wait jobs/demo/*.json'
@@ -16,4 +20,49 @@ stack-down:  ## stop the stack (keeps the pgdata volume; add -v yourself to wipe
 drill:       ## staged drift drill (sync §9 / SO-4) through the real pipeline
 	cd core && npx vitest run test/sync-drill.test.ts
 
-.PHONY: stack-up stack-demo stack-live stack-down drill
+# CP-2 manual-baseline kit (dev tooling; see OPERATOR.md).
+#
+# RUNS defaults to a directory OUTSIDE this repo on purpose: interactive
+# Claude Code auto-loads CLAUDE.md from the cwd's directory ancestry, so a
+# runs/ dir inside the repo would inject this repo's CLAUDE.md into every
+# journey session (condition contamination). `conditions` preflights this.
+
+PY   := .venv/bin/python
+RUNS ?= $(HOME)/Desktop/cp2-runs
+
+conditions:  ## build the three condition working dirs + manifest
+	$(PY) -m benchmark.manual conditions --root $(RUNS)
+
+preflight:   ## re-check isolation + no-stray-files invariants
+	$(PY) -m benchmark.manual preflight --root $(RUNS)
+
+ingest:      ## assemble R3 records from the executor JSONL logs
+	$(PY) -m benchmark.manual ingest --root $(RUNS)
+
+status:      ## coverage of the cases x conditions x reps grid
+	$(PY) -m benchmark.manual status --root $(RUNS)
+
+score:       ## validate + score records -> results/<run-id>/ (R8 + report)
+	$(PY) -m benchmark.manual score --root $(RUNS) --out results
+
+# CP-5 skill conformance scenarios (D-78 layer (b), the AS-9/10/12 gate
+# evidence). Re-run on any skill edit — the fixture deployment needs no
+# example estate. Requires a postgres admin URL (a throwaway container is
+# fine) and the `claude` CLI on PATH.
+#
+#   ADMIN_DB defaults to the local compose postgres; override for a
+#   throwaway container. FIXTURE is the connection file the launcher writes.
+ADMIN_DB ?= postgres://postgres:contextlayer@127.0.0.1:5433/postgres
+FIXTURE  ?= /tmp/cl-fixture.json
+SCEN_MODEL ?= claude-opus-4-8
+
+fixture-up:  ## stand up the fixture deployment (keeps running; Ctrl-C to stop)
+	cd core && CORE_TEST_DATABASE_URL="$(ADMIN_DB)" CORE_TEST_PYTHON="$(abspath $(PY))" \
+	  node_modules/.bin/vite-node test/fixture-deployment.ts -- --out "$(FIXTURE)" --with-execution
+
+scenarios:   ## run AS-9/10/12 against a running fixture -> results/cp5-scenarios/
+	$(PY) -m tools.skill_scenarios --connection "$(FIXTURE)" \
+	  --model $(SCEN_MODEL) --out results/cp5-scenarios
+
+.PHONY: stack-up stack-mcp stack-demo stack-live stack-down drill \
+        conditions preflight ingest status score fixture-up scenarios
