@@ -16,12 +16,16 @@ trust signals. First deployment: Supabase + GA4 + GSC → Looker Studio.
   If a decision is Open, implement its stated default. Never invent a
   resolution; propose a new register item instead.
 - Sequence: `plans/context-layer-development-plan-v1.md`
-  (checkpoints CP-0..CP-8). Current position: CP-6 (M2) — governed
-  execution built on branch `cp4-m1-mcp`; JP-2 measured and JP-1 closed
-  (D-69). M2 gate pending: the two-machine reporter demo needs
-  `deploy/execution-role.sql` applied to the pilot Supabase first
-  (operator action — we never run DDL against the customer estate).
-  M1's live-demo gate also remains open (PR-CP4-M1.md).
+  (checkpoints CP-0..CP-8). Current position: CP-7 (M3, "the report
+  ships") on branch `cp7-m3`; `main` is current through M2 + CP-5
+  (CP-5 closed by amendment, D-80; landing `b663434`). Task 7.0
+  (reporting views over RLS, D-80.3/D-81): delta DDL drafted in
+  `deploy/reporting-views.sql`, awaiting operator apply as customer
+  DBA (we never run DDL against the customer estate), then manual
+  sync → additive drift PR → lineage → enrich-the-hot-views, before
+  any publisher work. M1's live-demo gate remains open (PR-CP4-M1.md);
+  M2's pending two-machine demo happens as part of the M3 gate demo,
+  through these views.
 
 ## Engineering norms
 - Conformance tests are the definition of done. Snapshot work is done

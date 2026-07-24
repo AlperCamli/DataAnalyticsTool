@@ -1,5 +1,6 @@
--- Reporting views for governed execution (CP-6/M2; the CP-7 `sql_backing:
--- views` pattern arriving early).
+-- Reporting views for governed execution.
+-- CP-6/M2 origin (the CP-7 `sql_backing: views` pattern arriving early);
+-- extended at CP-7 task 7.0 with the seed-packet delta (D-81).
 --
 -- ─────────────────────────────────────────────────────────────────────
 -- WHY THIS FILE EXISTS
@@ -20,9 +21,14 @@
 -- READ THIS BEFORE APPLYING — what these views actually do
 --
 -- A Postgres view evaluates RLS as its OWNER, not its caller. These views
--- are owned by `postgres`, which holds BYPASSRLS. **They are therefore a
--- deliberate, narrow, audited hole in RLS.** That is the entire mechanism,
--- and it is why the rule below is absolute:
+-- are owned by the role that runs this file — `postgres`, which sees
+-- through RLS on the base tables. On the pilot that is true twice over:
+-- Supabase's `postgres` holds BYPASSRLS (measured; `rolsuper = false` —
+-- the D-71/F3 fact) AND owns the base tables (owner exemption, absent
+-- FORCE ROW LEVEL SECURITY). Either suffices; the verify section checks
+-- both. **These views are therefore a deliberate, narrow, audited hole
+-- in RLS.** That is the entire mechanism, and it is why the rule below
+-- is absolute:
 --
 --     EVERY COLUMN OF EVERY VIEW HERE MUST BE AN AGGREGATE OR A
 --     NON-IDENTIFYING DIMENSION. No user_id. No email. No name. No
@@ -171,8 +177,131 @@ SELECT date_trunc('month', created_at)::date AS signup_month,
   FROM public.users
  GROUP BY 1, 2, 3;
 
+-- ─────────────────────────────────────────────────────────────────────
+-- CP-7 TASK 7.0 — seed-packet delta (2026-07-24, D-81)
+--
+-- The twelve views above went live at CP-6/M2 and already flow through
+-- the product path (KB sync PR #20, enrichment PR #21, lineage graph).
+-- They were drafted before the benchmark seed packet
+-- (`benchmark/suite/benchmark-seed-v0.yaml`) pinned what the recurring
+-- reports actually query; five of its Supabase-backed cases cannot be
+-- served by them. The five views below close exactly that gap — scoped
+-- to the seed packet and no broader. (The plan's other scoping input,
+-- certified metrics, contributes nothing yet: the KB has no metrics/
+-- catalog — the benchmark's recorded KB defect.)
+--
+-- Already served without new surface, for the record: RB-02
+-- (plan × status subscriber counts) and RB-10 (churn-risk scorecard)
+-- both resolve through v_subscriptions_by_plan.
+--
+-- Two deliberate differences from the twelve:
+--   * Buckets pin UTC explicitly ((col AT TIME ZONE 'UTC')::date),
+--     matching the seed goldens' semantics in the SQL itself rather
+--     than inheriting the server TimeZone (Supabase defaults to UTC,
+--     so live numbers agree; the contract is now visible in the text).
+--   * Options are explicit: WITH (security_invoker = false) states the
+--     mechanism this file exists for instead of inheriting a default,
+--     and security_barrier = true keeps the planner from pushing
+--     non-leakproof predicates below the aggregation. The twelve above
+--     predate the D-81 ruling and are left untouched.
+-- ─────────────────────────────────────────────────────────────────────
+
+-- --- signups by day (RB-01 — the smoke-journey case; RB-05 stage 4) ---
+-- Zero-signup days are absent (GROUP BY), per the RB-01 resolution:
+-- fill client-side for a continuous axis. A day's count can be 1 on
+-- this ~24-user estate; the row carries a date and a count, nothing
+-- else — same accepted class as v_daily_activity.
+CREATE OR REPLACE VIEW reporting.v_user_signups_by_day
+    WITH (security_invoker = false, security_barrier = true) AS
+SELECT (created_at AT TIME ZONE 'UTC')::date AS signup_day,
+       count(*)                              AS new_users
+  FROM public.users
+ GROUP BY 1;
+
+-- --- job journey transitions (RB-06) ----------------------------------
+-- Transition-matrix source: one row per (day, from, to). from_status
+-- IS NULL marks a job's first status entry — render as '(initial)'
+-- downstream; the view keeps the raw NULL. changed_by_user_id is
+-- deliberately not exposed (the aggregate journey, not the actor).
+CREATE OR REPLACE VIEW reporting.v_job_status_transitions
+    WITH (security_invoker = false, security_barrier = true) AS
+SELECT (changed_at AT TIME ZONE 'UTC')::date AS changed_day,
+       from_status,
+       to_status,
+       count(*)                              AS transitions
+  FROM public.job_status_history
+ GROUP BY 1, 2, 3;
+
+-- --- new subscriptions by month (RB-08 supabase leg) ------------------
+-- New rows by created_at month × status, to sit beside GA4's purchase
+-- count in the reconciliation case. Counts, not revenue: subscriptions
+-- carries no amount column (entities/conversion.md).
+CREATE OR REPLACE VIEW reporting.v_subscriptions_new_by_month
+    WITH (security_invoker = false, security_barrier = true) AS
+SELECT date_trunc('month', created_at AT TIME ZONE 'UTC')::date AS month,
+       status,
+       count(*)                              AS new_subscriptions
+  FROM public.subscriptions
+ GROUP BY 1, 2;
+
+-- --- AI runs by day and status (RB-09) --------------------------------
+-- status stays a dimension on purpose: ai_runs.status is free text with
+-- no CHECK constraint (its vocabulary is ungrounded — the KB defect
+-- RB-09 flags), so the report grounds the actual failure spelling
+-- through this view (SELECT status, sum(run_count) … GROUP BY 1) and
+-- derives failure_pct itself. Baking status = 'failed' into the view
+-- would hardcode exactly the value the KB cannot confirm.
+CREATE OR REPLACE VIEW reporting.v_ai_runs_by_day
+    WITH (security_invoker = false, security_barrier = true) AS
+SELECT (started_at AT TIME ZONE 'UTC')::date AS run_day,
+       status,
+       count(*)                              AS run_count
+  FROM public.ai_runs
+ GROUP BY 1, 2;
+
+-- --- activation funnel by signup cohort (RB-07) ------------------------
+-- Same-month activation, deterministic per closed month: cohort = users
+-- by UTC signup month; a cohort user counts toward a stage iff at least
+-- one qualifying row exists before the cohort month's exclusive end.
+-- count(*) FILTER (WHERE EXISTS …) ≡ the golden's count(DISTINCT
+-- user_id) over a cohort join. Stage predicates mirror RB-07 exactly:
+-- master/tailored CVs exclude soft-deleted rows, exports must be
+-- status = 'completed', subscriptions count on any row. This is the one
+-- view that must row-join inside — which is precisely why it is a view:
+-- the execution role can never perform this join itself.
+CREATE OR REPLACE VIEW reporting.v_activation_funnel_monthly
+    WITH (security_invoker = false, security_barrier = true) AS
+SELECT u.cohort_month,
+       count(*) AS signed_up,
+       count(*) FILTER (WHERE EXISTS (
+           SELECT 1 FROM public.master_cvs m
+            WHERE m.user_id = u.id
+              AND m.is_deleted = false
+              AND (m.created_at AT TIME ZONE 'UTC') < u.next_month)) AS created_master_cv,
+       count(*) FILTER (WHERE EXISTS (
+           SELECT 1 FROM public.tailored_cvs t
+            WHERE t.user_id = u.id
+              AND t.is_deleted = false
+              AND (t.created_at AT TIME ZONE 'UTC') < u.next_month)) AS created_tailored_cv,
+       count(*) FILTER (WHERE EXISTS (
+           SELECT 1 FROM public.exports e
+            WHERE e.user_id = u.id
+              AND e.status = 'completed'
+              AND (e.created_at AT TIME ZONE 'UTC') < u.next_month)) AS exported,
+       count(*) FILTER (WHERE EXISTS (
+           SELECT 1 FROM public.subscriptions s
+            WHERE s.user_id = u.id
+              AND (s.created_at AT TIME ZONE 'UTC') < u.next_month)) AS subscribed
+  FROM (SELECT id,
+               date_trunc('month', created_at AT TIME ZONE 'UTC')::date AS cohort_month,
+               date_trunc('month', created_at AT TIME ZONE 'UTC') + interval '1 month' AS next_month
+          FROM public.users) u
+ GROUP BY u.cohort_month;
+
 -- Read-only, views only. New views added later are NOT granted
 -- automatically: adding a view is a deliberate act, and so is exposing it.
+-- (This grant runs after every view above, so re-running this whole file
+-- is what grants a newly added view — deliberately.)
 GRANT SELECT ON ALL TABLES IN SCHEMA reporting TO contextlayer_exec;
 
 COMMIT;
@@ -189,20 +318,42 @@ COMMIT;
 --   SELECT table_name, column_name
 --     FROM information_schema.columns
 --    WHERE table_schema = 'reporting'
---      AND (column_name ~* '(^|_)(user_id|auth_user_id|email|full_name|
---                              name|title|company|notes|description|
---                              url|path|filename|checksum|token|
---                              customer_id|subscription_id)($|_)'
+--      AND (column_name ~* '(^|_)(user_id|auth_user_id|email|full_name|name|title|company|notes|description|url|path|filename|checksum|token|customer_id|subscription_id)($|_)'
 --           OR column_name ~* 'payload|content|text');
+--
+-- (The pattern is one long line on purpose: the original split it across
+-- comment lines, which embedded newlines in the regex and silently
+-- disarmed every branch after `full_name`. Fixed at task 7.0.)
 --
 -- And confirm the execution role can read the views but still not the
 -- base tables:
 --
 --   SET ROLE contextlayer_exec;
---   SELECT count(*) FROM reporting.v_jobs_by_status;  -- rows expected
+--   SELECT count(*) FROM reporting.v_jobs_by_status;        -- rows expected
+--   SELECT count(*) FROM reporting.v_user_signups_by_day;   -- rows expected (7.0)
 --   SELECT count(*) FROM public.jobs;                 -- 0 (RLS still on)
 --   RESET ROLE;
+--
+-- And that the RLS exemption these views ride on actually holds. The
+-- owner's attributes (on the pilot: rolbypassrls = true):
+--
+--   SELECT rolname, rolbypassrls, rolsuper FROM pg_roles
+--    WHERE rolname = (SELECT viewowner FROM pg_views
+--                      WHERE schemaname = 'reporting' LIMIT 1);
+--
+-- If the owner ever rides on table ownership alone (rolbypassrls =
+-- false), FORCE ROW LEVEL SECURITY on a base table would silently empty
+-- every view over it (fails closed, but the report demo dies with it).
+-- Expect zero rows:
+--
+--   SELECT c.relname
+--     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+--    WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relforcerowsecurity;
 -- ─────────────────────────────────────────────────────────────────────
 --
 -- ROLLBACK:
 --   DROP SCHEMA reporting CASCADE;
+-- Task 7.0 delta only (leaves the CP-6 twelve in place):
+--   DROP VIEW reporting.v_user_signups_by_day, reporting.v_job_status_transitions,
+--             reporting.v_subscriptions_new_by_month, reporting.v_ai_runs_by_day,
+--             reporting.v_activation_funnel_monthly;

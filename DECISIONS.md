@@ -2834,3 +2834,62 @@ publisher demo depends on them.
 - BASELINE-1 added to the master register; MC-1's revisit trigger
   re-pointed at it (was "Baseline v1 … CP-5 per D-62", which D-80.1
   amends away).
+
+## D-81 — Task 7.0: reporting views scoped to the seed packet; security model ruled
+
+**Ruling (owner, 2026-07-24): definer + barrier.** The task 7.0 views
+declare `WITH (security_invoker = false, security_barrier = true)`.
+Definer because it is the mechanism: a view evaluates RLS as its owner
+(`postgres` — which on the pilot both holds BYPASSRLS, the measured
+D-71/F3 fact (`rolsuper = false`, `rolbypassrls = true`), and owns the
+base tables, so the exemption holds twice over), which is the entire
+point of the file — the reviewed view text is the access policy,
+aggregates-only columns are the containment. Invoker was rejected on
+two grounds: RLS would evaluate as `contextlayer_exec` (`auth.uid()`
+NULL → zero rows from every view, reproducing exactly the emptiness
+D-80.3 diagnosed), and making invoker work would require base-table
+SELECT grants plus permissive policies for the exec role — the grant
+the CP-7 scope fence forbids outright. `security_barrier` fences
+non-leakproof predicate pushdown below the aggregation; cost is nil at
+this scale. The ruling retroactively names the model the twelve CP-6
+views already use (default definer); they are left byte-untouched.
+Expected side effect, accepted: Supabase's advisor flags every view in
+`reporting` as "security definer view" — that flag is this design,
+not a finding.
+
+**Scope (— no broader).** Five views close exactly what
+`benchmark-seed-v0` needs and the CP-6 twelve cannot serve:
+`v_user_signups_by_day` (RB-01, the smoke-journey case; RB-05 stage 4),
+`v_job_status_transitions` (RB-06; raw NULL from_status, actor column
+deliberately unexposed), `v_subscriptions_new_by_month` (RB-08 Supabase
+leg), `v_ai_runs_by_day` (RB-09 — status kept a *dimension* because its
+vocabulary is ungrounded text; baking in `status = 'failed'` would
+hardcode the value the KB cannot confirm), and
+`v_activation_funnel_monthly` (RB-07 — the one view that row-joins
+inside, which is precisely why it must be a view;
+`count(*) FILTER (WHERE EXISTS …)` ≡ the golden's
+`count(DISTINCT user_id)` over a cohort join). RB-02 and RB-10 already
+resolve through `v_subscriptions_by_plan`, recorded in the file. The
+plan's other scoping input, certified metrics, contributes nothing:
+the KB has no `metrics/` catalog (the benchmark's recorded KB defect
+stands — a candidate for the post-sync enrichment pass, not for DDL).
+New buckets pin UTC explicitly (`(col AT TIME ZONE 'UTC')::date`),
+putting the goldens' semantics in the SQL text rather than the server
+TimeZone setting.
+
+**Also under this entry.** (a) The shipped guard query was
+newline-poisoned: its identifying-column pattern was split across
+comment lines, embedding literal newlines that disarmed every branch
+after `full_name`. Fixed to a single-line pattern; the file says so.
+(b) `tests/test_reporting_views_sql.py` extended: the miniature estate
+gains `job_status_history` (RLS keyed on the acting user) and the
+base-table read-denial loop covers it; a new lineage-parse test feeds
+every reporting view through `lineage.parser.snapshot_attestations`
+exactly as the connector will carry it (`pg_get_viewdef(oid, true)`,
+empty search_path, D-19.2) and asserts each task 7.0 view attests
+exactly its base tables, all resolved — guarding the D-41 all-or-nothing
+graph build the product-path sync depends on. Suite 8/8.
+**Boundary unchanged:** the owner applies the DDL as customer DBA (we
+never run DDL against the customer estate); `contextlayer_exec` gains
+SELECT on views only; no default privileges exist in `reporting`, so a
+future view is exposed only by deliberately re-running the grant.

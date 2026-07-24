@@ -45,6 +45,10 @@ CREATE TABLE public.jobs (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id uuid, company_name text, job_title text, notes text,
     status text, applied_at timestamptz, created_at timestamptz DEFAULT now());
+CREATE TABLE public.job_status_history (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id uuid, from_status text, to_status text NOT NULL,
+    changed_at timestamptz DEFAULT now(), changed_by_user_id uuid);
 CREATE TABLE public.tailored_cvs (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id uuid, language text, is_deleted boolean DEFAULT false,
@@ -80,6 +84,11 @@ INSERT INTO public.jobs (user_id, company_name, job_title, notes, status, create
 SELECT u.id, 'ACME ' || i, 'Engineer', 'private note ' || i,
        (ARRAY['draft','applied','interview'])[1 + (i % 3)], now() - (i || ' days')::interval
   FROM public.users u, generate_series(1, 4) i;
+INSERT INTO public.job_status_history (job_id, from_status, to_status, changed_by_user_id, changed_at)
+SELECT j.id, NULL, 'saved', j.user_id, j.created_at FROM public.jobs j;
+INSERT INTO public.job_status_history (job_id, from_status, to_status, changed_by_user_id, changed_at)
+SELECT j.id, 'saved', j.status, j.user_id, j.created_at + interval '1 day'
+  FROM public.jobs j WHERE j.status <> 'draft';
 INSERT INTO public.tailored_cvs (user_id, language) SELECT id, 'en' FROM public.users;
 INSERT INTO public.master_cvs (user_id, language, source_type) SELECT id, 'en', 'upload' FROM public.users;
 INSERT INTO public.ai_runs (user_id, flow_type, provider, model_name, status, input_tokens, output_tokens, total_tokens)
@@ -111,6 +120,10 @@ $do$;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY users_select_own ON public.users
     FOR SELECT USING (public.is_current_user(auth_user_id));
+-- job_status_history keys on the acting user, not a user_id column.
+ALTER TABLE public.job_status_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY job_status_history_select_own ON public.job_status_history
+    FOR SELECT USING (public.is_current_user(changed_by_user_id));
 """
 
 # Column names that would mean a view leaks something personal.
@@ -168,8 +181,9 @@ def test_execution_role_reads_aggregates_through_the_views(estate):
 
 def test_execution_role_still_cannot_read_any_base_table(estate):
     with psycopg.connect(estate["exec"], autocommit=True) as c:
-        for t in ("users", "jobs", "tailored_cvs", "master_cvs", "ai_runs",
-                  "exports", "imports", "files", "subscriptions"):
+        for t in ("users", "jobs", "job_status_history", "tailored_cvs",
+                  "master_cvs", "ai_runs", "exports", "imports", "files",
+                  "subscriptions"):
             assert c.execute(f"SELECT count(*) FROM public.{t}").fetchone()[0] == 0, t
 
 
@@ -228,3 +242,68 @@ def test_the_files_guard_query_returns_nothing(estate):
     # names the suite allows, and require nothing else survives.
     leftover = [f"{t}.{col}" for t, col in rows if col not in ALLOWED]
     assert not leftover, f"guard query flagged: {leftover}"
+
+
+NEW_VIEWS = {  # the task 7.0 delta and the base tables each must attest
+    "v_user_signups_by_day": {"users"},
+    "v_job_status_transitions": {"job_status_history"},
+    "v_subscriptions_new_by_month": {"subscriptions"},
+    "v_ai_runs_by_day": {"ai_runs"},
+    "v_activation_funnel_monthly": {
+        "users", "master_cvs", "tailored_cvs", "exports", "subscriptions"},
+}
+
+
+def test_reporting_views_parse_into_lineage_edges(estate):
+    """CP-7 exit-criterion guard (task 7.0): a view definition the lineage
+    parser cannot parse fails the WHOLE graph build at sync time (formats
+    §3.6, D-41) — so the file's views must parse *as the connector will
+    carry them* (pg_get_viewdef(oid, true) under an empty search_path,
+    D-19.2), and every task 7.0 view must attest exactly its base tables,
+    all resolved. The funnel's five edges are what the demo's lineage
+    evidence rides on."""
+    from lineage.parser import snapshot_attestations
+
+    with psycopg.connect(estate["admin"], autocommit=True) as c:
+        c.execute("SET search_path = ''")
+        views = c.execute(
+            "SELECT c.relname, pg_catalog.pg_get_viewdef(c.oid, true) "
+            "  FROM pg_catalog.pg_class c "
+            "  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+            " WHERE n.nspname = 'reporting' AND c.relkind = 'v' ORDER BY 1"
+        ).fetchall()
+        tables = c.execute(
+            "SELECT table_name, column_name, ordinal_position "
+            "  FROM information_schema.columns WHERE table_schema = 'public' "
+            " ORDER BY table_name, ordinal_position"
+        ).fetchall()
+
+    assert {v for v, _ in views} >= set(NEW_VIEWS), "delta views missing"
+    table_cols: dict[str, list[dict]] = {}
+    for t, col, pos in tables:
+        table_cols.setdefault(t, []).append({"name": col, "ordinal": pos})
+    snapshot = {
+        "system": "supabase",
+        "objects": [
+            {"kind": "table", "schema": "public", "name": t,
+             "columns": cols, "stats": {}}
+            for t, cols in table_cols.items()
+        ] + [
+            {"kind": "view", "schema": "reporting", "name": v,
+             "columns": [], "stats": {"definition": d}}
+            for v, d in views
+        ],
+    }
+
+    edges = snapshot_attestations(snapshot)  # LineageParseError = red
+
+    by_target: dict[str, set] = {}
+    for e in edges:
+        by_target.setdefault(e["target"].split(".")[-1], set()).add(
+            (e["source"], e["source_meta"]["resolved"]))
+    for view, expected in NEW_VIEWS.items():
+        got = by_target.get(view, set())
+        assert {s.split(".")[-1] for s, _ in got} == expected, \
+            f"{view}: attested {sorted(s for s, _ in got)}, expected {sorted(expected)}"
+        assert all(resolved for _, resolved in got), \
+            f"{view} carries a dangling source: {sorted(got)}"
