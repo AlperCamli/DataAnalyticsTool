@@ -61,10 +61,29 @@ date -u +%Y-%m-%dT%H:%M:%SZ
 
 ## Machine 2 — setup (one line)
 
-The reporter needs the `report` skill and the MCP endpoint. The skill is
-a single file in this repo, which has no remote (D-82), so it is copied
-directly. Enable Remote Login on machine 1 (System Settings → General →
-Sharing) or AirDrop the file and skip the `scp`.
+First, confirm machine 2 can reach the platform at all:
+
+```bash
+curl -s http://192.168.1.4:8100/healthz     # expect mcp_enabled + sync_enabled true
+```
+
+The reporter then needs the `report` skill and the MCP endpoint. The
+skill is a single file in this repo, which has no remote (D-82), so it
+is copied directly.
+
+**AirDrop is the path of least resistance** — Remote Login is off on
+machine 1 by default, which makes `scp` fail with "connection refused"
+even though the host pings and the demo ports answer (verified
+2026-07-27; the two are unrelated services). On machine 1,
+`open -R ~/Desktop/DataProject/core/skills/report/SKILL.md`, AirDrop it,
+then on machine 2:
+
+```bash
+mkdir -p ~/cp7-demo/.claude/skills/report && mv ~/Downloads/SKILL.md ~/cp7-demo/.claude/skills/report/SKILL.md && cd ~/cp7-demo && claude mcp add --transport http context-layer "http://192.168.1.4:8100/mcp?profile=reporter"
+```
+
+To use `scp` instead, first enable System Settings → General → Sharing →
+**Remote Login** on machine 1, then:
 
 ```bash
 mkdir -p ~/cp7-demo/.claude/skills/report && scp alpercamli@192.168.1.4:Desktop/DataProject/core/skills/report/SKILL.md ~/cp7-demo/.claude/skills/report/SKILL.md && cd ~/cp7-demo && claude mcp add --transport http context-layer "http://192.168.1.4:8100/mcp?profile=reporter"
