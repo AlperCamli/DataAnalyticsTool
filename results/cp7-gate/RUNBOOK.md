@@ -164,7 +164,7 @@ Skills come from the product image, never from the customer's KB.
 
 ```bash
 cd ~/Desktop/DataProject/core
-node dist/cli.js compile reporter --kb ~/Desktop/kb --url http://192.168.1.4:8100 --out ~/Desktop/reporter-setup
+node dist/cli.js compile reporter --kb ~/Desktop/kb --url http://192.168.1.4:8100 --out ~/reporter-setup
 ```
 
 *Windows PowerShell · machine 2:* nothing to run — the bundle is built
@@ -172,6 +172,14 @@ on machine 1 and copied across in step 5.2.
 
 Expect three files: `.mcp.json`, `CLAUDE.md`,
 `.claude/skills/report/SKILL.md` (about 13 KB).
+
+> **Build it in your home folder, not on the Desktop.** macOS protects
+> `~/Desktop`, `~/Documents` and `~/Downloads` from remote sessions, so
+> an SSH copy out of any of them fails with `Permission denied` even
+> though the files are plainly there and you own them. `~/reporter-setup`
+> sidesteps that entirely. (Granting the SSH daemon Full Disk Access in
+> Privacy & Security would also work, and is a much bigger permission to
+> hand out for one file copy.)
 
 ---
 
@@ -194,43 +202,66 @@ include an OpenSSH client, so `scp.exe` works once machine 1 allows it.
 *Windows PowerShell · machine 2:*
 
 ```powershell
-New-Item -ItemType Directory -Force "$HOME\cp7-demo" | Out-Null
-scp.exe -r alpercamli@192.168.1.4:Desktop/reporter-setup/* "$HOME\cp7-demo\"
+scp.exe -r alpercamli@192.168.1.4:reporter-setup "$HOME\cp7-demo"
 ```
 
 *macOS · machine 1 (equivalent, if you prefer to push rather than pull —
 replace the Windows username and address):*
 
 ```bash
-scp -r ~/Desktop/reporter-setup/* <windows-user>@<machine-2-ip>:cp7-demo/
+scp -r ~/reporter-setup <windows-user>@<machine-2-ip>:cp7-demo
 ```
 
+Two things about that command are deliberate:
+
+- **The remote path has no `~/` and no `Desktop/`.** `scp` starts in your
+  home folder already, and the bundle is built there (step 4.5) because
+  macOS blocks remote reads of the Desktop.
+- **It copies the folder, not `folder/*`.** Two of the three items are
+  hidden files — `.mcp.json` and `.claude/` — and a `*` never matches
+  names beginning with a dot. `scp -r dir/*` would have copied only
+  `CLAUDE.md`, succeeded without complaint, and left the session with no
+  server connection and no skill. Copy the folder itself and everything
+  comes across.
+- Do **not** create `cp7-demo` first. `scp` makes it as a copy of the
+  source; if it already exists you end up with
+  `cp7-demo\reporter-setup\` and have to `cd` one level deeper.
+
 If you would rather not enable Remote Login at all, any method that puts
-those three files in `%USERPROFILE%\cp7-demo` is fine — a USB stick, a
+those three items in `%USERPROFILE%\cp7-demo` is fine — a USB stick, a
 shared folder, OneDrive. Nothing in the bundle is secret: it contains no
-password and no token.
+password and no token. Whatever you use, **check the hidden files
+arrived** — many copy tools skip them by default too.
 
-### 5.3 Verify the skill arrived whole
+### 5.3 Verify all three items arrived
 
-A half-copied skill is worse than none — the session would follow half a
-procedure, and the procedure is what this gate tests.
+A half-copied bundle is the failure mode to catch here: the hidden files
+are the ones that carry the server connection and the procedure, and
+copy tools skip hidden files quietly.
 
 *Windows PowerShell · machine 2:*
 
 ```powershell
+Get-ChildItem "$HOME\cp7-demo" -Force -Recurse | Select-Object FullName, Length
 (Get-Item "$HOME\cp7-demo\.claude\skills\report\SKILL.md").Length
 Get-FileHash "$HOME\cp7-demo\.claude\skills\report\SKILL.md" -Algorithm SHA256 | Select-Object -ExpandProperty Hash
 ```
 
+`-Force` is what makes `Get-ChildItem` list hidden entries — without it
+the output looks convincingly like one file is all there ever was.
+
 *macOS · machine 1 (compare against these):*
 
 ```bash
-wc -c < ~/Desktop/reporter-setup/.claude/skills/report/SKILL.md
-shasum -a 256 ~/Desktop/reporter-setup/.claude/skills/report/SKILL.md
+ls -la ~/reporter-setup
+wc -c < ~/reporter-setup/.claude/skills/report/SKILL.md
+shasum -a 256 ~/reporter-setup/.claude/skills/report/SKILL.md
 ```
 
-The byte counts and hashes must match. (PowerShell prints the hash in
-uppercase; macOS lowercase. Same value.)
+You need all three present — `.mcp.json` (136 bytes), `CLAUDE.md` (906),
+`.claude/skills/report/SKILL.md` (13232) — and the skill's byte count
+and hash must match across the two machines. (PowerShell prints the hash
+in uppercase, macOS lowercase; same value.)
 
 ### 5.4 Start the session and log in
 
