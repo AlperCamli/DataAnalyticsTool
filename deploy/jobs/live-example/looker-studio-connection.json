@@ -27,13 +27,13 @@
   "payload": {
     "config": {
       "system": "looker_studio",
-      "template_report_id": "<REPLACE-template-report-id>",
+      "template_report_id": "00000000-0000-0000-0000-000000000000",
       "template_visual_kinds": ["table", "line", "bar", "scorecard", "pivot"],
       "sources": {
         "supabase": {
           "kind": "postgres",
           "alias": "supabase_reporting",
-          "host": "<REPLACE-db-host>",
+          "host": "YOUR_POOLER_HOST",
           "port": 5432,
           "database": "postgres",
           "username": "contextlayer_exec"

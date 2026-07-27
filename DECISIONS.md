@@ -2981,3 +2981,89 @@ merges); fixture reporter already tracks it (D-79 watch-note). Suites
 at this entry: python 578 passed (+13 env-gated skips; docker-gated
 postgres suites deselected, run separately and green incl.
 `test_reporting_views_sql.py` 8/8), TS 167 passed across 17 files.
+
+## D-84 — Drift PR #25, rotation trigger honored, compose precedence (owner ruling, 2026-07-27)
+
+Task 7.0's product path completed and the M3 prerequisites re-verified
+after a step-0 check found two of four claimed-done items untrue: the
+additive views drift PR had never been opened, and the `looker_studio`
+connection had never been registered. Both are now real. What was
+already true: the five views applied with `security_invoker = false,
+security_barrier = true` and `contextlayer_exec` holding SELECT on all
+five (D-81 as ruled), and KB PR #23 merged (`reporter` carries
+`publish_report:looker_studio` — confirmed live in the running server's
+reporter toolset).
+
+**1. ROTATION: D-80.2(b)'s trigger fired and was honored.** Part B's
+second-machine reporter session is non-localhost exposure of the estate,
+which is the stated trigger; deferral conditions that fire get honored,
+which is what makes a recorded risk acceptance mean anything. Chain:
+trigger fired → `reset-exec-password.sh` generated a fresh
+URL-safe password and wrote both sides from the one value → owner
+applied `ALTER ROLE contextlayer_exec PASSWORD …` in the Supabase SQL
+editor as customer DBA (we never run DDL/DCL against the estate) →
+agent re-wired `.secrets/runner.env` from `env.sh` and recreated the
+runner → **verified**: startup preflight `role=contextlayer_exec
+engine_version=17.6`, then one governed execute through
+`reporting.v_subscriptions_by_plan` returning 3 real rows
+(`source.role = contextlayer_exec`, `executed_on = primary`,
+`truncated = false`), audited under the reporter identity. The
+service-account key half (GSC/GA4) is the owner's console recycle and
+is **pending** at this entry; it does not gate the exec path.
+
+**Also verified along the way (D-80.3's emptiness is genuinely gone):**
+governed execution through a reporting view returns real rows, live, on
+the example estate. That is the fact M2 could not demonstrate.
+
+**2. COMPOSE PRECEDENCE, fixed.** `docker-compose.yml` declares the sync
+vars under `environment:` as `${SYNC_*:-}`, and compose ranks
+`environment:` above the live overlay's `env_file:` — so a populated
+`.secrets/sync.env` that is not *exported* yields `SYNC_ENABLED=0` and
+a stack that is healthy and silently never syncs. Measured consequence:
+the pilot ran that way for two days; the 2026-07-25 snapshot
+(`d4908bbb…`, taken after the DDL apply) was accepted and never became
+a PR. `make stack-live` now sources the file itself and passes
+`SYNC_PLATFORM_COMMIT=$(git rev-parse HEAD)` for §10 provenance;
+`CORE_MCP_ENABLED=1 make stack-live` arms /mcp on top.
+**Register motion filed, no build:** sync spec §13 **SO-F** —
+configured-but-disabled sync is silent in single-instance ops;
+`/healthz` already reports `sync_enabled`, the gap is that nothing
+consumes it where there is no dashboard. (Noted, not fixed: the master
+register has no SO-* section at all — SO-A..E were never carried over
+at consolidation.)
+
+**3. SUPERSEDE (SY-3) observed in production.** Arming sync fired a
+scheduled tick that opened PR #24; the manual `sync now supabase`
+trigger raced it and its run superseded #24 — auto-closed with the
+successor link, PR #25 open. One metadata-only delta between the two
+(`files.schema.md` row_estimate churn). SO-7's behavior, unrehearsed,
+on a real remote.
+
+**Drift PR #25 content, verified:** "0 breaking, 5 additive across
+supabase", label `sync:additive-only`, `REVIEW_REQUIRED`, KB CI **pass**,
+not merged (SO-B: the product never merges). Five `*.schema.md` machine
+docs with view definitions and `status: machine`; `lineage/graph.json`
+22→28 nodes, 16→25 edges, every view a `resolved: true` node pointing at
+its doc with edges parsed from the view definitions at `trust:
+sql-parse` — `v_activation_funnel_monthly` fanning in on all five of its
+bases with composite column maps. The pre-existing unresolved
+`supabase.` external node predates this run (it is in the CP-6 graph on
+`main`).
+
+**4. INTROSPECTION SWAP (F3 / D-71.2) verified cleared.** Measured
+`contextlayer_introspect`: `rolsuper=f`, `rolbypassrls=f`. The stale
+"PENDING OPERATOR ACTION" comments in `.secrets/env.sh` and
+`.secrets/connections.md` are removed. The runbook's demanded
+comparison is done, with the confound named: the first introspect-role
+pull post-dates the DDL, so whole-body hashes cannot be compared —
+per-object comparison instead shows all **29** pre-existing objects
+byte-identical by `schema_hash` and the only delta being the five new
+views. The swap changed nothing we can see.
+
+**5. WHEEL: A.3 not triggered, with a reason.** Carry is version-keyed
+and both sides are 0.5.0. `snapshot/` and `generator/` are byte-
+unchanged since the vendored commit `f38b75c`; only `lineage/` moved
+(bbaf5d7), and KB CI runs `generator.validate`, which never reads
+`lineage/graph.json`. So the vendored wheel is honestly current for what
+CI does — including for part B's graph-only PR, which will not re-raise
+this.

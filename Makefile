@@ -10,8 +10,17 @@ stack-mcp:   ## stack with the MCP server + dev OIDC provider armed (CP-4)
 stack-demo:  ## enqueue the no-credentials demo jobs and await results
 	docker compose exec core sh -c 'node dist/cli.js enqueue --wait jobs/demo/*.json'
 
+# The overlay's `env_file:` does NOT reach the sync vars: docker-compose.yml
+# declares them under `environment:` as ${SYNC_*:-}, and compose ranks
+# `environment:` above `env_file:` — so an unexported .secrets/sync.env
+# yields SYNC_ENABLED=0 and a stack that looks healthy and never syncs
+# (D-84.2; the pilot ran two days that way). Source it into the shell so
+# compose interpolates the real values. `CORE_MCP_ENABLED=1 make stack-live`
+# arms /mcp on top; SYNC_PLATFORM_COMMIT feeds §10 wheel provenance.
 stack-live:  ## live overlay stack up + enqueue the example estate's three systems
-	docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d --build
+	set -a; . .secrets/sync.env; set +a; \
+	  SYNC_PLATFORM_COMMIT=$$(git rev-parse HEAD) \
+	  docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d --build
 	docker compose exec core sh -c 'node dist/cli.js enqueue --wait jobs/live/*.json'
 
 stack-down:  ## stop the stack (keeps the pgdata volume; add -v yourself to wipe)
