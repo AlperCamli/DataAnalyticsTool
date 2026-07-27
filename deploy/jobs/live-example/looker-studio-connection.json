@@ -36,7 +36,7 @@
           "host": "YOUR_POOLER_HOST",
           "port": 5432,
           "database": "postgres",
-          "username": "contextlayer_exec"
+          "username": "contextlayer_exec.YOUR_PROJECT_REF"
         },
         "ga4": {
           "kind": "ga4",
