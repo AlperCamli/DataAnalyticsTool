@@ -61,37 +61,63 @@ date -u +%Y-%m-%dT%H:%M:%SZ
 
 ## Machine 2 — setup (one line)
 
+**Machine 2 is not a Mac** (Linux/Windows), so the delivery step is a
+plain HTTP fetch — AirDrop, `pbpaste` and macOS Sharing do not apply,
+and `scp` fails with "connection refused" because Remote Login is off on
+machine 1 by default (verified 2026-07-27: the host pings and the demo
+ports answer regardless — `sshd` and Docker's published ports are
+unrelated services).
+
 First, confirm machine 2 can reach the platform at all:
 
 ```bash
 curl -s http://192.168.1.4:8100/healthz     # expect mcp_enabled + sync_enabled true
 ```
 
-The reporter then needs the `report` skill and the MCP endpoint. The
-skill is a single file in this repo, which has no remote (D-82), so it
-is copied directly.
-
-**AirDrop is the path of least resistance** — Remote Login is off on
-machine 1 by default, which makes `scp` fail with "connection refused"
-even though the host pings and the demo ports answer (verified
-2026-07-27; the two are unrelated services). On machine 1,
-`open -R ~/Desktop/DataProject/core/skills/report/SKILL.md`, AirDrop it,
-then on machine 2:
+Then hand the `report` skill across. It is a single 13232-byte file in
+this repo, which has no remote (D-82). **On machine 1**, for the length
+of the fetch only:
 
 ```bash
-mkdir -p ~/cp7-demo/.claude/skills/report && mv ~/Downloads/SKILL.md ~/cp7-demo/.claude/skills/report/SKILL.md && cd ~/cp7-demo && claude mcp add --transport http context-layer "http://192.168.1.4:8100/mcp?profile=reporter"
+python3 -m http.server 8200 --directory ~/Desktop/DataProject/core/skills/report
 ```
 
-To use `scp` instead, first enable System Settings → General → Sharing →
-**Remote Login** on machine 1, then:
+**On machine 2** — Linux, or Windows under WSL/Git Bash:
 
 ```bash
-mkdir -p ~/cp7-demo/.claude/skills/report && scp alpercamli@192.168.1.4:Desktop/DataProject/core/skills/report/SKILL.md ~/cp7-demo/.claude/skills/report/SKILL.md && cd ~/cp7-demo && claude mcp add --transport http context-layer "http://192.168.1.4:8100/mcp?profile=reporter"
+mkdir -p ~/cp7-demo/.claude/skills/report && curl -fsS http://192.168.1.4:8200/SKILL.md -o ~/cp7-demo/.claude/skills/report/SKILL.md && cd ~/cp7-demo && claude mcp add --transport http context-layer "http://192.168.1.4:8100/mcp?profile=reporter"
 ```
+
+Windows PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\cp7-demo\.claude\skills\report" | Out-Null
+curl.exe -fsS http://192.168.1.4:8200/SKILL.md -o "$HOME\cp7-demo\.claude\skills\report\SKILL.md"
+cd "$HOME\cp7-demo"
+claude mcp add --transport http context-layer "http://192.168.1.4:8100/mcp?profile=reporter"
+```
+
+Stop the server on machine 1 (`Ctrl-C`) once the file has landed. Verify
+it arrived whole — **13232 bytes** (`wc -c` / `(Get-Item …).Length`). A
+truncated skill is worse than none: the session would half-follow the
+procedure, and the grounding discipline is precisely what this gate
+tests.
+
+If you would rather open no port at all, any USB volume or shared drive
+works — the file just has to end up at
+`~/cp7-demo/.claude/skills/report/SKILL.md`, with `claude mcp add` run
+separately.
 
 Then `claude` in `~/cp7-demo`. A browser opens for the dev IdP: log in as
 **`reporter` / `reporter-dev-pw`**. Tokens last one hour; if the session
 outlives that, re-authenticate rather than debugging odd 401s.
+
+The login needs a desktop browser **on machine 2** — the redirect goes to
+`http://192.168.1.4:8180`, which only resolves on the LAN. On a headless
+Linux box, copy the printed authorize URL into a browser on any machine
+that can reach that address; the callback returns to machine 2's local
+listener, so a fully headless host without port forwarding will not
+complete the flow.
 
 `~/cp7-demo` is deliberately **outside** any clone of this repo. A
 session started inside it would inherit the platform's `CLAUDE.md` and
