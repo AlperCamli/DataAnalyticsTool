@@ -3154,3 +3154,78 @@ the docker-gated postgres suites, run in the same pass). TS **166/167**
 identically with these changes stashed (35.3 s, same lease-expiry
 error) and passes in isolation (21 s). Not caused by D-85; worth its
 own look before CP-8 signs anything off.
+
+## D-86 — D-85 accepted; PR #26 findings dispositioned (owner ruling, 2026-07-27)
+
+**1. D-85 ACCEPTED as landed**, CC-12/CC-13 in the §11 conformance table
+affirmed as the correct location — the table is where definition-of-done
+lives. The NaN/Infinity→text encoding and the written-out array/interval
+renderings are affirmed as within the ruling's "text rendering" clause.
+
+**Standing practice recorded (the `re.subn` near-miss).** Re-wiring the
+recycled service-account key with `re.subn` corrupted the file: Python
+processes escapes in the *replacement* string, so the key's `\n`
+sequences became real newlines and split one env var across eight lines.
+Caught by read-back, not by the write. **Mutating a credentials file by
+regex replacement is a known trap; read-back verification after any
+secrets-file write is the standing practice** — parse the file again,
+assert the value round-trips, and assert the variable set is unchanged.
+This is cheap and it is the only thing that would have caught it, since
+the write itself succeeded and reported success.
+
+**2. JC-4 — named watch item, CP-8 blocker class.** `JC-4` (runner
+killed mid-job → reclaim by a second runner) fails under full-suite load
+and passes in isolation; the counterfactual (identical failure with the
+D-85 changes stashed) is the evidence that it is not ours.
+**Checked as instructed and the answer is no:** there is no earlier
+flake on record. `DECISIONS.md`, the four `PR-*.md` sign-off documents,
+and the commit history contain no CP-6/D-71-era note of an
+unreproducible failure — the only prior JC-4 mentions are its
+implementation (`aabb156`) and D-85's own entry. So this is the first
+record rather than a recurrence, and it arrives with a reproduction
+condition (concurrent load) instead of a shrug. To be looked at before
+CP-8 signs anything off; suspicion is lease TTL versus process-start
+latency when the suite saturates the machine.
+
+**3. `ai_runs.status` — DDL beats prose, two consequences.**
+
+(a) **D-81 correction.** The comment in `deploy/reporting-views.sql`
+("`ai_runs.status` is free text with no CHECK constraint", "its
+vocabulary is ungrounded") and the sentence repeating it in D-81's
+rationale are **wrong as written**. `ai_runs_status_check` enforces
+`pending | completed | failed`, and `ai_runs_completion_consistency_check`
+ties that vocabulary to `completed_at`. Read from the estate's
+`pg_constraint` on 2026-07-27. The **view design stands** — keeping
+`status` as a dimension lets a report ground the actual spelling and
+derive `failure_pct` itself, which is good practice regardless — but its
+stated reason was false. KB PR #26 publishes the enforced enum. The file
+comment is corrected at next touch; no dedicated PR for a comment.
+
+(b) **SS-5 elevated** (snapshot spec §10 register + master register).
+The item is no longer hypothetical: CHECK constraints being dropped at
+the snapshot boundary produced a false claim about the customer's
+estate, because a reader working only from the KB saw no constraint and
+took our blind spot for the source's vocabulary being open. The CP-7
+enrichment run also had to read `pg_constraint` out of band to write
+grounded enum documentation. Decision scheduled at **CP-8** — capture is
+a snapshot-spec and registry amendment, so it does not block M3.
+
+**4. SMALL-CELL SUPPRESSION — deferred with a trigger.** Register item
+**SUPPRESS-1** filed (master register, plan-level section, since the
+home spec is genuinely undecided between the formats spec and the MCP
+profile limits — settled at the trigger, and this entry is its home
+ruling per that section's convention). Default in force: the docs warn,
+nothing enforces. Trigger: **before any report reaches an audience
+outside the team.** The M3 demo's audience is the owner reading their
+own estate, so M3 proceeds without a threshold.
+
+**5. The four other named gaps** — `subscriptions.status` open
+vocabulary, no revenue column anywhere, `pending` runs indistinguishable
+from abandoned ones, the non-monotonic funnel — **stand as honest KB
+gaps.** They are the product working: `flag_gap` and future enrichment
+are what they exist for. No action.
+
+**6. GO for part B preparation** (the live M3 gate demo).
+
+**KB PR #26 merged** 2026-07-27T13:07:58Z — the five task 7.0 views now
+carry human semantics, so the gate demo has a grounding surface.
