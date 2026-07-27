@@ -108,6 +108,14 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | OB-3 | Staged drift drill as shipped fixture | Open | Ship a standard drill fixture with the product | Build during phase 4 |
 | OB-4 | Onboarding duration targets | Open | Measure first three; no promises before data | Third onboarding |
 
+## Platform architecture (PA-*)
+
+The architecture spec carries no spec-local register of its own, so items whose home is that document are tracked here directly (the same situation as the sync spec's SO-* items, which were never carried over at consolidation).
+
+| ID | Item | Status | Default | Revisit trigger |
+|---|---|---|---|---|
+| PA-1 | One-click setup export — how a compiled profile bundle (`.mcp.json` + `CLAUDE.md` + skills) reaches a user's own machine. §5 defines compilation and §6 lists the export as a Agent-Profiles dashboard action, but no delivery path exists outside the dashboard: the core serves `/mcp`, `/.well-known/*` and `/v1/*` only, and its MCP surface implements tools, not resources | Open | Operator-mediated file copy (`scp`, shared drive, USB). The bundle carries no credential, so out-of-band copying is safe if inconvenient | **Evidence, D-88.2:** the first second-machine onboarding hit this immediately — the M3 gate demo had to fall back to `scp.exe` from a Windows client. Trigger: the dashboard build, or the first real customer onboarding, whichever comes first. Distributing the bundle is a product surface, not an operator workaround |
+
 ## Plan-level (BASELINE-*)
 
 Items whose home is the development plan rather than a spec; home ruling recorded in `DECISIONS.md`.

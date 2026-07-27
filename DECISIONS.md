@@ -3229,3 +3229,38 @@ are what they exist for. No action.
 
 **KB PR #26 merged** 2026-07-27T13:07:58Z — the five task 7.0 views now
 carry human semantics, so the gate demo has a grounding surface.
+
+## D-88 — Setup delivery resolved; setup-export filed as a product gap (owner ruling, 2026-07-27)
+
+**1. Delivery resolved by D-87.4's own fallback clause.** There is no
+route that serves the compiled bundle over an already-listening port:
+the core exposes `/mcp`, `/.well-known/*` and `/v1/*`, its MCP surface
+implements `tools/*` only (no `resources/*`), and a static route would be
+new HTTP surface that platform-architecture §6 assigns to the dashboard's
+Agent Profiles module — excluded by the CP-7 scope fence. Flag-don't-patch
+was the right call. **Delivery for the demo** is the product's own
+compiled bundle (`cli.js compile reporter --kb … --url …` → `.mcp.json`
++ `CLAUDE.md` + `.claude/skills/report/SKILL.md`) copied with `scp.exe`
+or a USB volume. Safe because the bundle carries no credential — the
+token is minted by the login flow on machine 2, never packaged.
+
+**2. Register motion filed: PA-1, one-click setup export.** Home is
+platform-architecture §5/§6. That document carries **no spec-local
+register**, so the item is tracked directly in the master register under
+a new `Platform architecture (PA-*)` section — the same situation as the
+sync spec's SO-* items, which were never carried over at consolidation.
+(Say the word if you would rather the architecture spec grew a §-register
+of its own and PA-1 moved there; that is a structural spec change and I
+did not make it unasked.) Evidence recorded with the item: the first
+second-machine onboarding hit the gap immediately. Trigger: dashboard
+build, or the first real customer onboarding.
+
+**3. Runbook revision accepted**, and the two watch points are adopted
+into the owner's run: **Act 1 returning empty rows = stop** (it means the
+query reached a base table rather than a reporting view, and everything
+after it would be measuring nothing); **either Act 3 case succeeding =
+gate failure** — stop and keep the output, since a publish that should
+have been denied is the one result that cannot be retried away.
+
+**4. Demo gate:** the `entities/page.md` certification PR (D-87.2) is the
+only remaining prerequisite.
