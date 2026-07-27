@@ -48,7 +48,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | KB-E | Grouped API doc splitting threshold | Open | Split at 200 objects per kind-group | First estate hitting it |
 | KB-F | Trust semantics of repo-level human docs (`index.md`, `conventions.md`, `_notes.md`) | **Closed** | D-68 (CP-4): default affirmed — no `status` front-matter, no trust block; repo-level docs are search-indexed and visibility-checked like every doc (MCP-R15), one-liners derive from title/first line only, and no tool serves their full body in v1 | — |
 
-## Capability interfaces (CI-A..E)
+## Capability interfaces (CI-A..F)
 
 | ID | Item | Status | Default / resolution | Revisit trigger |
 |---|---|---|---|---|
@@ -57,6 +57,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | CI-C | Publisher probe cadence | Open | On configure + manual re-test | Stale effective flags cause failed journeys |
 | CI-D | Incremental harvest cursors | Open | Reserved field; v1 full-harvests, dedupe by content_hash | First large Drive/Confluence estate |
 | CI-E | SDK↔protocol↔snapshot version matrix | Open | Release notes carry it; manifest declares all three | Multi-version fleet reality |
+| CI-F | Publish depth for Looker Studio — `template_link` only in v1 | Open | A database-backed source cannot be prefilled by a link at all (PostgreSQL is not a Linking API connector — D-89), so every published report carries a manual re-point + password step. GA4/GSC prefill fine | A customer for whom per-report manual wiring is unacceptable; escalation is a community connector or the Data Studio API, both outside the CP-7 fence |
 
 ## MCP tool reference (MC-1..5)
 

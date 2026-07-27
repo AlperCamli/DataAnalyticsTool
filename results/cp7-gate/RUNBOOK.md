@@ -325,17 +325,40 @@ the agent finds it.
    has to complete in Looker Studio. That is normal for template links —
    nothing exists in Looker until a person clicks.
 
+The URL for a database-backed report is deliberately short — the report
+id and a name, nothing else:
+
+```
+https://lookerstudio.google.com/reporting/create?c.reportId=cad8f5e3-…&r.reportName=…
+```
+
+Google's linking mechanism cannot configure a PostgreSQL data source at
+all; the template's own database connection comes across with the copy
+and you re-point it by hand. The steps returned with the link say so and
+name the data source and the view. (The first run of this demo emitted
+database parameters that Google rejected outright, which is exactly what
+opening a real link was there to catch.)
+
 **Then open the link in a browser.**
+
+**If you are resuming Act 1 after that fix**, either republish from the
+session — Looker Studio allows about four report creations an hour, so
+if you have been retrying, you may need to wait — or open the corrected
+URL directly by keeping only `c.reportId` and `r.reportName` from the old
+one. **Record which route you used**; the gate note distinguishes a
+republished link from a hand-corrected one.
 
 **What to record**
 
-- The full Looker Studio URL.
-- **For each data source in the report: did Looker fill it in, or did it
-  ask you to complete a field?** If it asked, write down *exactly which
-  field*, word for word. The platform builds that URL using parameter
-  names published by Google; if Google renamed one, Looker quietly falls
-  back to asking the human. That is not a failure — but which field asked
-  is a finding we need.
+- The full Looker Studio URL, and whether it came from a republish or
+  from stripping the old one by hand.
+- **For GA4 and Search Console: did Looker fill the source in, or ask you
+  to complete a field?** If it asked, write down *exactly which field*,
+  word for word. Those two are configured through parameter names Google
+  publishes, verified against the reference on 2026-07-27; a rename would
+  show up as Looker asking you instead. The database source is expected
+  to need manual pointing — that one is not a finding, it is the
+  documented limit.
 - Which chart kinds the report actually rendered, out of the five the
   template declares: table, line, bar, scorecard, pivot.
 - A screenshot of the opened report.

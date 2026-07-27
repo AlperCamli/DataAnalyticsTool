@@ -3264,3 +3264,73 @@ have been denied is the one result that cannot be retried away.
 
 **4. Demo gate:** the `entities/page.md` certification PR (D-87.2) is the
 only remaining prerequisite.
+
+## D-89 — Linking API postgres wiring: watch-item outcome, root cause, fix (owner ruling, 2026-07-27)
+
+**The watch item resolved, and not the way it was written.** D-83.3 pinned
+the Linking API parameter names in one table and recorded that the live
+M3 gate would verify them, with the assumption that "a drifted name
+degrades softly — the human completes that field in the Looker UI". The
+first opened link falsified the assumption: **PostgreSQL is not a
+Linking-API-configurable connector at all**, and an invalid
+`ds.<alias>.connector` value does not degrade — Looker Studio **rejects
+the whole report-creation request**. Soft degradation is real for a
+drifted *parameter* name; it is not real for an invalid *connector*.
+The corrected sentence is now in the module.
+
+**Root cause: adapter defect.** Verified independently against Google's
+Linking API connector reference (retrieved 2026-07-27): the configurable
+set is `bigQuery`, `cloudSpanner`, `community`, `googleAnalytics`,
+`googleCloudStorage`, `googleSheets`, `looker`, `searchConsole`. There is
+no `postgreSQL` id and no `host`/`port`/`database`/`username` parameters.
+Our table invented them. **GA4 and GSC check out verbatim**:
+`googleAnalytics` takes `propertyId` (and `viewId`, which is Universal
+Analytics only and which we correctly never send), `searchConsole` takes
+`siteUrl` and `tableType`.
+
+**Fix.** Postgres-backed sources emit **no `ds.*` parameters whatsoever**
+— not `connector`, not `tableName`. Update-mode semantics carry the
+template's own embedded data source into the copy, and the returned
+`pending_human_steps` names the alias, the view, and where to do it:
+"Point the `<alias>` data source at `<schema.view>` in the editor
+(Resource → manage added data sources), entering the reporting-role
+password when prompted…". For the pilot the emitted URL is now exactly
+`create?c.reportId=<template>&r.reportName=<title>` — which is also the
+hand-stripped URL that works. GA4/GSC wiring is unchanged.
+
+**Guardrail (D-89.3).** The module now pins its source of truth (the
+reference URL + retrieval date) and carries the Linking API's supported
+connector-id set. Emitting a `connector` value outside that set raises
+`ConfigError` at **our** validation with an actionable message rather
+than shipping a parameter Google will reject — a guessed connector is
+worse than a refusal, because its failure surfaces as an opaque rejected
+`create` in a browser, minutes later, to a customer. Two conformance
+tests: every id in the pinned table is a real Linking API connector (so a
+future source kind added carelessly fails here, not at Google), and an
+unsupported source kind is refused naming what is supported.
+
+**Honesty fix (D-89.4).** The final human step now says a revision
+publishes as a **new link and therefore a new copy** — an already-saved
+copy is never updated in place. The previous wording let a reader assume
+otherwise.
+
+**Register (D-89.6): CI-F filed** — publish depth for Looker Studio,
+`template_link` only in v1. **No register item for that posture existed**;
+it lived only in the §8.1 reference declaration, so this is a new item
+rather than an amended one. Its evidence is this defect's permanent
+consequence: a database-backed source can never be prefilled by a link,
+so **every published report carries a manual re-point and password step,
+per report, forever** — and SQL sources are exactly the recurring-report
+case. Escalation paths, both outside the CP-7 fence: a Looker Studio
+community connector, or the Data Studio API for programmatic creation.
+
+**Gate status: PAUSED, not failed.** Everything the platform owns
+succeeded — grounding, validation, governed execution against the
+reporting views, publish authorization, audit. The defect sat at the
+external-API boundary, which is precisely what opening a real link
+existed to test. Act 1 resumes with a republish (≈4 report creations per
+hour) or the stripped URL; the runbook says to record which was used.
+
+**Suites at this entry:** python **663 passed, 13 skipped** (adapter
+suite 16/16). Runner image rebuilt so the live publish path carries the
+fix.

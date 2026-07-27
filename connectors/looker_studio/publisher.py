@@ -40,19 +40,45 @@ LINKING_BASE = "https://lookerstudio.google.com/reporting/create"
 #: Formats spec §4.4 registry v1 — closed set, additive growth only.
 VISUAL_KINDS = ("table", "line", "bar", "scorecard", "pivot")
 
-#: Linking API `ds.<alias>.*` parameters per source kind. `connector`
-#: is the Linking API's connector id; the remaining entries map our
-#: config keys onto Linking API parameter names.
-_SOURCE_PARAMS: dict[str, dict[str, str]] = {
-    "postgres": {
-        "connector": "postgreSQL",
-        "host": "host",
-        "port": "port",
-        "database": "database",
-        "username": "username",
-    },
+#: SOURCE OF TRUTH for everything in this section:
+#: https://developers.google.com/looker-studio/integrate/linking-api
+#: — "Connector parameters", retrieved 2026-07-27 (D-89). These names are
+#: externally owned; re-check this list against that page before trusting
+#: it, and update the date when you do.
+#:
+#: The connector ids the Linking API will accept at all. An id outside
+#: this set is not a soft failure: Looker Studio rejects the whole
+#: `create` request, so a guessed connector breaks report creation rather
+#: than degrading to a field the human completes.
+_LINKING_API_CONNECTOR_IDS = frozenset({
+    "bigQuery",
+    "cloudSpanner",
+    "community",
+    "googleAnalytics",
+    "googleCloudStorage",
+    "googleSheets",
+    "looker",
+    "searchConsole",
+})
+
+#: Linking API `ds.<alias>.*` parameters per source kind, for the kinds
+#: this adapter can prefill. `connector` is the Linking API connector id;
+#: the rest map our config keys onto Linking API parameter names.
+#:
+#: **PostgreSQL is deliberately absent.** It is not a Linking-API-
+#: configurable connector — the reference lists no `postgreSQL` id and no
+#: host/port/database parameters. Emitting them produced a `create`
+#: request Looker Studio refused outright, which is how the M3 gate found
+#: this: D-83.3's watch note assumed a drifted parameter name would
+#: degrade into a field the human fills in, and that assumption was wrong
+#: for an invalid *connector*. Postgres sources are carried by the
+#: template's own embedded data source and re-pointed by hand (see
+#: `_MANUAL_WIRING_KINDS`).
+_LINKING_API_CONNECTORS: dict[str, dict[str, str]] = {
     "ga4": {
         "connector": "googleAnalytics",
+        # `viewId` is Universal Analytics only and must not be sent for
+        # GA4 properties; `accountId` is optional when propertyId is set.
         "property_id": "propertyId",
     },
     "gsc": {
@@ -61,6 +87,11 @@ _SOURCE_PARAMS: dict[str, dict[str, str]] = {
         "table_type": "tableType",
     },
 }
+
+#: Kinds this adapter supports but cannot prefill through the link. The
+#: template carries the data source; update-mode semantics copy it into
+#: the new report, and the human re-points it in the editor.
+_MANUAL_WIRING_KINDS = frozenset({"postgres"})
 
 
 def _stable_id(artifact_id: str, target: str) -> str:
@@ -132,6 +163,7 @@ class LookerStudioPublisher(Publisher):
         pending: list[str] = []
         unwired: list[str] = []
         wired_systems: set[str] = set()
+        manual_wiring: list[tuple[str, str]] = []
 
         for query in queries:
             if not isinstance(query, dict):
@@ -146,9 +178,17 @@ class LookerStudioPublisher(Publisher):
                     f"but config.sources has no wiring for it"
                 )
             kind = source.get("kind")
-            params = _SOURCE_PARAMS.get(kind or "")
-            if params is None:
-                raise ConfigError(f"config.sources[{system!r}].kind {kind!r} is not supported")
+            params = _LINKING_API_CONNECTORS.get(kind or "")
+            if params is None and kind not in _MANUAL_WIRING_KINDS:
+                supported = ", ".join(
+                    sorted({*_LINKING_API_CONNECTORS, *_MANUAL_WIRING_KINDS})
+                )
+                raise ConfigError(
+                    f"config.sources[{system!r}].kind {kind!r} is not supported by this "
+                    f"adapter (supported: {supported}). Refusing rather than guessing a "
+                    "Linking API connector id — an id Looker Studio does not know fails "
+                    "report creation outright instead of degrading to a manual step."
+                )
             alias = source.get("alias")
             if not isinstance(alias, str) or not alias:
                 raise ConfigError(f"config.sources[{system!r}].alias is required")
@@ -174,12 +214,17 @@ class LookerStudioPublisher(Publisher):
                 if backing_entry not in backing:
                     backing.append(backing_entry)
                 if system in wired_systems:
-                    # One alias per system in the template: further views
-                    # cannot be prefilled through the link. Honest, loud.
-                    if ds_params.get(f"ds.{alias}.tableName") != ref:
+                    # One data source per system in the template: further
+                    # views cannot be carried by it. Honest, loud.
+                    if (alias, ref) not in manual_wiring:
                         unwired.append(ref)
                     continue
-                ds_params[f"ds.{alias}.tableName"] = ref
+                # No `ds.*` parameters at all for postgres — see
+                # _LINKING_API_CONNECTORS. The template's own data source
+                # comes across with the copy and is re-pointed by hand.
+                manual_wiring.append((alias, ref))
+                wired_systems.add(system)
+                continue
             elif request_dialect not in (None, "api"):
                 raise ConfigError(
                     f"query {query.get('name')!r}: system {system!r} is wired as {kind!r} "
@@ -187,7 +232,18 @@ class LookerStudioPublisher(Publisher):
                 )
 
             if system not in wired_systems:
-                ds_params[f"ds.{alias}.connector"] = params["connector"]
+                connector_id = params["connector"]
+                if connector_id not in _LINKING_API_CONNECTOR_IDS:
+                    # Defensive: an id can only get here by being added to
+                    # the table above without checking the reference. Fail
+                    # at our own validation — Looker Studio's failure for
+                    # the same mistake is an opaque rejected create.
+                    raise ConfigError(
+                        f"connector id {connector_id!r} for source kind {kind!r} is not a "
+                        "Linking API connector (see the pinned reference in this module). "
+                        "Refusing to emit a parameter Looker Studio will reject."
+                    )
+                ds_params[f"ds.{alias}.connector"] = connector_id
                 for config_key, wire_key in params.items():
                     if config_key == "connector":
                         continue
@@ -236,10 +292,12 @@ class LookerStudioPublisher(Publisher):
         url = f"{LINKING_BASE}?{urlencode(ordered, quote_via=quote)}"
 
         pending.append("Open the template link and review the prefilled data sources.")
-        if any(key.endswith(".connector") and value == "postgreSQL" for key, value in ds_params.items()):
+        for alias, ref in manual_wiring:
             pending.append(
-                "Enter the database password for the reporting role when Looker Studio "
-                "prompts (credentials never ride the link), and enable SSL."
+                f"Point the {alias} data source at {ref} in the editor "
+                "(Resource → manage added data sources), entering the reporting-role "
+                "password when prompted and enabling SSL — credentials never ride the "
+                "link, and a database source cannot be prefilled by it either."
             )
         if blend is not None:
             pairs = ", ".join(
@@ -253,7 +311,11 @@ class LookerStudioPublisher(Publisher):
                 f"Add a data source for {ref} in the editor — the template exposes one "
                 "data source per system and it is already used."
             )
-        pending.append('Click "Edit and share" to create your copy of the report.')
+        pending.append(
+            'Click "Edit and share" to create your copy of the report. A revised '
+            "version of this report publishes as a new link and therefore a new copy — "
+            "the copy you save now is never updated in place."
+        )
 
         detail: dict = {
             "template_report_id": template_id,

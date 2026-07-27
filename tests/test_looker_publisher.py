@@ -94,22 +94,82 @@ def test_manifest_validates_and_assembly_holds():
 
 # --- the template-link translation --------------------------------------------
 
-def test_template_link_wires_the_reporting_view():
+def test_postgres_sources_emit_no_ds_parameters():
+    """D-89: PostgreSQL is not a Linking-API-configurable connector.
+
+    The M3 gate found this the only way it could be found — by opening a
+    real link, which Looker Studio refused. An invalid `ds.*.connector`
+    fails report creation outright; it does not degrade into a field the
+    human completes, which is what the original watch note assumed.
+    """
     result = publish(artifact())
     assert result.mode == "template_link"
     params = url_params(result)
     assert params["c.reportId"] == "tmpl-abc123"
     assert params["r.reportName"] == "New users by day"
-    assert params["ds.sb.connector"] == "postgreSQL"
-    assert params["ds.sb.host"] == "db.pilot.supabase.co"
-    assert params["ds.sb.username"] == "contextlayer_exec"
-    assert params["ds.sb.tableName"] == "reporting.v_user_signups_by_day"
+
+    assert not [key for key in params if key.startswith("ds.sb.")], (
+        "no ds.* parameter may be emitted for a postgres source"
+    )
+
+    # The backing is still declared — what the report rests on is a fact
+    # about the artifact, independent of what the URL can carry.
     assert result.backing == [
         {"type": "reporting_view", "ref": "reporting.v_user_signups_by_day"}
     ]
-    # PB-3: template_link always leaves the human real steps.
-    assert result.pending_human_steps
-    assert any("password" in step for step in result.pending_human_steps)
+    # PB-3: the human step names the alias, the view, and where to do it.
+    step = next(s for s in result.pending_human_steps if "sb" in s)
+    assert "reporting.v_user_signups_by_day" in step
+    assert "manage added data sources" in step
+    assert "password" in step
+
+
+def test_every_emitted_connector_id_is_a_real_linking_api_connector():
+    """D-89 guardrail: we never invent a connector id.
+
+    Asserted over the whole pinned table rather than one publish, so a
+    future source kind added without checking the reference fails here
+    instead of at Google's create endpoint.
+    """
+    from connectors.looker_studio.publisher import (
+        _LINKING_API_CONNECTOR_IDS,
+        _LINKING_API_CONNECTORS,
+    )
+
+    for kind, params in _LINKING_API_CONNECTORS.items():
+        assert params["connector"] in _LINKING_API_CONNECTOR_IDS, (
+            f"source kind {kind!r} maps to a connector id the Linking API does not define"
+        )
+
+    art = artifact(
+        queries=[{
+            "name": "sessions", "system": "ga4",
+            "request": {"dialect": "api", "operation": "runReport", "body": {}},
+            "validated_against": "sha256:cc",
+            "backing": {"mode": "dataset_ref", "ref": "properties/000000000"},
+        }],
+    )
+    emitted = {
+        key.rsplit(".", 1)[0]: value
+        for key, value in url_params(publish(art)).items()
+        if key.endswith(".connector")
+    }
+    assert emitted, "expected at least one connector parameter"
+    for value in emitted.values():
+        assert value in _LINKING_API_CONNECTOR_IDS
+
+
+def test_unsupported_source_kind_is_refused_not_guessed():
+    """An unknown kind fails at our validation, naming what is supported."""
+    unsupported = {
+        **CONFIG,
+        "sources": {"supabase": {"kind": "mysql", "alias": "sb", "host": "db.example"}},
+    }
+    with pytest.raises(ConfigError) as excinfo:
+        publish(artifact(), config=unsupported)
+    message = str(excinfo.value)
+    assert "not supported by this adapter" in message
+    assert "postgres" in message and "ga4" in message
 
 
 def test_cross_source_wires_native_sources_and_blend_steps():
