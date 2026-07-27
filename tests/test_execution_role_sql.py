@@ -105,7 +105,9 @@ def test_the_provisioned_role_can_read_business_data(provisioned):
         Guardrails(row_cap=10, timeout_s=10),
         Identity(subject="oidc|test"),
     )
-    assert result.rows == [[1, 10], [2, 20]]
+    # `net` is numeric, so QE-5 hands it over as a string: a float would
+    # silently change the fact (D-85). `id` is an int and stays native.
+    assert result.rows == [[1, "10"], [2, "20"]]
 
 
 @pytest.mark.parametrize(

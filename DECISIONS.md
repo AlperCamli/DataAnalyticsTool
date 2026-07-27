@@ -3067,3 +3067,90 @@ unchanged since the vendored commit `f38b75c`; only `lineage/` moved
 `lineage/graph.json`. So the vendored wheel is honestly current for what
 CI does — including for part B's graph-only PR, which will not re-raise
 this.
+
+## D-85 — Execute result value encoding + runner job isolation (owner ruling, 2026-07-27)
+
+Found by the first governed query through a task 7.0 view: a `date`
+reached the SDK's secret-scrubber, `json.dumps` raised, and the **runner
+process died** — every job queued behind it then hung to lease expiry.
+Four of the five task 7.0 views return date buckets, so the M3 gate
+demo would have hit it on essentially every seed case. It stayed hidden
+for two checkpoints because RLS emptiness meant no row value ever
+reached the serializer; fixing the views is what exposed it.
+
+**Amendment (authorized, additive):** capability spec §6 gains **QE-5**
+(the value-encoding table, normative for *every* QueryExecutor) and
+**QE-6** (serialization failure semantics). Also touched, and called out
+rather than buried: two rows in the same spec's §11 conformance table
+(CC-12, CC-13) — the table is where "definition of done" is stated, and
+the ruling asked for the coverage. Nothing else in `specs/` changed.
+
+**1. ENCODING** as ruled: temporal → ISO-8601/RFC3339 text; numeric →
+string, never float; int/float/bool native, with out-of-safe-range
+integers taking the string treatment under the same fidelity rule;
+uuid → string; bytea → base64; json/jsonb native; arrays and unmapped
+types → the source's text rendering, never dropped and never a crash.
+`columns[].type` still carries the source-native name, so no string is
+ambiguous about what it encodes.
+
+Two implementation notes worth recording, both inside the ruling:
+(a) **Non-finite floats** (`NaN`, `Infinity`) become text. They have no
+JSON literal, and `json.dumps` would otherwise emit tokens the core's
+`JSON.parse` rejects — text keeps the value *and* keeps the result
+parseable, which is the same fidelity rule the numeric row states.
+(b) **"The source's text rendering" had to be written out for two
+Postgres types**, because psycopg parses them into Python objects whose
+`str()` is Python's rendering, not the source's: arrays (`{a,"b,c",NULL}`,
+quoting and all) and intervals (`1 day 02:03:04`, not
+`1 day, 2:03:04`). Engine-specific rendering lives in the connector,
+which knows the column type; the SDK holds the mapping. A `jsonb` array
+and an `int[]` both arrive as Python lists and are told apart by the
+column type — jsonb passes through as native JSON, the array renders.
+
+**2. FAILURE SEMANTICS:** job protocol §6.7 already had the slot, so no
+new capability code and no second amendment — `internal`, retryable,
+message carrying the exception *type* only (a value that failed to
+encode is exactly the value not to put in an error string, JC-8).
+
+**3. RUNNER JOB ISOLATION — the actual defect.** `result.to_json()` sat
+*outside* `_run_execute`'s try block, so an encoding failure bypassed
+the taxonomy mapping, killed the worker thread, and left the delivery
+path to take the process down. Fixed at three depths: serialization
+guarded inside `_run_execute` (and `_run_publish`, same shape), a
+job-level `except` in `Runner.execute` that fails the job rather than
+the runner, and a last-line guard in `run_forever`. The SDK's stated
+obligation in job §6.7 ("the SDK maps exceptions to this taxonomy") is
+now true rather than aspirational.
+
+**4. CONFORMANCE.** **CC-12**: a fixture view holding one column per
+QE-5 row — every mapping asserted against real Postgres types, on the
+executor's own output rather than through the boundary net, plus a
+`json.dumps` of the whole result. **CC-13**: a poisoned job (a value
+whose rendering raises) fails `internal`, the runner survives, and the
+next job on the same runner completes — driven through the real
+`run_forever` loop, not a unit stub. GA4/GSC executors **verified, not
+assumed**: both build rows from parsed-JSON scalars, so they are
+conformant by construction, and `ExecuteResult.to_json` now enforces
+QE-5 at the boundary for any executor that forgets.
+
+**Live re-verification (the point of all of it):**
+`reporting.v_user_signups_by_day` through the full governed path —
+`signup_day` as `"2026-07-23"` with `columns[].type = "date"`,
+`role = contextlayer_exec`, real rows; and the row-joining
+`v_activation_funnel_monthly` likewise (`cohort_month` `"2026-07-01"`,
+9 signed up / 6 master CVs / 0 subscribed). Runner alive after both.
+
+**5. FORWARD NOTE for BASELINE-1:** this encoding is now normative for
+result canonicalization. When the deferred baseline runs, R5 golden
+comparison must canonicalize under QE-5 — numerics as strings, dates as
+ISO text — and the frozen `verified_results` may need one re-execution
+pass. Recorded here so the mismatch surprises no one; the register row
+itself is untouched (no ruling to edit it).
+
+**Suites at this entry:** python **661 passed, 13 skipped** (includes
+the docker-gated postgres suites, run in the same pass). TS **166/167**
+— the one failure, `JC-4` (runner killed mid-job → reclaim), is
+**pre-existing and load-related, verified by counterfactual**: it fails
+identically with these changes stashed (35.3 s, same lease-expiry
+error) and passes in isolation (21 s). Not caused by D-85; worth its
+own look before CP-8 signs anything off.

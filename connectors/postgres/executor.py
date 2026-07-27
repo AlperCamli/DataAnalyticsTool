@@ -34,6 +34,7 @@ Error messages carry SQLSTATE and the source's message, never the DSN
 DSN raises before that and is never echoed.
 """
 
+import datetime
 import os
 import time
 
@@ -51,6 +52,7 @@ from connectors.sdk import (
     QueryExecutor,
     SourceUnavailable,
 )
+from connectors.sdk.encoding import json_value
 from sqlval import check_statement_class
 
 # Schemas whose objects are Postgres' own; a read-only reporting role
@@ -190,6 +192,79 @@ def check_role_is_readonly(conn: psycopg.Connection) -> dict:
         version = cur.fetchone()[0]
 
     return {"role": role, "engine_version": version}
+
+
+def _pg_interval(delta: datetime.timedelta) -> str:
+    """Render a timedelta the way Postgres renders an interval.
+
+    psycopg parses `interval` into a timedelta, whose `str()` is Python's
+    rendering ("1 day, 2:03:04") rather than the source's
+    ("1 day 02:03:04"), so QE-5's "the source's text rendering" has to be
+    written out. Wholly-negative intervals take Postgres' shape too
+    ("-1 days -02:03:04"); a mixed-sign interval — which the source can
+    hold but rarely returns from an aggregate — normalizes through
+    timedelta first, so its text is the normalized equivalent value.
+    """
+    negative = delta < datetime.timedelta(0)
+    if negative:
+        delta = -delta
+    sign = "-" if negative else ""
+    parts = []
+    if delta.days:
+        parts.append(f"{sign}{delta.days} day" + ("s" if delta.days != 1 else ""))
+    seconds, micro = delta.seconds, delta.microseconds
+    if seconds or micro or not parts:
+        hours, rem = divmod(seconds, 3600)
+        minutes, secs = divmod(rem, 60)
+        text = f"{sign}{hours:02d}:{minutes:02d}:{secs:02d}"
+        if micro:
+            text += f".{micro:06d}".rstrip("0")
+        parts.append(text)
+    return " ".join(parts)
+
+
+def _pg_text(value) -> str:
+    """Postgres' own text rendering, for QE-5's catch-all.
+
+    psycopg hands arrays back as Python lists, so `str()` would emit
+    Python syntax and call it "the source's rendering". This writes the
+    array literal Postgres itself would have written.
+    """
+    if isinstance(value, (list, tuple)):
+        parts = []
+        for item in value:
+            if item is None:
+                parts.append("NULL")
+            elif isinstance(item, (list, tuple)):
+                parts.append(_pg_text(item))
+            else:
+                text = str(json_value(item))
+                if text == "" or text.upper() == "NULL" or any(
+                    ch in text for ch in '{},"\\ '
+                ):
+                    text = '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+                parts.append(text)
+        return "{" + ",".join(parts) + "}"
+    return str(value)
+
+
+# json/jsonb arrive already parsed and pass through as native JSON; every
+# other list is a source array and takes the text rendering above (QE-5).
+_PASSTHROUGH_TYPES = ("json", "jsonb")
+
+
+def _encode_row(record, native: list[bool]) -> list:
+    encoded = []
+    for i, value in enumerate(record):
+        if native[i]:
+            encoded.append(json_value(value))          # json/jsonb: native JSON
+        elif isinstance(value, (list, tuple)):
+            encoded.append(_pg_text(value))            # array: source rendering
+        elif isinstance(value, datetime.timedelta):
+            encoded.append(_pg_interval(value))        # interval: ditto
+        else:
+            encoded.append(json_value(value))
+    return encoded
 
 
 def _type_name(oid: int) -> str:
@@ -344,6 +419,10 @@ class PostgresExecutor(QueryExecutor):
                 {"name": desc.name, "type": _type_name(desc.type_code)}
                 for desc in (cur.description or [])
             ]
+            # Values are encoded as they stream (QE-5), not at delivery:
+            # the cap bounds memory in encoded form, and nothing raw
+            # survives to reach a serializer that cannot handle it.
+            native = [c["type"] in _PASSTHROUGH_TYPES for c in columns]
             rows: list[list] = []
             truncated = False
             while len(rows) <= row_cap:
@@ -354,7 +433,7 @@ class PostgresExecutor(QueryExecutor):
                     if len(rows) >= row_cap:
                         truncated = True
                         break
-                    rows.append(list(record))
+                    rows.append(_encode_row(record, native))
                 if truncated:
                     break
         return columns, rows, truncated

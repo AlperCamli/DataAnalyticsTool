@@ -260,7 +260,26 @@ def _run_execute(connector: Connector, job: Job) -> JobOutcome:
         "job %s: %d rows (truncated=%s) in %dms",
         job.job_id, result.row_count, result.truncated, result.duration_ms,
     )
-    return JobOutcome(status="succeeded", result=result.to_json())
+    try:
+        payload = result.to_json()
+    except Exception as exc:  # QE-6: our defect, so `internal` (job §6.7)
+        # Serialization ran outside the guarded region until D-85, so a
+        # value QE-5 could not encode escaped the taxonomy, killed the
+        # worker thread, and left the runner to die on delivery. The
+        # message carries the exception type only — a value that failed
+        # to encode is exactly the value not to put in an error string.
+        logger.warning("job %s: result serialization failed (%s)",
+                       job.job_id, type(exc).__name__)
+        return JobOutcome(
+            status="failed",
+            error=_job_error(
+                "internal",
+                f"result serialization failed ({type(exc).__name__})",
+                retryable=True,
+                detail={"traceback": traceback.format_exc()},
+            ),
+        )
+    return JobOutcome(status="succeeded", result=payload)
 
 
 def _run_publish(connector: Connector, job: Job) -> JobOutcome:
@@ -367,4 +386,18 @@ def _run_publish(connector: Connector, job: Job) -> JobOutcome:
         "job %s: published mode=%s created=%d pending_steps=%d",
         job.job_id, result.mode, len(result.created), len(result.pending_human_steps),
     )
-    return JobOutcome(status="succeeded", result=result.to_json())
+    try:
+        payload = result.to_json()
+    except Exception as exc:  # same isolation as execute (QE-6)
+        logger.warning("job %s: result serialization failed (%s)",
+                       job.job_id, type(exc).__name__)
+        return JobOutcome(
+            status="failed",
+            error=_job_error(
+                "internal",
+                f"result serialization failed ({type(exc).__name__})",
+                retryable=True,
+                detail={"traceback": traceback.format_exc()},
+            ),
+        )
+    return JobOutcome(status="succeeded", result=payload)

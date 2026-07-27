@@ -104,6 +104,23 @@ API dialect (`"dialect": "api"`) carries a structured request instead:
 - **QE-2 (comment tagging):** SQL statements are executed with a leading comment `/* contextlayer user=<subject> session=<session_id> intent=<hash> */` — this is the product-spec §7 mechanism by which the system generates its own usage signal post-launch. The full intent text stays in the audit log; only its hash rides the wire.
 - **QE-3:** parameterized execution when `params` present; connectors must not interpolate.
 - **QE-4 (quota):** API executors surface quota exhaustion as job-protocol `defer` only for batch contexts; in interactive context (this job class) quota is a terminal `guardrail`-class error with `capability_code: quota_exhausted` and the retry-after in detail — the user is waiting, deferral would hang them.
+- **QE-5 (result value encoding, D-85 amendment):** `rows` carry JSON values only, and the mapping from source types is normative for **every** QueryExecutor, not one engine's. `columns[].type` continues to carry the source-native type name, so a string value is never ambiguous about what it encodes.
+
+  | Source type | JSON encoding |
+  |---|---|
+  | date | ISO-8601 text, `YYYY-MM-DD` |
+  | timestamp / timestamptz | RFC3339 text, offset preserved as the source returns it |
+  | time | text |
+  | interval | the source's text rendering |
+  | numeric / decimal | **string**, never a float — no silent precision loss |
+  | int2/4/8, float4/8, bool | native JSON values; an integer beyond the JSON-safe range becomes a string under the same fidelity rule |
+  | uuid | string |
+  | bytea / binary | base64 string |
+  | json / jsonb | passed through as native JSON |
+  | arrays, and every type with no listed mapping | the source's text rendering |
+
+  The catch-all is the point: an unmapped type is rendered, never dropped and never a crash. Rationale is the same fact-fidelity rule the snapshot layer applies to metadata (S-8) — the platform hands over what the source said, and a lossy numeric is a changed fact.
+- **QE-6 (serialization failure):** a value that cannot be encoded fails the **job** through the job protocol's standard error envelope (§6.7 `internal`) — no new capability code, because it is our defect and not a source refusal. It must not take the runner process down with it: the SDK's obligation to map exceptions to the §6.7 taxonomy (job spec §6.7) means an unexpected exception anywhere in job execution fails that job and the runner goes on serving the next one.
 
 **Result:**
 
@@ -217,6 +234,8 @@ Invariants: **LP-1** — `operation` is from the fixed taxonomy (product spec §
 | CC-9 | Harvest result carries `content_hash` and `uri` for every document; canary secret in a source doc is not redacted here (content is customer data) but never appears in logs | KP-1, job §7 |
 | CC-10 | Lineage edges: unknown operation rejected; dangling FQN delivered and flagged | LP-1, LP-3 |
 | CC-11 | Usage result contains no literal values from queries (canary-literal test) | UP-1 |
+| CC-12 | Result value encoding: every row of the QE-5 table exercised against a fixture view — temporal as ISO-8601/RFC3339 text, numeric as string, unmapped types rendered rather than dropped, and the whole result `json.dumps`-able | QE-5 |
+| CC-13 | Poisoned job (a value the encoder cannot handle staged into a result): the job fails `internal` through the standard envelope, the runner process survives, and the next job on the same runner completes without lease expiry | QE-6, job §6.7 |
 
 ## 12. Open decisions (spec-local register)
 

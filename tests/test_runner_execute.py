@@ -216,3 +216,129 @@ def test_malformed_request_is_config_error(tmp_path):
     assert outcome.status == "failed"
     assert outcome.error.code == "config_error"
     assert "dialect" in outcome.error.message
+
+
+# --- CC-13: job-level isolation (QE-6) --------------------------------------
+
+
+class Poison:
+    """A value nothing can encode — even QE-5's text catch-all raises."""
+
+    def __str__(self):  # pragma: no cover - the raise is the point
+        raise TypeError("this value cannot be rendered")
+
+
+class ScriptedClient:
+    """Hands out a scripted queue of jobs and records the wire calls."""
+
+    def __init__(self, jobs):
+        self.jobs = list(jobs)
+        self.calls: list[tuple] = []
+
+    def claim(self, **kwargs):
+        return self.jobs.pop(0) if self.jobs else None
+
+    def start(self, job_id, lease_token):
+        self.calls.append(("start", job_id))
+        return {"status": "running", "cancel_requested": False}
+
+    def heartbeat(self, job_id, lease_token, progress=None):
+        return {"lease": {"token": lease_token}, "cancel_requested": False}
+
+    def complete(self, job_id, lease_token, result):
+        self.calls.append(("complete", job_id, result))
+        return {"status": "succeeded"}
+
+    def fail(self, job_id, lease_token, error):
+        self.calls.append(("fail", job_id, error))
+        return {"status": "dead_lettered"}
+
+    def defer(self, job_id, lease_token, retry_after_s, reason):  # pragma: no cover
+        self.calls.append(("defer", job_id))
+        return {"status": "deferred"}
+
+    def named(self, name):
+        return [c for c in self.calls if c[0] == name]
+
+
+def execute_job(job_id):
+    return {
+        "job_id": job_id,
+        "type": "execute",
+        "class": "interactive",
+        "system": "s",
+        "connector": {"name": "testexec", "version_constraint": "*"},
+        "payload": {
+            "config": {"system": "s"},
+            "credentials": [],
+            "request": {"dialect": "sql", "statement": "SELECT 1"},
+            "guardrails": {"row_cap": 10, "timeout_s": 5},
+            "identity": {"subject": "u", "roles": ["r"], "session_id": "s1"},
+        },
+        "lease": {"token": "L1", "ttl_s": 30},
+    }
+
+
+def test_poisoned_job_fails_the_job_and_the_runner_survives(tmp_path):
+    """CC-13. Before D-85 a value the serializer could not handle killed
+    the runner process, and every job queued behind it hung to lease
+    expiry — which is how it stayed hidden: RLS emptiness meant no value
+    ever reached the serializer on the pilot.
+    """
+    class PoisonsFirstCall(RecordingExecutor):
+        """First job returns an unencodable value, the next a normal one."""
+
+        def execute(self, config, request, guardrails, identity):
+            self.calls.append((config, request, guardrails, identity))
+            rows = [[Poison()]] if len(self.calls) == 1 else [[1]]
+            return ExecuteResult(
+                columns=[{"name": "n", "type": "int8"}],
+                rows=rows,
+                row_count=1,
+                truncated=False,
+                duration_ms=1,
+                source={"executed_on": "primary", "engine_version": "16"},
+            )
+
+    executor = PoisonsFirstCall()
+    connector = make_connector(tmp_path, executor)
+    client = ScriptedClient([execute_job("j-poison"), execute_job("j-next")])
+    config = RunnerConfig(
+        core_url="http://core", token="t", runner_id="r1", connector_specs=(),
+        classes=("batch", "interactive"), heartbeat_interval_s=0.05,
+    )
+    runner = Runner(config=config, client=client, connectors={"testexec": connector},
+                    resolver=object())
+
+    # The second job is served by the same runner: the loop survived.
+    assert runner.run_forever(max_jobs=2) == 2
+
+    (_, job_id, error) = client.named("fail")[0]
+    assert job_id == "j-poison"
+    assert error["code"] == "internal"          # §6.7, not a new capability code
+    assert error["retryable"] is True
+    assert "TypeError" in error["message"]      # type only — never the value
+
+    completed = client.named("complete")
+    assert [c[1] for c in completed] == ["j-next"]
+
+    # The healthy job was delivered normally, not as a retry after expiry.
+    assert client.named("start")[1][1] == "j-next"
+
+
+def test_second_executor_result_is_unaffected_by_a_prior_poisoning(tmp_path):
+    """The isolation is per job: state from the failed one does not leak
+    into the next result envelope."""
+    executor = RecordingExecutor()
+    connector = make_connector(tmp_path, executor)
+    client = ScriptedClient([execute_job("j-ok")])
+    config = RunnerConfig(
+        core_url="http://core", token="t", runner_id="r1", connector_specs=(),
+        classes=("batch", "interactive"), heartbeat_interval_s=0.05,
+    )
+    runner = Runner(config=config, client=client, connectors={"testexec": connector},
+                    resolver=object())
+    runner.run_forever(max_jobs=1)
+    (_, _, result) = client.named("complete")[0]
+    assert result["rows"] == [[1]]
+    assert result["truncated"] is False

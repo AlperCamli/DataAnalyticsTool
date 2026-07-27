@@ -17,6 +17,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from hashlib import sha256
 
+from connectors.sdk.encoding import json_row
+
 
 @dataclass(frozen=True)
 class IntrospectionResult:
@@ -182,9 +184,13 @@ class ExecuteResult:
     source: dict
 
     def to_json(self) -> dict:
+        # QE-5 is enforced at the boundary as well as in the executors, so
+        # a connector that forgets it is still conformant rather than a
+        # crash at delivery. json_value is idempotent, so the executors
+        # that already encoded pay nothing but the walk.
         return {
             "columns": self.columns,
-            "rows": self.rows,
+            "rows": [json_row(row) for row in self.rows],
             "row_count": self.row_count,
             "truncated": self.truncated,
             "duration_ms": self.duration_ms,

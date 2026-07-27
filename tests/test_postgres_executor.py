@@ -9,6 +9,9 @@ wall including its startup refusal, and the staged-bypass path where a
 write that got past a doctored validator still dies at the role.
 """
 
+import base64
+import datetime
+import json
 import os
 import time
 
@@ -59,6 +62,31 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 CREATE ROLE cl_writer LOGIN PASSWORD 'writer-pw';
 GRANT USAGE ON SCHEMA public TO cl_writer;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO cl_writer;
+
+-- CC-12: one row holding every mapping in the QE-5 table, so the
+-- encoding is exercised type-by-type rather than by whatever types the
+-- estate's own views happen to return.
+CREATE VIEW public.v_types AS
+SELECT date '2026-07-27'                             AS c_date,
+       timestamp '2026-07-27 10:11:12.5'             AS c_timestamp,
+       timestamptz '2026-07-27 10:11:12+02'          AS c_timestamptz,
+       time '10:11:12'                               AS c_time,
+       interval '1 day 02:03:04'                     AS c_interval,
+       interval '-1 day -02:03:04'                   AS c_interval_neg,
+       numeric '12345678901234567890.12345'          AS c_numeric,
+       9007199254740993::bigint                      AS c_bigint_unsafe,
+       42::bigint                                    AS c_bigint,
+       1.5::float8                                   AS c_float,
+       true                                          AS c_bool,
+       uuid '11111111-2222-3333-4444-555555555555'   AS c_uuid,
+       '\\xdeadbeef'::bytea                          AS c_bytea,
+       '{"a": [1, 2], "b": null}'::jsonb             AS c_jsonb,
+       '[10, 20]'::jsonb                             AS c_jsonb_array,
+       ARRAY['a', 'b,c', NULL]::text[]               AS c_text_array,
+       ARRAY[1, 2, 3]::int[]                         AS c_int_array,
+       inet '192.168.0.1'                            AS c_inet,
+       NULL::text                                    AS c_null;
+GRANT SELECT ON public.v_types TO cl_exec;
 """
 
 
@@ -430,3 +458,69 @@ def test_comment_tag_is_observable_in_the_source_statement_log(estate, config):
     assert "session=s-test" in combined
     # QE-2: the intent text itself never rides the wire — only its hash.
     assert "net sales by region" not in combined
+
+
+# --- CC-12: QE-5 result value encoding --------------------------------------
+
+
+def test_result_values_are_encoded_per_qe5(config):
+    """CC-12: every row of the QE-5 table, against real Postgres types.
+
+    Asserted on the executor's own output rather than on `to_json`, so a
+    regression here cannot hide behind the boundary net in
+    `ExecuteResult.to_json`.
+    """
+    result = PostgresExecutor().execute(
+        config, sql_request("SELECT * FROM public.v_types"), Guardrails(), IDENTITY
+    )
+    row = dict(zip([c["name"] for c in result.columns], result.rows[0]))
+
+    # temporal: ISO-8601 / RFC3339 text
+    assert row["c_date"] == "2026-07-27"
+    assert row["c_timestamp"] == "2026-07-27T10:11:12.500000"
+    assert row["c_time"] == "10:11:12"
+    stamped = datetime.datetime.fromisoformat(row["c_timestamptz"])
+    assert stamped.utcoffset() is not None, "timestamptz must keep its offset"
+    assert stamped == datetime.datetime(
+        2026, 7, 27, 8, 11, 12, tzinfo=datetime.timezone.utc
+    )
+    # interval: the source's rendering, not Python's "1 day, 2:03:04"
+    assert row["c_interval"] == "1 day 02:03:04"
+    assert row["c_interval_neg"] == "-1 day -02:03:04"
+
+    # numeric: string, at full precision — the fidelity rule
+    assert row["c_numeric"] == "12345678901234567890.12345"
+    assert isinstance(row["c_numeric"], str)
+
+    # integers: native, until JSON's safe range runs out
+    assert row["c_bigint"] == 42
+    assert row["c_bigint_unsafe"] == "9007199254740993"
+
+    assert row["c_float"] == 1.5
+    assert row["c_bool"] is True
+    assert row["c_uuid"] == "11111111-2222-3333-4444-555555555555"
+    assert row["c_bytea"] == base64.b64encode(bytes.fromhex("deadbeef")).decode()
+
+    # json/jsonb pass through as native JSON, arrays render as the source
+    # writes them — including the quoting an embedded comma forces
+    assert row["c_jsonb"] == {"a": [1, 2], "b": None}
+    assert row["c_jsonb_array"] == [10, 20]
+    assert row["c_text_array"] == '{a,"b,c",NULL}'
+    assert row["c_int_array"] == "{1,2,3}"
+
+    # no listed mapping: rendered, never dropped
+    assert row["c_inet"] == "192.168.0.1"
+    assert row["c_null"] is None
+
+    # the whole point: the result survives the serializer that used to
+    # take the runner down
+    json.dumps(result.to_json())
+
+
+def test_encoding_survives_the_delivery_boundary(config):
+    """QE-5 is enforced at `to_json` too, so an executor that skipped it
+    is still conformant. Encoding twice must not change the values."""
+    result = PostgresExecutor().execute(
+        config, sql_request("SELECT * FROM public.v_types"), Guardrails(), IDENTITY
+    )
+    assert result.to_json()["rows"] == result.rows

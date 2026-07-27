@@ -449,6 +449,19 @@ class Runner:
                 self._fail(job_id, heartbeat.token, _CANCELLED_ERROR, secrets)
                 return
             self._deliver(job_id, heartbeat.token, outcome_box, secrets)
+        except Exception as exc:  # job-level isolation (QE-6, job §6.7)
+            # Anything unexpected on the runner side of a job — a result
+            # value the serializer cannot encode, a bug in this harness —
+            # is that job's failure, not the runner's death. Before D-85 a
+            # `date` in a result took the process down and every queued job
+            # after it hung to lease expiry. The type name is enough for
+            # triage; the value never enters the message (JC-8).
+            logger.exception("job %s: unhandled runner-side error", job_id)
+            self._fail(job_id, lease_token, {
+                "code": "internal",
+                "message": f"runner-side failure handling the job ({type(exc).__name__})",
+                "retryable": True,
+            }, secrets)
         finally:
             for var in env_names:
                 os.environ.pop(var, None)
@@ -532,7 +545,13 @@ class Runner:
                 job.get("job_id"), job.get("type"), job.get("system"),
                 job.get("connector", {}).get("name"),
             )
-            self.execute(job)
+            try:
+                self.execute(job)
+            except Exception:  # last line of the same defence
+                logger.exception(
+                    "job %s: failure escaped job handling; runner continues",
+                    job.get("job_id"),
+                )
             executed += 1
             if once or (max_jobs is not None and executed >= max_jobs):
                 return executed
