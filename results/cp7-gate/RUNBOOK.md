@@ -1,42 +1,119 @@
-# M3 gate demo — runbook (CP-7 part B)
+# M3 gate demo — operator runbook
 
-The live run that closes M3. Fixtures proved the code; only this passes
-the gate. Machine 1 is the platform host (this repo, the stack, the
-estate); machine 2 is the reporter's laptop and sees nothing but an MCP
-URL and a login.
+**Machine 1** = this Mac. It hosts the platform: the Docker stack, the
+connection to the customer database, the knowledge base.
+**Machine 2** = the Windows PC. It plays the customer's analyst. It gets
+a web address and a login and nothing else.
 
-Everything under "already done" was verified on 2026-07-27 — re-check it
-rather than redo it.
+Read the whole page once before starting. Every command below is given
+for both machines' shells, labelled — do not paste a macOS line into
+PowerShell, several will silently do the wrong thing.
 
 ---
 
-## Already done (do not redo)
+## 1. What this demo proves
+
+That a person on a different computer, holding nothing but a login, can
+ask a question in plain English and get a **published report built from
+the customer's real data** — with the platform refusing, in public and
+on the record, anything it cannot ground in documented facts.
+
+Four specific claims, one per act:
+
+| Act | Claim | Runs on |
+|---|---|---|
+| 1 | A plain-English question becomes checked SQL, returns **real rows**, and publishes as a working Looker Studio link | Machine 2 |
+| 2 | Two different data sources are combined **only on a join the knowledge base documents**, pointing at the doc that authorises it | Machine 2 |
+| 3 | Two things the platform must refuse — publishing somewhere the profile does not allow, and joining two sources on a key nobody documented — are refused and recorded | Machine 2 |
+| 4 | Everything above is in a tamper-evident audit trail under the reporter's name | Machine 1 |
+
+The interesting evidence is as much the refusals as the successes. A
+system that only ever says yes has not been tested.
+
+## 2. Words used below
+
+- **Reporter profile** — the customer-side role this demo acts as. It may
+  read the knowledge base, check SQL, run queries against Supabase, and
+  publish to Looker Studio. Nothing else. The server re-checks this on
+  every single call; the client cannot widen it.
+- **The knowledge base (KB)** — the customer's own git repository of
+  documentation about their data. Machine-written pages carry facts;
+  human-written pages carry meaning.
+- **Grounding** — the agent may only assert things the KB says. If the KB
+  does not settle a question, the honest answer is "gap", never a guess.
+- **Seed case** — one of ten canned business questions (`RB-01` … `RB-10`)
+  used as a standard workload. Act 1 runs `RB-01`; Act 3 uses `RB-08`.
+- **Blend** — combining two data sources into one report. Only allowed on
+  a key that an *entity document* in the KB explicitly records.
+- **Template link** — how publishing works here: the platform builds a URL
+  that opens a pre-made Looker Studio report pointed at the right data.
+  Nothing exists in Looker until you click it.
+- **Audit chain / ledger** — every tool call is recorded with who, what,
+  and allowed-or-denied. Gaps the agent hits become tracked items.
+
+## 3. Before you start
 
 | Prerequisite | State |
 |---|---|
-| Task 7.0 views applied (definer + barrier, D-81) | live; `contextlayer_exec` has SELECT on all five |
-| Drift PR #25 | merged — machine docs + lineage edges for all five views |
-| Enrichment PR #26 | merged — human semantics for all five, `0 errors, 0 warnings` |
-| KB PR #23 | merged — reporter carries `publish_report:looker_studio`, confirmed in the live server's `tools/list` |
-| `looker_studio` connection | registered in `cl_ops.sync_systems`, template `00000000-0000-0000-0000-000000000000`, five visual kinds |
-| Credential rotation (D-84.1) | both halves done and verified — LAN exposure is authorized |
-| QE-5 encoding + runner isolation (D-85) | landed; dates come back as ISO text instead of killing the runner |
+| Reporting views live on the customer database | done — the five new views are applied and readable by the query-only role |
+| Views documented in the KB (pull request #25) | merged — the machine-written pages and the data-flow graph both know them |
+| Meaning written for those views (pull request #26) | merged — purposes, reporting notes, warnings |
+| Reporter allowed to publish (pull request #23) | merged — confirmed live in the server's own tool list |
+| Looker Studio template registered | done — template `00000000-0000-0000-0000-000000000000`, five chart kinds declared |
+| Passwords and keys rotated | done — which is what permits exposing this stack to the local network |
+| Dates come back as text, not crashes | done — a fault that killed the job runner on any date column is fixed |
+| **`entities/page.md` certified** | **YOURS — must be merged before Act 2.** Act 2 blends on the page mapping in that document; certifying it is a real verification act, not a status edit |
 
-## Machine 1 — host preparation
+If the certification PR is not merged, run Acts 1, 3 and 4 and come back
+for Act 2 — do not run Act 2 against a draft and call it certified.
 
-The stack is up and bound to the LAN as of this writing. Confirm rather
-than restart:
+---
+
+## 4. Machine 1 — prepare the host
+
+### 4.1 Confirm the stack is up and reachable
+
+*macOS · machine 1:*
 
 ```bash
-curl -s http://192.168.1.4:8100/healthz            # mcp_enabled + sync_enabled true
+curl -s http://192.168.1.4:8100/healthz
+```
+
+*Windows PowerShell · machine 2 (same check, from the other side — this
+is also step 5.1's reachability test):*
+
+```powershell
+curl.exe -s http://192.168.1.4:8100/healthz
+```
+
+> In PowerShell, `curl` is an **alias for `Invoke-WebRequest`**, which
+> takes different flags and returns an object rather than text. Always
+> type `curl.exe` when you want the real curl.
+
+Expect JSON containing `"mcp_enabled":true` and `"sync_enabled":true`.
+
+### 4.2 Confirm the runner will actually serve queries
+
+*macOS · machine 1:*
+
+```bash
+cd ~/Desktop/DataProject
 docker compose logs runner | grep -i "execution preflight" | tail -1
 ```
 
-Expected: `execution preflight passed for postgres: {'role': 'contextlayer_exec', …}`.
-A **FAILED** line means the runner is withholding execution (G3 doing its
-job) and every execute job will hang to its deadline — fix before demoing.
+*Windows PowerShell · machine 2:* nothing to run — the stack lives only
+on machine 1.
 
-If it needs bringing up again:
+Expect: `execution preflight passed for postgres: {'role': 'contextlayer_exec', …}`
+
+If it says **FAILED**, the runner is deliberately refusing to serve
+queries because the database role it was given is too powerful. That is
+a safety check working. **Abort the demo and fix the role** — queries
+will otherwise hang until they time out, with no useful error.
+
+### 4.3 If the stack needs restarting
+
+*macOS · machine 1:*
 
 ```bash
 cd ~/Desktop/DataProject
@@ -46,227 +123,326 @@ CL_BIND=0.0.0.0 CL_HOST_ADDR=192.168.1.4 \
   docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d
 ```
 
-`CL_BIND=0.0.0.0` makes the ports reachable from machine 2; `CL_HOST_ADDR`
-makes the OAuth issuer resolvable there. Getting the second one wrong
-shows up as a login that redirects to `localhost` and hangs. Sourcing
-`sync.env` is not optional — compose ranks `environment:` above
-`env_file:`, so an unexported file silently disables sync (D-84.2).
+*Windows PowerShell · machine 2:* nothing to run.
 
-**Note the demo start time in UTC before machine 2 begins** — the
-evidence extractor takes it as its window:
+Two of those settings matter and are easy to get wrong:
+`CL_BIND=0.0.0.0` is what makes the ports answer from another computer;
+`CL_HOST_ADDR=192.168.1.4` is what makes the login redirect point at an
+address machine 2 can resolve. Getting the second wrong looks like a
+login page that hangs forever on `localhost`.
+
+The `set -a; . .secrets/sync.env; set +a` line is not decoration.
+Without it the stack starts healthy with syncing silently switched off —
+that exact mistake left the platform quietly not syncing for two days.
+
+### 4.4 Record the start time
+
+Everything the evidence extractor collects is "since this moment", so
+capture it **before machine 2 does anything**.
+
+*macOS · machine 1:*
 
 ```bash
 date -u +%Y-%m-%dT%H:%M:%SZ
 ```
 
-## Machine 2 — setup (one line)
-
-**Machine 2 is not a Mac** (Linux/Windows), so the delivery step is a
-plain HTTP fetch — AirDrop, `pbpaste` and macOS Sharing do not apply,
-and `scp` fails with "connection refused" because Remote Login is off on
-machine 1 by default (verified 2026-07-27: the host pings and the demo
-ports answer regardless — `sshd` and Docker's published ports are
-unrelated services).
-
-First, confirm machine 2 can reach the platform at all:
-
-```bash
-curl -s http://192.168.1.4:8100/healthz     # expect mcp_enabled + sync_enabled true
-```
-
-Then hand the `report` skill across. It is a single 13232-byte file in
-this repo, which has no remote (D-82). **On machine 1**, for the length
-of the fetch only:
-
-```bash
-python3 -m http.server 8200 --directory ~/Desktop/DataProject/core/skills/report
-```
-
-**On machine 2** — Linux, or Windows under WSL/Git Bash:
-
-```bash
-mkdir -p ~/cp7-demo/.claude/skills/report && curl -fsS http://192.168.1.4:8200/SKILL.md -o ~/cp7-demo/.claude/skills/report/SKILL.md && cd ~/cp7-demo && claude mcp add --transport http context-layer "http://192.168.1.4:8100/mcp?profile=reporter"
-```
-
-Windows PowerShell:
+*Windows PowerShell · machine 2 (if you would rather read it there):*
 
 ```powershell
-New-Item -ItemType Directory -Force "$HOME\cp7-demo\.claude\skills\report" | Out-Null
-curl.exe -fsS http://192.168.1.4:8200/SKILL.md -o "$HOME\cp7-demo\.claude\skills\report\SKILL.md"
-cd "$HOME\cp7-demo"
-claude mcp add --transport http context-layer "http://192.168.1.4:8100/mcp?profile=reporter"
+(Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 ```
 
-Stop the server on machine 1 (`Ctrl-C`) once the file has landed. Verify
-it arrived whole — **13232 bytes** (`wc -c` / `(Get-Item …).Length`). A
-truncated skill is worse than none: the session would half-follow the
-procedure, and the grounding discipline is precisely what this gate
-tests.
+Write it down. Example: `2026-07-27T15:20:00Z`.
 
-If you would rather open no port at all, any USB volume or shared drive
-works — the file just has to end up at
-`~/cp7-demo/.claude/skills/report/SKILL.md`, with `claude mcp add` run
-separately.
+### 4.5 Build the customer's setup bundle
 
-Then `claude` in `~/cp7-demo`. A browser opens for the dev IdP: log in as
-**`reporter` / `reporter-dev-pw`**. Tokens last one hour; if the session
-outlives that, re-authenticate rather than debugging odd 401s.
+The platform compiles a profile into a ready-to-use Claude Code setup:
+the connection config, a short instruction file, and the report skill.
+Skills come from the product image, never from the customer's KB.
 
-The login needs a desktop browser **on machine 2** — the redirect goes to
-`http://192.168.1.4:8180`, which only resolves on the LAN. On a headless
-Linux box, copy the printed authorize URL into a browser on any machine
-that can reach that address; the callback returns to machine 2's local
-listener, so a fully headless host without port forwarding will not
-complete the flow.
-
-`~/cp7-demo` is deliberately **outside** any clone of this repo. A
-session started inside it would inherit the platform's `CLAUDE.md` and
-stop being a customer-agent demo (the CP-2 contamination lesson).
-
----
-
-## Act 1 — the happy path (B.1)
-
-Seed case **RB-01** (signups by day, `line`), which is the smoke-journey
-case and now runs through `reporting.v_user_signups_by_day`.
-
-Prompts, in plain language — do not name the view, that is the point:
-
-1. *"What do we know about user signups over time?"*
-   → `search_context` / `get_table`. **Point at the trust block**: status,
-   last verified, `snapshot_ref`. The view now carries the semantics from
-   PR #26, including the warning that zero-signup days are absent.
-2. *"Give me daily new signups for the last 90 days."*
-   → `validate_sql` returns `verdict: pass` **and a validation token**,
-   then `execute_sql` returns **real rows** — `signup_day` as
-   `"2026-07-23"`, ISO text with `columns[].type = "date"`.
-   **This is the M2 blocker gone**: RLS emptiness no longer applies to
-   viewed data.
-3. *"Publish that as a Looker Studio report."*
-   → `publish_report`, `mode: template_link`, one `created[0]` of type
-   `template_link` with a URL, plus `pending_human_steps`.
-
-**Open the link.** This is the only check on the Linking API parameter
-names, which are externally owned facts pinned in
-`connectors/looker_studio/publisher.py` (`_SOURCE_PARAMS`, D-83.3).
-
-**Record, per source alias:** did Looker pre-fill the data source, or did
-it ask you to complete a field? A drifted name degrades softly — the
-human fills that field in the UI, which template-link journeys require
-anyway — so a prompt is not a failure, but **which** field prompted is
-the finding. Note it verbatim; it goes in the gate note and the FM-2
-record.
-
-Also record which of the five declared visual kinds the template
-actually exercised (`table`, `line`, `bar`, `scorecard`, `pivot`) — FM-2
-wants the real answer, not the declared one.
-
-## Act 2 — a documented cross-source blend (B.2)
-
-**Read the flag below before running this act — it does not work as
-originally specified, and the reason is the KB being honest.**
-
-Use the page entity, which is the one documented cross-source join in
-this KB: `entities/page.md` maps `gsc.standard.page` (key `page`) and
-`ga4.standard.pagePath` (key `pagePath`).
-
-*"Compare search impressions and pageviews for our top landing pages,
-blended by page."*
-
-Expect: two backings (GSC + GA4), a `blend` whose single key is
-`left_column: page` / `right_column: pagePath` with
-`entity_ref: entities/page.md`, and a publish that **succeeds**. Neither
-leg is executed — the reporter may only execute against supabase, and
-Looker pulls GA4/GSC itself through the template's own aliases. The
-artifact is still validated end to end (F-7, token-less).
-
-Point at: the blend key came from the entity doc, not from the agent's
-judgement, and `entity_ref` resolves to a doc the reviewer can open.
-
-## Act 3 — live denials (B.3)
-
-Both must be **refused by the server and audited**, not talked out of by
-the agent.
-
-**3a — a target outside the profile.** *"Publish that same report to
-Google Sheets instead."*
-Expect `permission_denied`: the profile grants
-`publish_report:looker_studio` and nothing else, the denial is
-server-side, and it lands in `audit_records` with `decision = denied`.
-The agent should say so plainly without speculating about targets it
-cannot see (M-3).
-
-**3b — an undocumented blend key.** Seed case **RB-08**
-(GA4 purchases vs Supabase subscriptions). *"Blend the GA4 purchase
-count with our new subscriptions so I can see them per transaction."*
-Expect a refusal naming the entity doc and its documented key set —
-`entities/conversion.md` documents `maps[].keys` of exactly `{id}`
-(subscriptions' PK), and the GA4 objects carry none — followed by
-`flag_gap(kind: missing_join_path)`. The ledger entry is the evidence;
-an inline refusal alone does not close this act.
-
-This is the KB refusing to invent a join that does not exist:
-`entities/conversion.md` states outright that no shared row-level key
-exists between a GA4 conversion and a subscriptions row.
-
-## Act 4 — evidence (B.4)
-
-Back on machine 1, with the start time noted earlier:
+*macOS · machine 1:*
 
 ```bash
-results/cp7-gate/extract-audit.sh '<demo-start-utc>'
+cd ~/Desktop/DataProject/core
+node dist/cli.js compile reporter --kb ~/Desktop/kb --url http://192.168.1.4:8100 --out ~/Desktop/reporter-setup
 ```
 
-Writes `audit-chain.txt`, `audit-chain.json`, `ledger-events.txt`,
-`publish-results.json` beside the script — direct dumps of what the
-server recorded, not a summary. Check before committing:
+*Windows PowerShell · machine 2:* nothing to run — the bundle is built
+on machine 1 and copied across in step 5.2.
 
-- the chain is continuous and every row carries `subject = reporter`;
-- Act 1 shows `validate_sql` → `execute_sql` → `publish_report`, all
-  `allowed`, with the executed statement text stored;
-- **two** `denied` rows for Act 3a and the Act 3b refusal;
-- `ledger-events.txt` contains the `missing_join_path` event with its
-  `audit_ref` pointing back into the chain.
-
-Then add the working Looker URL, the Linking API observations, and the
-exercised visual kinds to the gate note.
+Expect three files: `.mcp.json`, `CLAUDE.md`,
+`.claude/skills/report/SKILL.md` (about 13 KB).
 
 ---
 
-## Flags — read before running
+## 5. Machine 2 — set up the reporter's laptop
 
-**1. Act 2 cannot be a seed case, and that is the KB working correctly.**
-The gate asks for "a cross-source seed case published with its blend on
-documented entity keys". The seed packet's only cross-source cases are
-RB-05 (gsc+ga4+supabase, `entities/user.md`) and RB-08 (ga4+supabase,
-`entities/conversion.md`) — and both entity docs state that no shared
-row-level key exists: `user.md` maps only `supabase.public.users`
-because GA4/GSC see anonymous visitors, and `conversion.md` says "there
-is no documented blend key" in as many words. The packet itself
-classifies both as `aggregate-reconciliation`, not joins. So a seed case
-with a documented blend does not exist to run. The runbook above splits
-the requirement: Act 2 demonstrates the documented blend using
-`entities/page.md` (off-packet but real), and Act 3b turns RB-08 into
-the refusal evidence it can honestly provide. If you would rather keep
-Act 2 strictly on-packet, the alternative is to publish RB-08 **without**
-a blend — two backings side by side, which is what a reconciliation is —
-and accept that the blend-key path is then only demonstrated negatively.
+### 5.1 Check you can reach the platform
 
-**2. "Certified entity docs" do not exist yet.** All three entity docs
-are `status: draft`, `last_verified: null` — batch 3 landed them that
-way deliberately, since no mapping had been customer-certified. So Act 2
-resolves `entity_ref` to a **draft** doc, and the artifact must not claim
-`certified: true` (MT-10 refuses certification the KB never granted —
-which is itself worth demoing if you want a third denial). To satisfy
-the gate's wording literally, certify `entities/page.md` first: set
-`status: verified` + `last_verified` via a KB PR. That is a human
-certification act and is yours, not mine.
+Run the PowerShell command in 4.1. If it does not answer: both machines
+on the same network, and machine 1 awake (a sleeping Mac drops the
+ports).
 
-**3. The seed packet repeats the corrected `ai_runs.status` claim.**
-`benchmark/suite/benchmark-seed-v0.yaml` (the `known_gaps` block) still
-says `ai_runs.status` is ungrounded free text with no DB CHECK — the
-same error D-86.3a corrected in `deploy/reporting-views.sql` and D-81.
-I did not touch it: editing the seed packet changes the frozen input
-BASELINE-1 will be measured against, and that trade-off is yours. It has
-no effect on this demo — the reporter grounds against the KB, which now
-publishes the enforced `pending | completed | failed` enum.
+### 5.2 Copy the bundle across
+
+Machine 2 is Windows, so AirDrop is not available. Windows 10 and 11
+include an OpenSSH client, so `scp.exe` works once machine 1 allows it.
+
+**On machine 1 first:** System Settings → General → Sharing → turn on
+**Remote Login**. Turn it off again after the demo.
+
+*Windows PowerShell · machine 2:*
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\cp7-demo" | Out-Null
+scp.exe -r alpercamli@192.168.1.4:Desktop/reporter-setup/* "$HOME\cp7-demo\"
+```
+
+*macOS · machine 1 (equivalent, if you prefer to push rather than pull —
+replace the Windows username and address):*
+
+```bash
+scp -r ~/Desktop/reporter-setup/* <windows-user>@<machine-2-ip>:cp7-demo/
+```
+
+If you would rather not enable Remote Login at all, any method that puts
+those three files in `%USERPROFILE%\cp7-demo` is fine — a USB stick, a
+shared folder, OneDrive. Nothing in the bundle is secret: it contains no
+password and no token.
+
+### 5.3 Verify the skill arrived whole
+
+A half-copied skill is worse than none — the session would follow half a
+procedure, and the procedure is what this gate tests.
+
+*Windows PowerShell · machine 2:*
+
+```powershell
+(Get-Item "$HOME\cp7-demo\.claude\skills\report\SKILL.md").Length
+Get-FileHash "$HOME\cp7-demo\.claude\skills\report\SKILL.md" -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+```
+
+*macOS · machine 1 (compare against these):*
+
+```bash
+wc -c < ~/Desktop/reporter-setup/.claude/skills/report/SKILL.md
+shasum -a 256 ~/Desktop/reporter-setup/.claude/skills/report/SKILL.md
+```
+
+The byte counts and hashes must match. (PowerShell prints the hash in
+uppercase; macOS lowercase. Same value.)
+
+### 5.4 Start the session and log in
+
+*Windows PowerShell · machine 2:*
+
+```powershell
+cd "$HOME\cp7-demo"
+claude
+```
+
+*macOS · machine 1:* nothing to run — machine 1 is the host, not the
+customer.
+
+A browser opens to the demo login provider. Sign in as
+**`reporter`** / **`reporter-dev-pw`**.
+
+This login provider is for development only. A real customer deployment
+points at their own company sign-on and this becomes their normal login
+screen.
+
+Two practical notes: the login must happen in a browser **on machine 2**
+(the address only resolves on this network), and the session token lasts
+one hour — if the demo runs long, re-run `claude` and log in again rather
+than debugging strange failures.
+
+`cp7-demo` is deliberately a folder of its own, not a copy of the
+platform's source. A session started inside the platform repository
+would absorb the platform's own instructions and stop being a customer
+demo.
+
+---
+
+## 6. Act 1 — question to published report
+
+**Purpose:** show the whole path working on real data: plain question →
+checked SQL → real rows → a link that opens a report.
+
+**Runs on:** machine 2, in the `claude` session.
+
+**Paste these, one at a time.** Do not name the view — the point is that
+the agent finds it.
+
+> What do we know about user signups over time?
+
+> Give me daily new signups for the last 90 days.
+
+> Publish that as a Looker Studio report.
+
+**What you should see if it worked**
+
+1. The agent searches the KB and reads the page for the signups view. It
+   should show a **trust block**: the document's status, when it was last
+   verified, and which data snapshot it reflects. It should also relay
+   the warning that days with no signups are missing rather than zero.
+2. It checks the SQL first (`validate_sql` → `verdict: pass`) and only
+   then runs it. **Real rows come back** — dates like `"2026-07-23"` with
+   a count beside them. This is the headline: until the reporting views
+   existed, this query returned nothing at all, because the underlying
+   table hides every row from this account.
+3. Publishing returns a **URL**, plus a short list of steps a human still
+   has to complete in Looker Studio. That is normal for template links —
+   nothing exists in Looker until a person clicks.
+
+**Then open the link in a browser.**
+
+**What to record**
+
+- The full Looker Studio URL.
+- **For each data source in the report: did Looker fill it in, or did it
+  ask you to complete a field?** If it asked, write down *exactly which
+  field*, word for word. The platform builds that URL using parameter
+  names published by Google; if Google renamed one, Looker quietly falls
+  back to asking the human. That is not a failure — but which field asked
+  is a finding we need.
+- Which chart kinds the report actually rendered, out of the five the
+  template declares: table, line, bar, scorecard, pivot.
+- A screenshot of the opened report.
+
+**If it fails:** if rows come back empty, stop — that means the query ran
+against the base table rather than a reporting view, and Act 2 onward
+will be meaningless. If publishing errors, capture the error text
+verbatim before retrying; a retry can hide the first failure's cause.
+
+## 7. Act 2 — combining two sources, only where documented
+
+**Purpose:** show that a cross-source join is allowed **because a
+document authorises it**, not because the agent judged it sensible.
+
+**Runs on:** machine 2. **Requires the `entities/page.md` certification
+PR to be merged.**
+
+Background: search data (Google Search Console) and analytics data
+(GA4) both describe web pages, and the KB's page document records that
+Search Console's `page` and GA4's `pagePath` identify the same thing.
+That mapping is the permission slip.
+
+**Paste:**
+
+> Compare search impressions and pageviews for our top landing pages,
+> blended by page.
+
+**What you should see if it worked**
+
+- The report is built from two sources, joined on `page` ↔ `pagePath`.
+- The join cites the entity document — you can open the page it names and
+  read the same mapping yourself.
+- It publishes. Neither source is queried by the agent: the reporter is
+  only allowed to run queries against Supabase, and Looker pulls Search
+  Console and GA4 itself. The request is still checked end to end.
+- If the certification PR is merged, the document it cites reads
+  `verified`; the agent may only claim certification the KB actually
+  granted.
+
+**What to record:** the published URL, the entity document named in the
+blend, and whether its status showed as verified.
+
+**If it fails:** a refusal here that names a *missing* key means the
+certification PR changed the mapping — stop and re-read the document
+rather than rewording the prompt until it passes.
+
+## 8. Act 3 — the two refusals
+
+**Purpose:** show the platform refusing, server-side and on the record,
+rather than relying on the agent's good manners.
+
+**Runs on:** machine 2.
+
+### 8a — publishing somewhere the profile does not allow
+
+**Paste:**
+
+> Publish that same report to Google Sheets instead.
+
+**Expect:** a permission refusal. The reporter is allowed to publish to
+Looker Studio and nowhere else. The refusal must come from the **server**
+— it lands in the audit trail as `denied`. The agent should say so
+plainly and should *not* speculate about other places it might publish,
+because it cannot see them.
+
+### 8b — joining on a key nobody documented
+
+**Paste:**
+
+> Blend the GA4 purchase count with our new subscriptions so I can see
+> them per transaction.
+
+**Expect:** a refusal that **names the documented keys** and stops. The
+KB's conversion document is explicit that no shared row-level key exists
+between a GA4 conversion and a subscription row — GA4 carries no user
+id, and subscriptions store no GA4 identifier. The agent should then file
+a gap (`missing_join_path`), which becomes a tracked item.
+
+This is the most important minute of the demo. The honest answer to that
+question is "you cannot join these", and the platform gives it instead of
+inventing a plausible key.
+
+**What to record:** both refusal messages, verbatim.
+
+**If it fails:** if either succeeds instead of refusing, **stop the demo**
+— a publish that should have been denied is a gate failure, not a
+curiosity. Keep the output.
+
+## 9. Act 4 — collect the evidence
+
+**Purpose:** turn the demo into committed evidence.
+
+**Runs on:** machine 1, after machine 2 is finished.
+
+*macOS · machine 1* (use the timestamp from 4.4):
+
+```bash
+cd ~/Desktop/DataProject
+results/cp7-gate/extract-audit.sh '2026-07-27T15:20:00Z'
+```
+
+*Windows PowerShell · machine 2:* nothing to run — the audit trail lives
+in machine 1's database.
+
+Writes four files beside the script. They are direct dumps of what the
+server recorded, not a summary anyone wrote afterwards.
+
+**Check before committing:**
+
+- every row names `reporter` as the subject;
+- Act 1 appears as check → run → publish, all allowed, with the SQL text
+  stored;
+- **two `denied` rows** from Act 3;
+- `ledger-events.txt` contains the `missing_join_path` gap, cross-
+  referenced to the matching audit row.
+
+Then send me: the start timestamp, the Looker URL, the fields Looker
+asked you to complete, the chart kinds rendered, and the two refusal
+messages. I will write the gate note and close M3.
+
+---
+
+## 10. Notes on scope
+
+- **Act 2 is deliberately not one of the ten seed cases.** The two
+  cross-source seed cases are exactly the ones whose entity documents
+  conclude that no shared key exists. Publishing them blended would
+  fabricate a join the KB forbids, so the demo instead blends where the
+  KB documents a join (the page mapping) and refuses where it does not
+  (Act 3b, using seed case `RB-08`). Showing both is stronger evidence
+  than showing either.
+- **The seed packet is left frozen** even though one of its notes is now
+  known to be wrong (it says a status column has no database constraint;
+  it does). It is the fixed input a future measurement baseline will be
+  compared against, so it gets corrected in one recorded pass when that
+  baseline is revived, not piecemeal today. It does not affect this demo.
+- **No suppression threshold for small numbers exists yet.** The estate
+  has about two dozen users, so a count of 1 can identify a person. Every
+  reporting document warns about this, nothing enforces it, and that is
+  deliberate: the decision is due before any report reaches an audience
+  outside the team. The audience for this demo is you.
