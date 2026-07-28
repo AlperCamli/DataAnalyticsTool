@@ -73,5 +73,9 @@ scenarios:   ## run AS-9/10/12 against a running fixture -> results/cp5-scenario
 	$(PY) -m tools.skill_scenarios --connection "$(FIXTURE)" \
 	  --model $(SCEN_MODEL) --out results/cp5-scenarios
 
+powerbi-preflight:  ## verify the D-91.7 Power BI SP provisioning (STOP-A gate)
+	$(PY) -m connectors.powerbi.preflight
+
 .PHONY: stack-up stack-mcp stack-demo stack-live stack-down drill \
-        conditions preflight ingest status score fixture-up scenarios
+        conditions preflight ingest status score fixture-up scenarios \
+        powerbi-preflight
