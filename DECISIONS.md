@@ -3334,3 +3334,97 @@ hour) or the stripped URL; the runbook says to record which was used.
 **Suites at this entry:** python **663 passed, 13 skipped** (adapter
 suite 16/16). Runner image rebuilt so the live publish path carries the
 fix.
+
+
+RULING D-90 — resume authorization
+
+1. D-89 fix ACCEPTED as landed: independent reference verification,
+   update-mode URL, honest pending steps, pinned source-of-truth +
+   CI guardrail (both tests noted — the pinned-set-is-real check is the
+   one that catches the next careless source kind).
+2. CI-F filing ACCEPTED as a new register item rather than an amendment —
+   correct call, no home existed. Evidence statement affirmed: per-report
+   manual re-point + password entry is a standing cost of template_link
+   for database-backed sources; escalation paths (community connector /
+   Data Studio API) stay outside the fence, trigger: first customer for
+   whom the manual step is a real adoption blocker.
+3. DEMO RESUMES at Act 1 via republish through the fixed adapter (fresh
+   Claude Code session on machine 2; same bundle, no re-compile).
+   Record: which route produced the opened link (republish vs
+   hand-stripped — expected: republish), whether GA4/GSC sources arrived
+   prefilled (a hand-completion field THERE is a real finding; the
+   supabase manual pointing is the documented limit), chart kinds
+   rendered, UTC start timestamp, and Act 3's two refusal messages
+   verbatim.
+4. Rate-limit note honored: batch any republishing; ≈4 creations/hour.
+
+
+RULING D-91 — M3 target replaced: text-to-report via Power BI
+
+1. GATE REDEFINED. CP-7/M3 closes when: a reporter on machine 2, using only
+   the compiled one-line setup, types a plain-language report request — and
+   a finished, AI-designed, trust-annotated Power BI report exists in the
+   customer workspace. "Zero manual wiring," measured: the reporter
+   configures no data source, enters no credential, builds no chart;
+   pending_human_steps is empty or "open the link" alone. Cross-source
+   criterion restated for the new target: a report whose semantic model
+   carries a relationship on documented entity keys (entity_ref resolving
+   to the certified entity doc); the undocumented-blend refusal criterion
+   is unchanged and publisher-agnostic.
+2. LOOKER DISPOSITION. All landed CP-7 Looker work REMAINS on main: the
+   adapter, D-89 guardrails, template-link path — registered as a
+   secondary target with its limits documented (CI-F evidence stands).
+   Nothing is deleted; profiles choose targets. The paused demo's Act 1
+   evidence is KEPT and committed as CI-F/D-89 evidence; Acts 2–4 will
+   run against the Power BI target under the amended gate, not resumed
+   on Looker.
+3. ENTRY CONDITION (spec-first, the JP-4/sync pattern): a REPORT
+   AUTHORING SPEC is authored and merged before build. It owns: the
+   two-MCP orchestration contract (context-layer MCP + Microsoft Power
+   BI MCPs in one Claude Code session); the data-plane/visual-plane
+   boundary; the artifact's new layout/design section; the attestation
+   flow through publish_report; the trust-rendering rule; failure and
+   revision semantics. It authorizes the additive amendments it needs
+   (capability spec publisher flags, formats spec artifact section, MCP
+   spec publish_report contract, skill spec report-skill authoring
+   flow) — each diff leading per the fence.
+4. PRE-RULED INVARIANTS the spec is written to (the product's spine,
+   not open questions):
+   (a) No LLM in the product: all authoring intelligence runs in the
+       customer's Claude Code session via the skill. The core stays
+       deterministic.
+   (b) Data plane is ours: the semantic model's data is delivered by a
+       deterministic core publisher leg from the artifact's validated,
+       reporting-view-backed SQL results. The agent NEVER holds
+       database credentials; SK-6 survives as the rule on what may
+       feed a model. Republish updates the model in place.
+   (c) Visual plane is the agent's: design decided per-request within
+       the five-kind registry as guidance (FM-2 becomes advisory for
+       this target); the chosen design is written back into the
+       artifact before attestation, so AI-designed output remains
+       reproducible and auditable.
+   (d) Trust disclosures render as a visible element OF the report.
+   (e) PBIR authoring is OUR thin tooling in the skill (JSON
+       generation + Fabric API deploy) — no third-party community MCP
+       dependency in the product. Microsoft's official MCPs (remote +
+       local modeling) are the only external agentic surfaces, and
+       every Microsoft API we emit against gets the D-89 treatment:
+       pinned reference + retrieval date + CI conformance check.
+5. RISK ACCEPTANCES, recorded: Microsoft preview surfaces may change
+   (mitigated per 4e); Entra/workspace/licensing is net-new customer
+   cost, accepted; GA4/GSC data delivery becomes our refresh
+   responsibility under this target (register item: refresh cadence
+   rides sync-policy); Power BI MCP under service-principal auth does
+   not enforce PBI-side RLS — acceptable because delivered data is
+   exec-role reporting-view aggregates, noted in the threat model.
+6. REGISTER: CI-F escalation CLOSED-BY-SUPERSESSION (this ruling is the
+   escalation); new items filed per 5. CP-8 remains after CP-7 in
+   sequence (no dates by design). BASELINE-1 unaffected.
+7. MY SIDE (parallelizable now, the customer-DBA pattern): Entra app
+   registration + service principal; Power BI workspace with the SP as
+   member; tenant admin setting "Users can use the Power BI MCP server
+   endpoint (preview)" enabled; licensing/capacity confirmed; the SP
+   credential lands in .secrets under the existing reference
+   discipline. Machine 2 (Windows) may optionally carry Power BI
+   Desktop for visual verification, but the gate is service-side: the
+   report exists in the workspace.
