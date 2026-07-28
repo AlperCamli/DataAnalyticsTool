@@ -457,7 +457,7 @@ curiosity. Keep the output.
 
 ```bash
 cd ~/Desktop/DataProject
-results/cp7-gate/extract-audit.sh '2026-07-27T15:20:00Z'
+results/cp7-gate/extract-audit.sh '2026-07-28T01:09:00Z'
 ```
 
 *Windows PowerShell · machine 2:* nothing to run — the audit trail lives
