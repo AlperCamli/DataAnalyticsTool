@@ -55,6 +55,13 @@ class Job:
     # `publish` payload members (capability §8.2); unused elsewhere.
     artifact: dict | None = None
     target: str | None = None
+    # Two-call contract members for `create_report: api` adapters
+    # (capability §8.2 amendment / report-authoring §7); absent for
+    # template-link publishes.
+    mode: str | None = None
+    results: dict | None = None
+    previous: dict | None = None
+    attestation: dict | None = None
 
     @classmethod
     def local(cls, config: dict) -> "Job":
@@ -308,7 +315,9 @@ def _run_publish(connector: Connector, job: Job) -> JobOutcome:
             ),
         )
     try:
-        request = PublishRequest.parse(job.artifact, job.target)
+        request = PublishRequest.parse(
+            job.artifact, job.target, job.mode, job.results, job.previous, job.attestation,
+        )
     except ValueError as exc:
         return JobOutcome(
             status="failed",
@@ -371,13 +380,19 @@ def _run_publish(connector: Connector, job: Job) -> JobOutcome:
             ),
         )
 
-    if result.mode != "full" and not result.pending_human_steps:
+    # PB-3, as amended for api adapters (capability §8.2 amendment):
+    # template_link/instructions journeys are completed by a HUMAN, so
+    # empty steps there means the adapter quietly overstated what
+    # happened. deliver_model/attest journeys are completed by the
+    # authoring SESSION — empty steps is the expected, honest shape
+    # (D-91.1's zero-manual-wiring measure), so the gate does not apply.
+    if result.mode in ("template_link", "instructions") and not result.pending_human_steps:
         return JobOutcome(
             status="failed",
             error=_job_error(
                 "internal",
                 f"adapter returned mode={result.mode!r} without pending_human_steps "
-                "(PB-3: mandatory whenever mode is not 'full')",
+                "(PB-3: mandatory whenever a human completes the journey)",
                 retryable=False,
             ),
         )

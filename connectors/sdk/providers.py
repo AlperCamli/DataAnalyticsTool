@@ -238,14 +238,51 @@ class PublishRequest:
 
     artifact: dict
     target: str
+    #: Two-call contract members for `create_report: api` adapters
+    #: (capability §8.2 amendment / report-authoring §7). `mode` is None
+    #: exactly when the adapter is a single-shot (template_link/full)
+    #: publisher; api adapters receive "deliver_model" or "attest".
+    mode: str | None = None
+    #: deliver_model: query name → capability §6 execute result —
+    #: gateway-executed, the only thing that may feed a model (RA-2).
+    results: dict | None = None
+    #: deliver_model: the prior delivery's `results`, for restoring
+    #: complete-or-previous after a mid-delivery failure (§5 / AT-8).
+    previous: dict | None = None
+    #: attest: {report_id, definition_hash} from the verified deploy.
+    attestation: dict | None = None
 
     @classmethod
-    def parse(cls, artifact: object, target: object) -> "PublishRequest":
+    def parse(
+        cls,
+        artifact: object,
+        target: object,
+        mode: object = None,
+        results: object = None,
+        previous: object = None,
+        attestation: object = None,
+    ) -> "PublishRequest":
         if not isinstance(artifact, dict):
             raise ValueError("payload.artifact must be an object")
         if not isinstance(target, str) or not target:
             raise ValueError("payload.target must be a non-empty string")
-        return cls(artifact=artifact, target=target)
+        if mode is not None and mode not in ("deliver_model", "attest"):
+            raise ValueError(
+                "payload.mode must be 'deliver_model' or 'attest' when present "
+                "(capability §8.2 amendment)"
+            )
+        for name, value in (("results", results), ("previous", previous),
+                            ("attestation", attestation)):
+            if value is not None and not isinstance(value, dict):
+                raise ValueError(f"payload.{name} must be an object when present")
+        return cls(
+            artifact=artifact,
+            target=target,
+            mode=mode if isinstance(mode, str) else None,
+            results=results if isinstance(results, dict) else None,
+            previous=previous if isinstance(previous, dict) else None,
+            attestation=attestation if isinstance(attestation, dict) else None,
+        )
 
     @property
     def artifact_version(self) -> str | None:

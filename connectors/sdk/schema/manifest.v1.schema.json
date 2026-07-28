@@ -32,7 +32,7 @@
           "required": ["create_report", "create_dataset", "sql_backing",
                        "cross_source", "scheduled_refresh", "git_integration"],
           "properties": {
-            "create_report": { "enum": ["full", "template_link", "none"] },
+            "create_report": { "enum": ["full", "template_link", "api", "none"] },
             "create_dataset": { "enum": ["yes", "no"] },
             "sql_backing": { "enum": ["native", "views", "none"] },
             "cross_source": { "enum": ["native", "blending", "none"] },

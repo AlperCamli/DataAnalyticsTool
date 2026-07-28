@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["system", "tenant_id", "client_id", "workspace_id"],
+  "additionalProperties": false,
+  "properties": {
+    "system": {
+      "type": "string",
+      "description": "Target name this connection serves (the publish_report target qualifier), e.g. powerbi."
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "description": "Entra directory (tenant) id the service principal lives in."
+    },
+    "client_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "description": "Application (client) ID of the Entra app registration (not the object id)."
+    },
+    "workspace_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "description": "Power BI workspace (group) id the SP is a Member of; every model and report this connection delivers lands here (RA-10 scope boundary)."
+    },
+    "client_secret_env": {
+      "type": "string",
+      "description": "Set by the RUNNER at job time (J-4 credential injection); never written into a registration file."
+    },
+    "api_base_override": {
+      "type": "string",
+      "description": "FIXTURE ONLY: host replacement for the pinned Power BI API base. The pinned path shape still applies; live registrations omit this."
+    },
+    "login_base_override": {
+      "type": "string",
+      "description": "FIXTURE ONLY: host replacement for the pinned Entra login base."
+    },
+    "fabric_base_override": {
+      "type": "string",
+      "description": "FIXTURE ONLY: host replacement for the pinned Fabric API base."
+    }
+  }
+}

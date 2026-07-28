@@ -1,0 +1,34 @@
+# Power BI publisher adapter (CP-7/M3 under ruling D-91; report-
+# authoring spec RA-5/RA-6, capability spec §8.1 amendment).
+#
+# The shipped push+PBIR leg, declared honestly: create_report is `api`
+# — the two-call publish contract in which THIS adapter delivers only
+# the data plane (push semantic model from gateway-executed results,
+# RA-2) and the report definition is authored and deployed by the
+# customer session's report skill (RA-3/RA-5). cross_source is native
+# because documented blend keys become real semantic-model
+# relationships (D-91.1); sql_backing stays views because delivered
+# rows are the artifact's reporting-view-backed results; no scheduled
+# refresh in v1 (RA-E: manual/skill-triggered revisions only).
+#
+# Values quoted where YAML 1.1 would read them as booleans ("yes"/"no").
+name: powerbi
+version: 0.1.0
+protocol_version: 1
+snapshot_version: "1"
+capabilities:
+  publish:
+    create_report: api
+    create_dataset: "yes"
+    sql_backing: views
+    cross_source: native
+    scheduled_refresh: "no"
+    git_integration: "no"
+config_schema: ./config.schema.json
+# One credential: the Entra app's client secret, resolved by the runner
+# from its vault (env://POWERBI_CLIENT_SECRET on the pilot) and handed
+# to the adapter through a job-scoped env indirection — never in
+# config, never in the registration row (J-4/JC-8).
+credentials:
+  - { key: client_secret, required_for: [publish], description: "Entra app client secret for the workspace service principal" }
+rate_limit: { strategy: none }

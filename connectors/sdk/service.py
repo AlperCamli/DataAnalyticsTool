@@ -80,6 +80,7 @@ CREDENTIAL_CONFIG_KEYS: dict[str, str] = {
     "dsn": "dsn_env",
     "execute_dsn": "execute_dsn_env",
     "service_account": "credentials_env",
+    "client_secret": "client_secret_env",
 }
 
 # Job types this SDK can execute (run_job dispatches by type).
@@ -426,6 +427,11 @@ class Runner:
                         # Interactive `publish` members (capability §8.2).
                         artifact=payload.get("artifact"),
                         target=payload.get("target"),
+                        # Two-call contract members (§8.2 amendment).
+                        mode=payload.get("mode"),
+                        results=payload.get("results"),
+                        previous=payload.get("previous"),
+                        attestation=payload.get("attestation"),
                     ))
                 ),
                 daemon=True, name=f"work-{job_id}",
