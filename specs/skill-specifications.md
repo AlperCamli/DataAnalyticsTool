@@ -65,7 +65,19 @@ intent → resolution → drafting → validation → execution → presentation
 
 **S6 presentation. CP-R3 [A]:** present results with the refs and any trust warnings that applied. **CP-R4 [A]:** ask the confirmation question — does this match what you asked for? A negative → `flag_gap(kind: result_disputed)` with the user's stated discrepancy (SK-5), then offer to revise. This is detector class 3.
 
-**S7 publish (optional).** Only on user request and profile permission. Behavior follows the effective `create_report` flag: `full` → publish, return URL; `template_link` → execute the backing path first (see below), then hand the link and relay `pending_human_steps` verbatim (PB-3); `none` → deliver validated SQL + instructions. **Backing path (SK-6):** when `sql_backing: views` and the report is recurring, produce the reporting-view DDL; if the session can open a PR on the migrations repo, do so and link it; otherwise attach the DDL as a handoff artifact in a `flag_gap(kind: capability_gap)` entry explicitly routed to R2, and tell the user their data team received it. **CP-R5 [A]:** never publish results the user has not confirmed in CP-R4.
+**S7 publish (optional).** Only on user request and profile permission. Behavior follows the effective `create_report` flag: `full` → publish, return URL; `template_link` → execute the backing path first (see below), then hand the link and relay `pending_human_steps` verbatim (PB-3); `api` → the S8 authoring flow (two-call publish contract; amendment below); `none` → deliver validated SQL + instructions. **Backing path (SK-6):** when `sql_backing: views` and the report is recurring, produce the reporting-view DDL; if the session can open a PR on the migrations repo, do so and link it; otherwise attach the DDL as a handoff artifact in a `flag_gap(kind: capability_gap)` entry explicitly routed to R2, and tell the user their data team received it. **CP-R5 [A]:** never publish results the user has not confirmed in CP-R4.
+
+**S8 authoring flow (api targets — amendment, report-authoring spec §12.4 / D-91, 2026-07-29).** Entered from S7 when the target's effective `create_report` is `api`. Implements report-authoring spec §4 stages 4–10; CP-R4 confirmation and CP-R5 still gate entry (RA-9: the target changed, the honesty rules did not).
+
+1. **Design (CP-R6 [A]).** Decide pages, visual kinds, encodings, and titles per report-authoring §6.1: the five-kind registry is design guidance; a target-native kind outside it carries a one-line justification in `layout…notes`. Documented data caveats bind design — a series without a calendar spine must not render as an interpolating line; clipped window edges are annotated; small-cell sensitivity is noted in the trust element. Titles and labels come from human-doc semantics where docs exist. Write the design into the artifact's `layout` section (formats §4.7) **before** any publish call — the design record precedes the delivery it describes (RA-3), and the RA-4 `trust_element` is part of it.
+2. **Deliver (CP-R7 [E]).** `publish_report(mode: "deliver_model")` — call #1. Server gates are enforced (MCP §6.8); the result returns the delivered table schemas.
+3. **Author.** Generate the deployed definition (PBIR) with the skill-local tooling (RA-5) strictly against the **returned** `delivered.tables[].columns` names and types — never against guessed field names; a schema mismatch regenerates from the returned schema, and a persistent mismatch is a K-FAIL flag, not a guess (report-authoring §8). The RA-4 trust element renders in every authored definition.
+4. **Deploy.** Skill-local Fabric deployment: create the report on revision 1, update the same `report_id` in place thereafter (RA-8).
+5. **Verify (CP-R8 [A]).** RA-7 read-back: deployed hash equals authored hash AND every field reference resolves against the delivered schema. On mismatch: redeploy once, then fail loudly. **Never attest unverified work.**
+6. **Attest (CP-R9 [E-adjacent]).** `publish_report(mode: "attest", attestation: {report_id, definition_hash})` — call #2. The server refuses an attest without its matching delivery (report-authoring AT-5), so a skipped delivery or a stale revision cannot be attested; the skill's own duty is to attest **only after** step 5 passed.
+7. **Hand off.** Relay the returned workspace report URL. `pending_human_steps` is empty or `["open the report"]` — anything more is a defect to surface, not a step to relay as normal (D-91.1).
+
+Failure exits ride the report-authoring §8 table; SK-7's bounded-repair rule applies per stage (at most 2 repair attempts, then flag and stop).
 
 ## 6. `enrich` skill
 
@@ -143,6 +155,13 @@ Each skill ships scripted scenarios executed against a fixture deployment (fixtu
 | AS-15 | profile compilation: a compiled profile yields a Claude Code setup whose MCP config, skills bundle, and CLAUDE.md fragment match the profile's `tools.allow`, `skills`, and `context` — and **widening the compiled client config does not widen access** when replayed against the server | platform-architecture §5, M-3 |
 
 AS-15's second clause is the one that matters: compiled configs are conveniences, and the scenario must demonstrate the enforcement boundary rather than assume it — a hand-edited config granting a tool the profile withholds still gets denied server-side.
+
+**Additions with S8 (amendment, report-authoring spec §12.4 / D-91, 2026-07-29; additive only).**
+
+| # | Scenario | Verifies |
+|---|---|---|
+| AS-16 | report/S8: fixture end-to-end — audit shows `publish_report` `deliver_model` then `attest` for the same artifact and revision, in that order, with the attested `definition_hash` matching the artifact's `layout.pbir_hash`; the terminal `pending_human_steps` is empty or `["open the report"]` | S8, report-authoring AT-9, D-91.1 |
+| AS-17 | report/S8: authored definition references a field absent from the delivered schema → verify fails and **no attest call appears in audit** | CP-R8, report-authoring AT-4 |
 
 ## 10. Amendments to other specs (additive)
 

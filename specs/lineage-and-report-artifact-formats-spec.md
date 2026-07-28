@@ -145,6 +145,8 @@ Every `ref` must resolve at publish (MT-10). `trust_notes` carries the K-TRUST d
 
 The visual registry is deliberately small and additive (F-8). Adapters map each kind to their platform's nearest equivalent and must record substitutions in the publish result's `detail` — fidelity is honest, not assumed. Layout is a hint (`layout: {order, sections}` optional field), never pixel geometry.
 
+**Amendment (report-authoring spec §12.2 / D-91, 2026-07-29):** for `create_report: api` targets the registry is advisory design guidance, applied through the artifact's `layout` section (§4.7) — see FM-2's disposition there. `visuals[]` itself remains registry-bound, and the registry remains enforced verbatim for `full`/`template_link` targets. For api-class targets the `layout` section (§4.7) **supersedes** the hint form above: when `layout` carries the §4.7 shape, it is the design record, not a hint.
+
 ### 4.5 `blend` — cross-source reports
 
 ```json
@@ -159,6 +161,32 @@ Present only when queries span systems. `entity_ref` is mandatory per key: blend
 ### 4.6 Persistence, idempotency, lineage effects
 
 At `publish_report`, the server: (1) validates the artifact (schema, MT-10 ref resolution, F-7 re-validation of each query); (2) persists `{id, revision, body, content_hash}` to ops Postgres — same `id` + unchanged `content_hash` short-circuits to the existing publish result; (3) enqueues the publish job; (4) on success, writes F-4 nodes (`datasource`, `report`) and gateway-tier edges from each `queries[].backing` ref (or the underlying objects for `direct`) to the new nodes, into the next graph regeneration's input set. Republish of a known `id` with a new `content_hash` increments `revision` and updates (PB-2), never duplicates.
+
+### 4.7 `layout` — the authored design record (additive amendment, report-authoring spec §12.2 / D-91, 2026-07-29)
+
+Optional section; **required by api-class publish targets at `deliver_model` time** (report-authoring spec §4 stage 4 writes it before the first `publish_report` call). It is the durable record of the AI-designed visual plane (RA-3): the design is decided in the session, recorded here, and only then delivered and attested — creativity in the design, determinism in the record.
+
+```json
+"layout": {
+  "designed_by": "report-skill@<version>",
+  "pages": [ { "name": "Overview",
+    "visuals": [ { "kind": "bar", "registry_kind": "bar",
+      "table": "weekly_signups", "x": "week_start", "y": "new_users",
+      "title": "Weekly new signups (trailing 90 days)",
+      "notes": "bars not line: no calendar spine in backing view" } ] } ],
+  "trust_element": { "page": "Overview", "placement": "footer",
+                     "content_from": "trust_notes" },
+  "pbir_hash": "sha256:…"
+}
+```
+
+Rules (closed schema — unknown keys rejected; versioned with `artifact_version`, additive-only per F-8). A `layout` carrying this shape (discriminated by `pages`/`designed_by`/`trust_element`) is validated against it; the legacy §4.4 hint form (`{order, sections}`) remains accepted, unvalidated, for non-api targets only.
+
+- `pages` is a non-empty array; each page has a unique `name` and a non-empty `visuals` array. `designed_by` records the deciding skill and version.
+- `visuals[].table` must name an artifact query (`queries[].name`) — the delivered model's tables are named per result-set alias (report-authoring §5), so a layout referencing a table the artifact does not deliver is structurally invalid. Encoding members (`x`, `y`, `series`, `values`, `columns`) name columns of that result set; column-level resolution against the *delivered* schema is the session-side verify step (report-authoring RA-7), not a server gate — the server cannot know result columns before execution.
+- `visuals[].kind` is the target-native visual type. For api-class targets the §4.4 five-kind registry is **advisory** (FM-2 disposition): when `kind` maps to a registry kind, `registry_kind` names it; when it does not, `registry_kind` is omitted and `notes` MUST carry the one-line justification (report-authoring §6.1).
+- `trust_element` is **required** (RA-4; report-authoring AT-3): `page` must name a layout page, `content_from` must be exactly `"trust_notes"` — the disclosures render verbatim from the artifact's own `semantics.trust_notes`, as a visible element of the report itself, with the artifact id and generated date.
+- `pbir_hash` is the sha256 of the authored deployed definition, set at authoring (report-authoring §4 stage 6) and checked against the read-back at stage 8. **It is excluded from the §4.1 `content_hash` computation** exactly as `revision`/`content_hash` themselves are: it is bookkeeping of a later pipeline stage, and hashing it would mint a phantom revision between `deliver_model` and `attest`, orphaning the delivery the attestation must match (report-authoring §7). The attestation record (MCP §6.8) is the authoritative deployed-definition hash; `layout.pbir_hash` is the artifact-side copy.
 
 ## 5. Conformance tests
 
@@ -187,7 +215,7 @@ At `publish_report`, the server: (1) validates the artifact (schema, MT-10 ref r
 | # | Item | Provisional default | Revisit when |
 |---|---|---|---|
 | FM-1 | Column-level contamination (walk narrowed to affected columns via `columns` mappings, not whole nodes) | Node-level flagging in v1; column mappings served as context in the flag detail | If pilot shows node-level flags are too noisy on wide models |
-| FM-2 | Visual registry growth (maps, gauges, conditional formatting) | Five kinds in v1; additions via this register, adapter support declared per flag docs | First customer report the registry cannot express |
+| FM-2 | Visual registry growth (maps, gauges, conditional formatting) | Five kinds in v1; additions via this register, adapter support declared per flag docs. **Disposition for api-class targets (D-91 / report-authoring §12.2, 2026-07-29):** the registry is advisory design guidance applied through `layout` (§4.7) — target-native kinds are permitted with a recorded one-line justification; registry enforcement is unchanged for `full`/`template_link` targets and for `visuals[]` | First customer report the registry cannot express *on a registry-enforced target* |
 | FM-3 | Artifact retention in ops Postgres | Keep all revisions of published artifacts (they are audit evidence); prune drafts never persisted | Storage telemetry |
 | FM-4 | Parameterized artifacts (runtime-bound filters beyond defaults) | Defaults only in v1; parameterization pairs with skill-spec SP-4 (saved re-runs) | Recurring-report demand in pilot |
 | FM-5 | Cross-system lineage edges from blend usage (gsc.page ↔ ga4.pagePath as graph edges vs entity-doc-only knowledge) | Entity-doc-only in v1 (cross-system relations are human knowledge, snapshot §4.4 rationale); blend publishes create edges to the report node from *each* side, which captures the dependency without asserting source-to-source flow | If reconciliation questions need source-to-source cross-system edges |

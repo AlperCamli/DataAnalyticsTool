@@ -160,7 +160,7 @@ Invariants: **UP-1** — literals are stripped at the source side of the boundar
 
 | Flag | Values | Meaning |
 |---|---|---|
-| `create_report` | `full` \| `template_link` \| `none` | Terminal state of journey J3 (HLR §8 P5) |
+| `create_report` | `full` \| `template_link` \| `api` \| `none` | Terminal state of journey J3 (HLR §8 P5). `api` (amendment, report-authoring spec §12.1 / D-91, 2026-07-29): the report is created programmatically through the two-call `publish_report` mode contract (MCP §6.8) — the adapter delivers the data model (`deliver_model`), the session's report skill authors and deploys the visual definition, and the verified deployment is attested (`attest`) |
 | `create_dataset` | `yes` \| `no` | Can the adapter create/point data sources |
 | `sql_backing` | `native` \| `views` \| `none` | How agent SQL becomes a data source (`views` = reporting-views pattern) |
 | `cross_source` | `native` \| `blending` \| `none` | Cross-system reports; `blending` requires entity blend keys documented (KB spec §7 entity template) |
@@ -168,6 +168,8 @@ Invariants: **UP-1** — literals are stripped at the source side of the boundar
 | `git_integration` | `yes` \| `no` | Report definitions can live in git pre-publish (PBIP/TMDL, LookML) |
 
 Reference declarations — Looker Studio: `{create_report: template_link, create_dataset: no, sql_backing: views, cross_source: blending, scheduled_refresh: no, git_integration: no}`. Power BI: `{create_report: full, create_dataset: yes, sql_backing: native, cross_source: native, scheduled_refresh: tenant, git_integration: yes}`.
+
+**Amendment (report-authoring spec §12.1 / D-91, 2026-07-29) — the shipped Power BI declaration.** The Power BI adapter that ships under the report-authoring spec is the **push+PBIR leg** (RA-5/RA-6) and declares `{create_report: api, create_dataset: yes, sql_backing: views, cross_source: native, scheduled_refresh: no, git_integration: no}` — `cross_source: native` because documented blend keys become real semantic-model relationships (D-91.1's cross-source criterion); `sql_backing: views` because the delivered rows are the artifact's reporting-view-backed, gateway-executed results (RA-2); `scheduled_refresh: no` per RA-E (manual/skill-triggered revisions only in v1). The pre-existing Power BI declaration above describes the eventual full native connector (DirectQuery-class) and remains the reference point for the RA-6 escalation, not the shipped adapter.
 
 **Effective capabilities** (CI-5): stored per *connection* as manifest flags refined by the last `test_connection` probe (e.g. Power BI probe downgrades `scheduled_refresh` on Pro-only tenants). The MCP server serves effective flags to the `report` skill so expectations are set at journey start, not at failure (HLR §8 P5 ruling).
 
@@ -187,6 +189,18 @@ Reference declarations — Looker Studio: `{create_report: template_link, create
 **Invariants: PB-1** — `mode` must be consistent with effective flags; an adapter must not attempt `full` when its effective `create_report` is `template_link` (fail `config_error` instead — this is a core bug, not a runtime surprise). **PB-2** — every created object is returned with a stable id + URL; publishes are idempotent per `(artifact.id, target)`: re-publish updates rather than duplicates where the platform allows, else returns `capability_code: already_published` with the existing URL. **PB-3** — `pending_human_steps` is mandatory whenever `mode ≠ full`; the skill relays it verbatim. **PB-4** — adapters record any visual-kind substitutions (formats spec §4.4) in `PublishResult.detail.visual_substitutions`.
 
 **Capability codes:** `target_not_permitted`, `tenant_capability_missing`, `already_published`, `artifact_version_unsupported`.
+
+**Amendment (report-authoring spec §12.1 / D-91, 2026-07-29) — the `deliver_model`/`attest` contract for `create_report: api` adapters.** For api-class targets, `publish_report` is a two-call contract (MCP §6.8; report-authoring spec §4/§7), and the §8.2 payload/result gain additive members:
+
+- Payload gains `mode`: `"deliver_model" | "attest"`. An api adapter receiving no `mode` (or a non-api adapter receiving one) fails `config_error` — a core/registration bug in PB-1's sense, not a runtime surprise.
+- `deliver_model` payload additionally carries `results`: an object mapping each artifact query `name` to its capability §6 execute result — **gateway-executed** under the caller's identity and profile guardrails (report-authoring RA-2: this member is the only thing that may feed a model). A result with `truncated: true` is refused by the core before enqueue — a capped result must never quietly become "the model" (CI-7). The payload may carry `previous`: the prior successful delivery's `results`, which the adapter uses to restore already-replaced tables when a mid-delivery failure would otherwise leave the model half-new (§5 complete-or-previous).
+- `attest` payload additionally carries `attestation`: `{report_id, definition_hash}` — the skill-deployed report id and the sha256 of the verified deployed definition (report-authoring RA-7).
+- `deliver_model` result: `{mode: "deliver_model", created: [{type: "dataset", id, url}], delivered: {workspace_id, dataset_id, tables: [{name, columns: [{name, type, source_type}], rows_delivered}]}, pending_human_steps: [], backing: […]}` — `delivered.tables[].columns` is the schema **as delivered** (`type` the target-side column type, `source_type` the §6 result's source-native name); the authoring skill generates field references against these names, never against guesses.
+- `attest` result: `{mode: "attest", created: [{type: "report", id: <report_id>, url: <workspace report URL>}], pending_human_steps: [], backing: [], detail: {…}}`.
+- **PB-2 for api adapters:** idempotency is identity-stability, not result-reuse — one dataset per `artifact.id` (named `cl-<artifact-id-short>`), created once and updated in place; a repeat `deliver_model` at an unchanged content hash is the data-only-revision case (report-authoring RA-8) and re-executes/re-pushes rows under the same revision and ids rather than short-circuiting to a stored result. Re-attesting the same `{artifact_id, revision}` updates the same attestation record.
+- **PB-3 for api adapters:** `pending_human_steps` remains mandatory in shape but is expected empty — the remainder of the journey belongs to the authoring session, not a human; the terminal `attest` result carries `[]` or `["open the report"]` alone (ruling D-91.1's zero-manual-wiring measure). Anything more is a defect surfaced, not a step relayed as normal.
+
+Capability codes gain `push_limit_exceeded` (a push-model table/row/rate cap would be exceeded — the error names the limit, the measured value, and the RA-6 Fabric/DirectLake escalation path; never a silent truncation) and `delivery_state_inconsistent` (a mid-delivery failure was followed by a failed restore, so the model may be half-new — the error names the tables in each state; loud by design, because when a double fault defeats complete-or-previous the state must be *reported*, never papered over).
 
 ## 9. KnowledgeProvider — job type `harvest`
 
