@@ -94,6 +94,12 @@ REFERENCES: dict[str, dict[str, str]] = {
         "url": "https://learn.microsoft.com/en-us/rest/api/power-bi/groups/get-groups",
         "retrieved": "2026-07-29",
     },
+    "users-refresh-permissions": {
+        # A fresh workspace grant takes ~2 minutes to reach the API
+        # surface; this call forces the refresh (max 1/user/hour).
+        "url": "https://learn.microsoft.com/en-us/rest/api/power-bi/users/refresh-user-permissions",
+        "retrieved": "2026-07-29",
+    },
     "reports-get-in-group": {
         # Documents the report `webUrl` form served back at attest.
         "url": "https://learn.microsoft.com/en-us/rest/api/power-bi/reports/get-report-in-group",
@@ -161,6 +167,11 @@ ENDPOINTS: dict[str, dict[str, str]] = {
         "method": "GET",
         "template": PBI_API_BASE + "/groups",
         "ref": "groups-get-groups",
+    },
+    "users.refresh_permissions": {
+        "method": "POST",
+        "template": PBI_API_BASE + "/RefreshUserPermissions",
+        "ref": "users-refresh-permissions",
     },
     "datasets.list_in_group": {
         "method": "GET",

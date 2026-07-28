@@ -78,7 +78,10 @@ def test_happy_path_loads(tmp_path):
 
 
 class FakeMicrosoft:
-    """Scriptable transport; asserts every URL it sees is pinned."""
+    """Scriptable transport; asserts every URL it sees is pinned.
+
+    `groups` may be a list (served every time) or a list of lists
+    (served per successive groups.list call — models propagation)."""
 
     def __init__(self, *, token_status=200, groups=None, groups_status=200,
                  datasets_status=200, fabric_status=200, aadsts=""):
@@ -89,6 +92,7 @@ class FakeMicrosoft:
         self.fabric_status = fabric_status
         self.aadsts = aadsts
         self.calls = []
+        self.groups_served = 0
 
     def __call__(self, method, url, headers=None, form_data=None, timeout_s=30):
         name = ref.pinned_request(method, url)  # unpinned URL would raise here
@@ -98,12 +102,22 @@ class FakeMicrosoft:
                 return 200, {"access_token": "tok", "expires_in": 3599}
             return self.token_status, {"error_description": self.aadsts}
         if name == "groups.list":
-            return self.groups_status, {"value": self.groups}
+            batch = self.groups
+            if batch and isinstance(batch[0], list):
+                batch = batch[min(self.groups_served, len(batch) - 1)]
+            self.groups_served += 1
+            return self.groups_status, {"value": batch}
+        if name == "users.refresh_permissions":
+            return 200, None
         if name == "datasets.list_in_group":
             return self.datasets_status, {"value": []}
         if name == "fabric.list_reports":
             return self.fabric_status, {"value": []}
         raise AssertionError(f"preflight called an unexpected endpoint {name}")
+
+
+def no_sleep(_seconds):
+    pass
 
 
 def by_name(checks):
@@ -112,7 +126,7 @@ def by_name(checks):
 
 def test_all_green(tmp_path):
     fake = FakeMicrosoft()
-    checks = by_name(run_preflight(env(tmp_path), fake))
+    checks = by_name(run_preflight(env(tmp_path), fake, sleeper=no_sleep))
     assert all(check.ok for check in checks.values()), checks
     assert set(checks) == {
         "token:powerbi", "token:fabric", "workspace-membership", "push-api", "fabric-api",
@@ -127,7 +141,7 @@ def test_bad_secret_fails_with_aadsts_hint_and_blocks_dependents(tmp_path):
         token_status=401,
         aadsts="AADSTS7000215: Invalid client secret provided.",
     )
-    checks = by_name(run_preflight(env(tmp_path), fake))
+    checks = by_name(run_preflight(env(tmp_path), fake, sleeper=no_sleep))
     assert not checks["token:powerbi"].ok
     assert "POWERBI_CLIENT_SECRET is wrong or expired" in checks["token:powerbi"].message
     assert not checks["workspace-membership"].ok
@@ -136,14 +150,30 @@ def test_bad_secret_fails_with_aadsts_hint_and_blocks_dependents(tmp_path):
 
 def test_sp_not_workspace_member_names_the_fix(tmp_path):
     fake = FakeMicrosoft(groups=[{"id": "3d9b93c6-7b6d-4801-a491-1738910904fd"}])
-    checks = by_name(run_preflight(env(tmp_path), fake))
+    checks = by_name(run_preflight(env(tmp_path), fake, sleeper=no_sleep))
     assert not checks["workspace-membership"].ok
     assert "MEMBER" in checks["workspace-membership"].message
+    assert "after a permissions refresh" in checks["workspace-membership"].message
+    # The heal path ran: refresh was attempted, groups listed twice.
+    assert [c[0] for c in fake.calls].count("users.refresh_permissions") == 1
+    assert fake.groups_served == 2
+
+
+def test_propagation_lag_heals_via_refresh_and_recheck(tmp_path):
+    # First groups listing is empty (fresh grant not yet propagated);
+    # after RefreshUserPermissions + the wait, the workspace appears.
+    waits = []
+    fake = FakeMicrosoft(groups=[[], [{"id": WORKSPACE}]])
+    checks = by_name(run_preflight(env(tmp_path), fake, sleeper=waits.append))
+    assert checks["workspace-membership"].ok
+    assert checks["push-api"].ok
+    assert waits == [120]
+    assert [c[0] for c in fake.calls].count("users.refresh_permissions") == 1
 
 
 def test_tenant_setting_refusal_names_the_setting(tmp_path):
     fake = FakeMicrosoft(groups_status=401)
-    checks = by_name(run_preflight(env(tmp_path), fake))
+    checks = by_name(run_preflight(env(tmp_path), fake, sleeper=no_sleep))
     assert not checks["workspace-membership"].ok
     assert "Allow service principals to use Power BI APIs" in checks["workspace-membership"].message
     assert not checks["push-api"].ok
@@ -151,7 +181,7 @@ def test_tenant_setting_refusal_names_the_setting(tmp_path):
 
 def test_fabric_refusal_names_setting_and_licensing(tmp_path):
     fake = FakeMicrosoft(fabric_status=403)
-    checks = by_name(run_preflight(env(tmp_path), fake))
+    checks = by_name(run_preflight(env(tmp_path), fake, sleeper=no_sleep))
     assert not checks["fabric-api"].ok
     assert "Fabric" in checks["fabric-api"].message
     assert "licens" in checks["fabric-api"].message
@@ -166,7 +196,7 @@ def test_no_secret_material_in_any_message(tmp_path):
         FakeMicrosoft(groups_status=403),
         FakeMicrosoft(fabric_status=500),
     ):
-        for check in run_preflight(env(tmp_path), fake):
+        for check in run_preflight(env(tmp_path), fake, sleeper=no_sleep):
             assert SECRET not in check.message
 
 

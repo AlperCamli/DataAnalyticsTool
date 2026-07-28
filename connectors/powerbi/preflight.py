@@ -96,11 +96,29 @@ def _get(url_name: str, token: str, transport: Transport, **params: str) -> tupl
     return transport(method, url, headers={"Authorization": f"Bearer {token}"})
 
 
-def run_preflight(env: PowerBIEnv, transport: Transport | None = None) -> list[Check]:
+#: A fresh workspace grant takes ~2 minutes to reach the API surface
+#: (ref: users-refresh-permissions). On a membership miss, preflight
+#: forces the refresh and re-checks once after this wait.
+_PROPAGATION_WAIT_S = 120
+
+
+def _visible_workspaces(token: str, transport: Transport) -> tuple[int, set[str]]:
+    status, body = _get("groups.list", token, transport)
+    ids = {str(g.get("id", "")).lower() for g in (body or {}).get("value", [])}
+    return status, ids
+
+
+def run_preflight(env: PowerBIEnv, transport: Transport | None = None,
+                  sleeper: Callable[[float], None] | None = None) -> list[Check]:
     """The five network checks (tokens, membership, push API, Fabric
     API). Env-file validation happens before this in `main` — a caller
-    holding a PowerBIEnv already passed it."""
+    holding a PowerBIEnv already passed it. `sleeper` is injectable so
+    tests skip the real propagation wait."""
     transport = transport or _requests_transport
+    if sleeper is None:
+        import time
+
+        sleeper = time.sleep
     checks: list[Check] = []
 
     pbi_token, message = _acquire_token(env, ref.PBI_SCOPE, transport)
@@ -114,7 +132,7 @@ def run_preflight(env: PowerBIEnv, transport: Transport | None = None) -> list[C
         checks.append(Check("workspace-membership", False, skip))
         checks.append(Check("push-api", False, skip))
     else:
-        status, body = _get("groups.list", pbi_token, transport)
+        status, ids = _visible_workspaces(pbi_token, transport)
         if status != 200:
             checks.append(Check("workspace-membership", False, (
                 f"GET /groups returned HTTP {status} — if 401/403, enable the tenant "
@@ -124,13 +142,28 @@ def run_preflight(env: PowerBIEnv, transport: Transport | None = None) -> list[C
             )))
             checks.append(Check("push-api", False, "blocked: workspace listing failed"))
         else:
-            ids = {str(g.get("id", "")).lower() for g in (body or {}).get("value", [])}
             member = env.workspace_id.lower() in ids
+            refreshed = ""
+            if not member:
+                # The documented propagation lag: force the refresh
+                # (best-effort — 429 means one already ran this hour),
+                # wait the documented ~2 minutes, re-check once.
+                refresh_status, _ = _get("users.refresh_permissions", pbi_token, transport)
+                print(
+                    f"      workspace not visible yet — RefreshUserPermissions "
+                    f"(HTTP {refresh_status}); waiting {_PROPAGATION_WAIT_S}s for "
+                    "propagation, then re-checking once…"
+                )
+                sleeper(_PROPAGATION_WAIT_S)
+                status, ids = _visible_workspaces(pbi_token, transport)
+                member = status == 200 and env.workspace_id.lower() in ids
+                refreshed = " (after a permissions refresh + re-check)"
             checks.append(Check("workspace-membership", member, (
                 "service principal is a member of the target workspace" if member else
                 f"workspace {env.workspace_id} is not among the {len(ids)} workspace(s) the SP "
-                "can see — add the SP (or its security group) as a MEMBER of the workspace "
-                "(workspace → Manage access), re-check POWERBI_WORKSPACE_ID, then re-run."
+                f"can see{refreshed} — add the SP (or its security group) as a MEMBER of the "
+                "workspace (workspace → Manage access), re-check POWERBI_WORKSPACE_ID, then "
+                "re-run."
             )))
             status, _ = _get("datasets.list_in_group", pbi_token, transport,
                              groupId=env.workspace_id)
