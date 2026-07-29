@@ -326,8 +326,11 @@ def build_parts(artifact: dict, delivered: dict, generated_date: str) -> dict[st
                     "width": round(cell_w - 16, 2),
                     "height": round(cell_h - 16, 2),
                 },
+                # NB: the nested visual object is the EMBEDDED
+                # visualConfiguration (schema-embedded.json) — it
+                # rejects a $schema member; live-verified 2026-07-29
+                # (Report_Import_FailedToImportReport names it).
                 "visual": {
-                    "$schema": SCHEMAS["visualConfiguration"],
                     "visualType": visual_type,
                     "query": {"queryState": query_state},
                     "drillFilterOtherVisuals": True,
@@ -356,7 +359,6 @@ def build_parts(artifact: dict, delivered: dict, generated_date: str) -> dict[st
                     "height": TRUST_HEIGHT,
                 },
                 "visual": {
-                    "$schema": SCHEMAS["visualConfiguration"],
                     "visualType": "textbox",
                     "objects": {
                         "general": [{
@@ -505,7 +507,8 @@ def _fabric(name: str, token: str, *, params: dict[str, str], body: dict | None 
                 *(_endpoint("fabric.operation_state", operationId=operation)),
                 {"Authorization": f"Bearer {token}"}, None,
             )
-            state = str(_parse(raw).get("status", ""))
+            parsed_state = _parse(raw)
+            state = str(parsed_state.get("status", ""))
             if state == "Succeeded":
                 status, _, raw = _http(
                     *(_endpoint("fabric.operation_result", operationId=operation)),
@@ -513,7 +516,11 @@ def _fabric(name: str, token: str, *, params: dict[str, str], body: dict | None 
                 )
                 return _parse(raw)
             if state == "Failed" or waited > 600:
-                fail(f"{name}: Fabric operation {operation} {state or 'timed out'}")
+                error = parsed_state.get("error")
+                fail(
+                    f"{name}: Fabric operation {operation} {state or 'timed out'}"
+                    + (f" — {json.dumps(error)}" if error else "")
+                )
     if status not in expect:
         code = str(_parse(raw).get("errorCode", ""))
         fail(f"{name} failed (HTTP {status}{f' {code}' if code else ''})")
@@ -594,6 +601,29 @@ def cmd_verify(args) -> int:
     for path in sorted(parts):
         if path not in deployed:
             problems.append(f"authored part {path} is absent from the deployed definition")
+        elif path == "definition.pbir":
+            # Live-verified 2026-07-29: the service EXPANDS the deployed
+            # connection string ('semanticmodelid=<id>' comes back as the
+            # full 'Data Source="powerbi://…";initial catalog=…;
+            # semanticmodelid=<id>' form). The fact RA-7 must hold is the
+            # BINDING: the deployed report points at the same semantic
+            # model we authored against; the rest of the part must still
+            # match structurally.
+            authored_id = _semantic_model_id(parts[path])
+            deployed_id = _semantic_model_id(deployed[path])
+            if authored_id is None or deployed_id != authored_id:
+                problems.append(
+                    f"definition.pbir binds semantic model {deployed_id!r}, "
+                    f"authored {authored_id!r}"
+                )
+            elif canonical(_without_connection(deployed[path])) != canonical(
+                _without_connection(parts[path])
+            ):
+                problems.append("definition.pbir differs beyond the connection string")
+            else:
+                # Normalized-equal: hash over the authored form so the
+                # definition_hash equality below means what it says.
+                deployed[path] = parts[path]
         elif canonical(deployed[path]) != canonical(parts[path]):
             problems.append(f"deployed part {path} differs from the authored part")
 
@@ -633,6 +663,26 @@ def cmd_attest_payload(args) -> int:
         "definition_hash": parts_hash(parts),
     }))
     return 0
+
+
+def _semantic_model_id(content: dict) -> str | None:
+    connection = (
+        ((content.get("datasetReference") or {}).get("byConnection") or {})
+        .get("connectionString", "")
+    )
+    for piece in str(connection).split(";"):
+        key, _, value = piece.partition("=")
+        if key.strip().lower() == "semanticmodelid":
+            return value.strip().strip('"').lower() or None
+    return None
+
+
+def _without_connection(content: dict) -> dict:
+    clone = json.loads(json.dumps(content))
+    by_connection = (clone.get("datasetReference") or {}).get("byConnection")
+    if isinstance(by_connection, dict):
+        by_connection.pop("connectionString", None)
+    return clone
 
 
 def _read_json(path: str) -> dict:

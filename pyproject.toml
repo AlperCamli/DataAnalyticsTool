@@ -69,4 +69,5 @@ markers = [
     "ga4_live: live GA4 pull against the customer property; skipped unless CTXLAYER_GA4_LIVE is set (needs CTXLAYER_GA4_PROPERTY_ID + GOOGLE_APPLICATION_CREDENTIALS)",
     "gsc_live: live Search Console pull against the customer property; skipped unless CTXLAYER_GSC_LIVE is set (needs CTXLAYER_GSC_SITE_URL + GOOGLE_APPLICATION_CREDENTIALS)",
     "postgres_live: live governed execution against the customer database under the dedicated read-only execution role (G3); skipped unless CTXLAYER_PG_EXEC_LIVE is set (needs CTXLAYER_PG_EXEC_DSN)",
+    "powerbi_live: live Power BI push+PBIR delivery to the configured workspace (CP-7 step 8); skipped unless CTXLAYER_POWERBI_LIVE is set (needs CTXLAYER_PG_EXEC_DSN + .secrets/powerbi.env)",
 ]
