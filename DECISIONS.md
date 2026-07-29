@@ -3460,3 +3460,62 @@ RULING D-93 — demo interruption disposition
 3. Act 1 re-runs in a fresh session; CP-R4 answered when asked. Remaining
    prerequisites unchanged: entities/page.md certification before Act 2;
    GA4 query wiring confirmed.
+
+   CORRECTION NOTE (D-94.2, 2026-07-29) to D-93.1 — history kept, wording
+   amended. "Ungranted api-class target refused SERVER-SIDE" overstates
+   what the July 29 window holds. The refusal was AGENT-SIDE, taken from
+   the compiled bundle's allow-set; the audit chain for that window
+   contains no publish_report call at all, so server-side enforcement is
+   unproven THERE (it is separately evidenced by execute_sql denials of
+   2026-07-20 and 2026-07-27, which are not this run). The transcript
+   stays committed; what it demonstrates is re-titled: an honest
+   agent-side ceiling, a gap filed and routed, CP-R4 held, and the spine
+   design rule generalised unprompted to a novel dataset. The other three
+   demonstrations in D-93.1 are unaffected.
+
+   CORRECTION NOTE (D-94.3, 2026-07-29) to D-93.2 — the "no machine-2
+   recompile" conclusion is WRONG and is corrected: recompile the setup
+   bundle and re-copy it to machine 2 after any profile change. The
+   premise stands — the server allow-set is authoritative per call and no
+   client file can widen it — but the bundle's CLAUDE.md tool list is
+   what the session reads as its permissions, so a stale bundle NARROWS
+   what the session will attempt. That is what ended the July 29 run. A
+   register item is filed against the setup-export design (see D-94.3).
+
+RULING D-94 — prep-report flag dispositions + demo readiness
+(owner ruling, 2026-07-29; recorded verbatim)
+
+1. FLAG ① — RA-F CONFIRMED as filed (letters = open decisions, per the
+   spec's own convention); D-92.2's dated trigger rides it. The two
+   remaining §12.5 items are AUTHORIZED for filing now: GA4/GSC refresh
+   cadence under api-class targets (home: sync-policy register) and
+   report lifecycle/teardown (home: authoring spec §13). Additive only.
+2. FLAG ② — ACCEPTED. D-93.1's wording is amended: the July 29 refusal
+   was AGENT-SIDE from the compiled allow-set; no publish_report call
+   exists in that window; server-side enforcement is unproven there.
+   The transcript stays committed; its README re-titles what it shows:
+   honest agent-side ceiling, gap filed and routed, CP-R4 held, spine
+   rule generalized to a novel dataset.
+3. FLAG ③ — ACCEPTED. D-93.2's "no recompile" conclusion is corrected:
+   recompile and re-copy the bundle after any profile change; the
+   premise (server allow-set authoritative per call) stands. REGISTER
+   ITEM filed (home: the setup-export item, platform-architecture §5):
+   compiled-bundle staleness — the bundle's tool list acts as de facto
+   client-side permissions; compile-on-profile-change or a staleness
+   warning belongs in the setup-export design. Evidence: July 29.
+4. FLAG ④ — ACCEPTED. Act 3a passes in EITHER shape: agent-side refusal
+   citing the profile ceiling, or a server denied audit row. Coaching
+   forbidden. The runbook may include an optional operator-run direct
+   probe producing a genuine server denial as supplementary evidence.
+   AUTHORIZED CODE CHANGE (one line + read-back test):
+   CORE_MCP_PUBLISH_PER_HOUR passthrough in docker-compose.yml; runbook
+   4.3 simplified accordingly.
+5. CERTIFICATION DELEGATION (OB-2 pattern): the session gathers the
+   entities/page.md evidence pack and DRAFTS the certification PR; the
+   certification judgment and both merges remain the operator's. If the
+   evidence fails the doc's stated normalization rule, that is a
+   finding — no flip.
+6. The publish_report:powerbi KB PR: session AUTHORS it, body carrying
+   the FULL 36-char trailer CL-Resolves:
+   6473a5f1-f4f7-4dfd-b702-a15ba760ce14; operator merges as R2; session
+   verifies propagation and resolved_by: pr via the 5-minute sweep.

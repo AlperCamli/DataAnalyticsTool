@@ -30,6 +30,15 @@ registered at all (new step 4.4b), the setup bundle has to be rebuilt
 (4.7), and Act 3a's refusal can legitimately arrive without an audit row
 (8a). Each is written up where you hit it.
 
+**Then the ruling on that prep report (D-94) changed three of them
+again.** The budget override is a normal command-line variable now — the
+missing passthrough was fixed in `docker-compose.yml` rather than worked
+around (4.3). Act 3a has an explicit two-shape pass criterion, a
+coaching ban, and an optional direct probe you can run yourself for a
+server-side denial (8a). And 4.7's recompile is no longer a demo
+footnote: it is a filed product gap (PA-2), because a stale bundle acts
+as client-side permissions.
+
 ---
 
 ## 1. What this demo proves
@@ -98,7 +107,7 @@ Verified on machine 1 on **July 29** unless the row says otherwise.
 | Test suites | done — python 721 passed / 14 skipped; core 185 passed across two consecutive full runs |
 | Power BI connection registered on the stack (step 4.4) | done — registered July 29 with the `publish.flags` block and a credential *reference*, no secret in the row |
 | Platform stack rebuilt with the Power BI leg (step 4.1) | **do during prep** |
-| Publish budget raised for the demo window (step 4.3) | **do during prep — and it is not the command line you would expect.** See the warning in 4.3: the override has to go in `.secrets/sync.env`, because the shell prefix never reaches the container |
+| Publish budget raised for the demo window (step 4.3) | **do during prep.** `CORE_MCP_PUBLISH_PER_HOUR=12` in front of `docker compose up`, then read it back off the container — the passthrough that makes the shell prefix work landed July 29 (D-94.4) |
 | GA4 + Search Console registered on the stack for the gateway (step 4.4b) | **do during prep — new step, and Act 2 cannot run without it.** The two systems have working credentials but *no connection row*, so a Power BI delivery of their data fails with `system ga4 has no connection registered` |
 | Reporter profile allows Power BI publishing | **YOURS — a KB pull request** adding `publish_report:powerbi` to `.contextlayer/profiles/reporter.yaml` must be merged before Act 1, same review path as every KB change. **Not yet open** — it still has to be written. Put `CL-Resolves: 6473a5f1-f4f7-4dfd-b702-a15ba760ce14` in the PR body (see 3.1) |
 | Reporter bundle rebuilt after that merge (steps 4.7 + 5.2) | **do after the merge, before Act 1.** The bundle's `CLAUDE.md` lists the profile's tools, and the AI treats that list as the truth about what it may do — a bundle compiled before the merge tells the session it cannot publish to Power BI. This is what stopped the July 29 attempt |
@@ -195,38 +204,46 @@ has duplicates — edit it down to one.
 
 ### 4.3 Start the stack (new images, new migration)
 
-**First, raise the publish budget — in the env file, not on the command
-line.** A Power BI report costs *two* publish calls (deliver, then
-attest), and the platform's default budget is four per hour: Act 1 plus
-one revision exhausts it and Act 2 dies waiting. The obvious fix does
-not work. `docker-compose.yml` passes only a fixed list of variables
-into the core container, and `CORE_MCP_PUBLISH_PER_HOUR` is not on it,
-so writing it in front of `docker compose up` sets it for your shell and
-never reaches the server. Put it in the env file the core already reads:
+**Raise the publish budget on the command line, with everything else.**
+A Power BI report costs *two* publish calls (deliver, then attest), and
+the platform's default budget is four per hour: Act 1 plus one revision
+exhausts it and Act 2 dies waiting. `CORE_MCP_PUBLISH_PER_HOUR` is now a
+declared passthrough in `docker-compose.yml` (D-94.4), so the obvious
+thing works — set it in front of `up` and it reaches the server.
 
 *macOS · machine 1:*
 
 ```bash
 cd ~/Desktop/DataProject
-grep -q '^CORE_MCP_PUBLISH_PER_HOUR=' .secrets/sync.env \
-  || echo 'CORE_MCP_PUBLISH_PER_HOUR=12' >> .secrets/sync.env
 set -a; . .secrets/sync.env; set +a
 SYNC_PLATFORM_COMMIT=$(git rev-parse HEAD) CORE_MCP_ENABLED=1 \
+CORE_MCP_PUBLISH_PER_HOUR=12 \
 CL_BIND=0.0.0.0 CL_HOST_ADDR=192.168.1.4 \
   docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d
 ```
 
-Then **confirm it actually arrived** — this is the whole point of the
-detour:
+Then **confirm it actually arrived** — cheap, and it is what the July 29
+prep pass got wrong:
 
 ```bash
 docker inspect dataproject-core-1 \
   --format '{{range .Config.Env}}{{println .}}{{end}}' | grep PUBLISH_PER_HOUR
 ```
 
-Expect `CORE_MCP_PUBLISH_PER_HOUR=12`. **No output means the budget is
-still four per hour** and Act 2 will strand — fix it before going on.
-Remove the line from `.secrets/sync.env` after the demo.
+Expect `CORE_MCP_PUBLISH_PER_HOUR=12`. **No output, or `=` with nothing
+after it, means the budget is still four per hour** and Act 2 will
+strand — fix it before going on. Nothing to clean up afterwards: the
+override lives in that one shell line, and the next start without it
+returns the server to four per hour.
+
+> **If a previous run left `CORE_MCP_PUBLISH_PER_HOUR=` in
+> `.secrets/sync.env`, delete the line.** It no longer does what it did
+> on July 29, and it can do the wrong thing in both directions: the
+> `set -a; . .secrets/sync.env` above exports it into your shell, so a
+> stale `=12` there quietly pins the raised budget past the demo; and if
+> you *don't* source the file, compose's `environment:` block now wins
+> over `env_file:` and the line is ignored entirely. One place, one
+> line, on the command line.
 
 *Windows PowerShell · machine 2:* nothing to run.
 
@@ -745,20 +762,70 @@ same way.
 **Expect:** a refusal. The agent should say plainly what targets it has
 and should *not* speculate about others, because it cannot see them.
 
-**Two shapes are possible, and you should record which one you got.**
-The refusal may come from the **server**, in which case it lands in the
-audit trail as `denied` — or the agent may refuse *before calling*,
-because the bundle's `CLAUDE.md` already tells it which targets the
-profile permits, in which case there is **no audit row at all** and the
-evidence is the transcript plus (usually) a filed gap. The July 29
-attempt produced the second shape: no `publish_report` call was ever
+**Pass criterion (ruling D-94.4): the act passes in EITHER shape.**
+
+| Shape | What happens | Where the evidence is |
+|---|---|---|
+| **Agent-side** | The agent refuses *before calling*, citing the profile ceiling — the bundle's `CLAUDE.md` already lists which targets it may publish to | The transcript, plus (usually) a filed gap. **No audit row at all** |
+| **Server-side** | The agent calls anyway and the server refuses | A `denied` row in the audit trail, carried into Act 4 |
+
+Both are the rule working; they are not the same evidence, so **record
+which one you got** and the refusal message verbatim. The July 29
+attempt produced the first shape: no `publish_report` call was ever
 made, and the platform recorded a tracked gap instead.
 
-Both are the rule working; they are not the same evidence. Record the
-refusal message verbatim either way, and note whether a `denied` row
-appears in Act 4. **Do not re-prompt to force a server call** — coaxing
-the agent into a denial proves nothing about how it behaves when nobody
-is watching.
+**Coaching is forbidden.** Do not re-prompt, rephrase, or nudge the
+agent into calling the server — an agent-side refusal is a pass on its
+own terms, and a denial you had to coax proves nothing about how the
+system behaves when nobody is watching. If you re-prompt, the act is
+void, not failed.
+
+#### Optional: the direct probe (supplementary evidence only)
+
+If you want a genuine server-side denial on the record regardless of
+which shape the session took, run this **yourself on machine 1**, after
+the session's Act 3a is finished. It bypasses the agent entirely: it
+logs in as the reporter and calls `publish_report` at an ungranted
+target directly. It is *not* part of Act 3a's pass criterion and must
+never be used to "fix" an agent-side refusal.
+
+*macOS · machine 1:*
+
+```bash
+cd ~/Desktop/DataProject
+TOKEN=$(curl -s -X POST http://192.168.1.4:8180/token \
+  -d grant_type=password -d username=reporter -d password=reporter-dev-pw \
+  | .venv/bin/python -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+curl -s -X POST 'http://192.168.1.4:8100/mcp?profile=reporter' \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"publish_report","arguments":{"target":"google_sheets","artifact":{}}}}'
+```
+
+Expect an `isError` result whose text is
+
+```
+{"code":"permission_denied","message":"tool publish_report is granted only for looker_studio, powerbi, not google_sheets"}
+```
+
+— the target list is whatever the profile grants at that moment, so
+before the publish-grant merge it reads `looker_studio` alone. Dry-run
+on July 29 returned exactly that pre-merge form and wrote its `denied`
+row; the probe is known to work.
+
+Confirm the row (it is the same query Act 4 runs, narrowed):
+
+```bash
+docker compose exec -T postgres psql -U postgres -d cl_ops -c \
+  "select ts, subject, profile, tool, decision, decision_reason
+     from audit_records where tool = 'publish_report'
+     order by ts desc limit 3;"
+```
+
+The probe is a *dev-IdP* password grant — it exists because this
+deployment's identity provider is the dev one. It has no equivalent
+against a customer IdP, so do not write it into customer material.
 
 The server-side gate itself is not in question here: the same audit
 table already holds `denied` rows from earlier runs ("tool execute_sql
@@ -820,7 +887,9 @@ It writes the evidence files next to the script. Check, in
   own permissions list there will be no row, which is the expected
   second shape, not a missing result. The script's closing line counts
   denials and says "Act-3 evidence is missing" when it finds none; read
-  that against 8a before treating it as a failure.
+  that against 8a before treating it as a failure. If you ran 8a's
+  optional direct probe, its `denied` row is in here too — label it as
+  the probe, not as the session's refusal.
 - Every row under the reporter's identity, with the full statement or
   artifact pin recorded for validate/execute/publish calls.
 

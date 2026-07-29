@@ -1,8 +1,14 @@
 # Interrupted M3 gate demo — unplanned evidence (2026-07-29)
 
-Kept and committed per ruling **D-93.1**. This is not a scripted act of
-the gate demo: it is the record of a demo attempt that stopped early,
-retained because what it caught is worth more than a clean re-run.
+Kept and committed per ruling **D-93.1**, as amended by **D-94.2**. This
+is not a scripted act of the gate demo: it is the record of a demo
+attempt that stopped early, retained because what it caught is worth
+more than a clean re-run.
+
+**What this run demonstrates, as re-titled by D-94.2:** an honest
+agent-side ceiling; a capability gap filed and routed; CP-R4 held; and
+the design spine generalised, unprompted, to a novel dataset. It does
+**not** demonstrate server-side publish enforcement — see §1.
 
 **Window:** `2026-07-29T09:13:55Z` → `09:21:05Z`, reporter profile,
 machine 2 against the live stack on machine 1.
@@ -14,7 +20,8 @@ had not been merged (and, as of this writing, has not been authored).
 
 ## What it demonstrates
 
-**1. An ungranted api-class publish target did not produce a report.**
+**1. An ungranted api-class publish target did not produce a report —
+refused agent-side, from the profile ceiling the bundle declares.**
 The agent recognised it held no Power BI target and said so, rather than
 improvising a route. Read the gap description in `ledger-events.txt`
 (09:21:05) — it names the grant it has, names the flow it therefore
@@ -28,7 +35,8 @@ real and independently evidenced — the same `audit_records` table holds
 `execute_sql` denials from 2026-07-20 and 2026-07-27 ("tool execute_sql
 is granted only for supabase, not ga4") — but it is not what stopped
 *this* request. Described as "refused server-side", this run would be
-claiming evidence it does not hold.
+claiming evidence it does not hold. D-94.2 amended D-93.1's wording
+accordingly; the correction note sits under D-93 in `DECISIONS.md`.
 
 **2. `capability_gap` 6473a5f1 was filed and routed.** Kind
 `capability_gap`, `routed_to: data-team`, `occurrences: 1`,

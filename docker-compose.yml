@@ -55,6 +55,10 @@ services:
       CORE_PUBLIC_URL: http://${CL_HOST_ADDR:-localhost}:8100
       CORE_OIDC_CLIENT_ID: core
       CORE_OIDC_CLIENT_SECRET: dev-introspect-secret
+      # D-94.4: publish budget is the one MCP limit a demo/gate window
+      # legitimately raises from the shell (an api-class report costs two
+      # publish calls). Empty ⇒ the config default (4/h).
+      CORE_MCP_PUBLISH_PER_HOUR: ${CORE_MCP_PUBLISH_PER_HOUR:-}
       # CP-3b sync orchestrator — off in the plain dev stack (no KB
       # remote here). The live overlay's env file supplies SYNC_ENABLED,
       # SYNC_GIT_REMOTE, SYNC_GIT_TOKEN (fine-grained PAT, ruling D2)
