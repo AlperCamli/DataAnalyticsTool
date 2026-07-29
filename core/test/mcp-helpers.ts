@@ -89,7 +89,7 @@ skills: [report]
 tools:
   allow: [search_context, get_entity, get_table, get_metric, get_lineage,
           validate_sql, execute_sql:drill, publish_report:looker_studio,
-          report_freshness, flag_gap]
+          publish_report:powerbi, report_freshness, flag_gap]
 limits: { row_cap: 50000, timeout_s: 60 }
 `;
 

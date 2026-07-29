@@ -317,14 +317,64 @@ async function runCompile(args: string[]): Promise<number> {
   return 0;
 }
 
+/**
+ * `publish deliveries` — the MCP §6.8 amendment's ops surface: every
+ * model delivery per (artifact, target), with revisions that never
+ * reached `attest` marked DANGLING, loudly. A delivered-but-unattested
+ * revision means the two-call contract stopped between calls — the
+ * model changed but no verified report was recorded against it.
+ */
+async function runPublish(args: string[]): Promise<number> {
+  if (args[0] !== "deliveries") {
+    console.error("usage: cli.js publish deliveries");
+    return 2;
+  }
+  const cfg = loadConfig();
+  const pool = createPool(cfg.databaseUrl);
+  try {
+    const { rows } = await pool.query(
+      `SELECT d.artifact_id, d.target, d.revision, d.dataset_id, d.delivered_at,
+              a.report_id, a.definition_hash, a.attested_at
+         FROM model_deliveries d
+         LEFT JOIN report_attestations a
+           ON a.artifact_id = d.artifact_id AND a.target = d.target
+          AND a.revision = d.revision
+        ORDER BY d.delivered_at DESC`,
+    );
+    if (rows.length === 0) {
+      console.log("no model deliveries recorded");
+      return 0;
+    }
+    let dangling = 0;
+    for (const row of rows) {
+      const attested = row.report_id
+        ? `attested report=${row.report_id} at ${row.attested_at.toISOString()}`
+        : "DANGLING — delivered but never attested (no verified report records this revision)";
+      if (!row.report_id) dangling += 1;
+      console.log(
+        `${row.artifact_id} rev ${row.revision} → ${row.target} dataset=${row.dataset_id} ` +
+          `delivered ${row.delivered_at.toISOString()} | ${attested}`,
+      );
+    }
+    if (dangling > 0) {
+      console.log(`\n${dangling} dangling deliver${dangling === 1 ? "y" : "ies"} — ` +
+        "finish the authoring flow (author → deploy → verify → attest) or re-deliver.");
+    }
+    return dangling > 0 ? 1 : 0;
+  } finally {
+    await pool.end();
+  }
+}
+
 const [, , command, ...rest] = process.argv;
 const run =
   command === "migrate" ? runMigrate() :
   command === "enqueue" ? runEnqueue(rest) :
   command === "sync" ? runSync(rest) :
   command === "compile" ? runCompile(rest) :
+  command === "publish" ? runPublish(rest) :
   Promise.resolve().then(() => {
-    console.error("usage: cli.js migrate | enqueue [--wait] FILE... | sync … | compile PROFILE --kb DIR --url URL");
+    console.error("usage: cli.js migrate | enqueue [--wait] FILE... | sync … | compile PROFILE --kb DIR --url URL | publish deliveries");
     return 2;
   });
 

@@ -183,8 +183,10 @@ describe("authz — profile allowlist and target qualifier (M-3/MCP-R4)", () => 
   });
 
   it("target outside the qualifier grant → permission_denied, audited, no job", async () => {
+    // `powerbi` joined the reporter grant at the D-91 target switch, so
+    // the ungranted probe is a target no profile carries.
     await expectNoPublish(async () => {
-      const res = await publish({ artifact: artifact(), target: "powerbi" });
+      const res = await publish({ artifact: artifact(), target: "tableau" });
       expect(res.isError).toBe(true);
       expect(res.payload.code).toBe("permission_denied");
       expect(String(res.payload.message)).toContain("looker_studio");

@@ -172,10 +172,28 @@ const TOOL_DEFS: { name: string; description: string; inputSchema: Record<string
   {
     name: "publish_report",
     description:
-      "Publish a report artifact (formats spec §4) to a configured target. The artifact is validated before anything is enqueued: every cited metric/dimension/entity ref must resolve, blend keys must be the entity doc's documented mappings, and every query is re-validated against the current snapshot (a moved snapshot returns revalidate_required — re-validate and re-emit). Response is the capability §8.2 result: mode, created objects with URLs, pending_human_steps to relay verbatim, and backing.",
+      "Publish a report artifact (formats spec §4) to a configured target. The artifact is validated before anything is enqueued: every cited metric/dimension/entity ref must resolve, blend keys must be the entity doc's documented mappings, and every query is re-validated against the current snapshot (a moved snapshot returns revalidate_required — re-validate and re-emit). Response is the capability §8.2 result: mode, created objects with URLs, pending_human_steps to relay verbatim, and backing. For api-class targets (create_report: api, e.g. powerbi) publishing is a TWO-CALL contract: mode 'deliver_model' executes the artifact queries through the governed gateway and delivers the semantic model (returning the delivered table schemas to author against), then — after the deployed report definition is verified — mode 'attest' with attestation {report_id, definition_hash} records the permanent attestation and returns the workspace report URL. Attest without its matching delivery is refused.",
     inputSchema: {
       type: "object",
-      properties: { artifact: { type: "object" }, target: { type: "string" } },
+      properties: {
+        artifact: { type: "object" },
+        target: { type: "string" },
+        mode: {
+          type: "string",
+          enum: ["deliver_model", "attest"],
+          description: "Required for api-class targets; not accepted for single-shot targets.",
+        },
+        attestation: {
+          type: "object",
+          description:
+            "attest mode only: {report_id, definition_hash, verified_at?} from the verified deploy (RA-7).",
+          properties: {
+            report_id: { type: "string" },
+            definition_hash: { type: "string" },
+            verified_at: { type: "string" },
+          },
+        },
+      },
       required: ["artifact", "target"],
     },
   },
@@ -638,6 +656,14 @@ async function toolPublishReport(ctx: CallContext, args: Record<string, unknown>
   if (!artifact || typeof artifact !== "object" || Array.isArray(artifact)) {
     return err("invalid_argument", "artifact (object) required");
   }
+  // MCP §6.8 amendment: api-class targets take mode (deliver_model |
+  // attest) and, for attest, the attestation facts. publish.ts owns
+  // the class check — a mode on a single-shot target is refused there.
+  const mode = typeof args.mode === "string" ? args.mode : undefined;
+  const attestation =
+    args.attestation && typeof args.attestation === "object" && !Array.isArray(args.attestation)
+      ? (args.attestation as Record<string, unknown>)
+      : undefined;
 
   const outcome = await publishReport(
     {
@@ -655,7 +681,7 @@ async function toolPublishReport(ctx: CallContext, args: Record<string, unknown>
       sessionId: ctx.sessionId,
       auditId: ctx.auditId,
     },
-    { artifact: artifact as Record<string, unknown>, target },
+    { artifact: artifact as Record<string, unknown>, target, mode, attestation },
   );
 
   if (!outcome.ok) {
