@@ -3428,3 +3428,20 @@ RULING D-91 — M3 target replaced: text-to-report via Power BI
    discipline. Machine 2 (Windows) may optionally carry Power BI
    Desktop for visual verification, but the gate is service-side: the
    report exists in the workspace.
+
+   RULING D-92 — pre-demo bookkeeping
+
+1. CI-F: master register folded — Closed by supersession per D-91.6,
+   evidence pointer to the authoring spec. (My miss; the session was
+   right to flag rather than touch it.)
+2. RA-6 REGISTER ROW AMENDED: the push surface's dated deprecation
+   (new-model creation ends 2027-10-31; existing models unaffected)
+   becomes the row's explicit trigger — the Fabric/DirectLake escalation
+   now has a DEADLINE, not just a scale condition. Decision scheduled no
+   later than the first onboarding after mid-2027 or CP-8 of the next
+   phase, whichever first.
+3. The docker-heavy sync-test flake joins JC-4's watch item (same class:
+   load-sensitive, non-reproducing; two consecutive green re-runs is the
+   accepted evidence standard for now). Both remain CP-8 look-at items.
+4. MCP topology confirmed as built: no Microsoft MCP in the v1 session
+   (RA-A/RA-B defaults); escalation triggers unchanged.

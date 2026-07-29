@@ -170,13 +170,21 @@ docker compose logs core | grep -i migrat | tail -2
 The registration tells the platform where the workspace is and which
 credential *reference* the runner should resolve. Fill the three ids
 from `.secrets/powerbi.env` (they are ids, not secrets — the secret
-itself stays out of this file):
+itself stays out of this file).
+
+The file is written on the Mac but consumed **inside the core
+container**, which has its own `/tmp` — so it must be copied in with
+`docker compose cp` before the `exec`. (Running the CLI from the host
+`core/` checkout instead does not work: the host shell has no
+`CORE_DATABASE_URL`, and the container's database is not reachable
+under its compose hostname from outside.)
 
 *macOS · machine 1:*
 
 ```bash
 cd ~/Desktop/DataProject
 . <(grep -E '^POWERBI_(TENANT|CLIENT|WORKSPACE)' .secrets/powerbi.env | sed 's/^/export /')
+echo "$POWERBI_TENANT_ID $POWERBI_CLIENT_ID $POWERBI_WORKSPACE_ID"
 cat > /tmp/powerbi-connection.json <<EOF
 {
   "system": "powerbi",
@@ -200,10 +208,15 @@ cat > /tmp/powerbi-connection.json <<EOF
   }
 }
 EOF
-docker compose exec core node dist/cli.js sync systems set /tmp/powerbi-connection.json \
-  || (cd core && node dist/cli.js sync systems set /tmp/powerbi-connection.json)
+docker compose cp /tmp/powerbi-connection.json core:/tmp/powerbi-connection.json
+docker compose exec core node dist/cli.js sync systems set /tmp/powerbi-connection.json
+docker compose exec core rm /tmp/powerbi-connection.json
 rm /tmp/powerbi-connection.json
 ```
+
+The `echo` must print **three GUIDs** before you go on — an empty slot
+means the grep found nothing and the registration would silently carry
+blank ids. (Ids, not secrets, so printing them is fine.)
 
 *Windows PowerShell · machine 2:* nothing to run.
 
@@ -324,7 +337,24 @@ shasum -a 256 ~/reporter-setup/.claude/skills/report/pbir_tool.py
 
 `-Force` is what makes PowerShell list hidden entries. The tool's hash
 must match across machines (PowerShell prints uppercase, macOS
-lowercase; same value).
+lowercase; same value). A `__pycache__` folder may ride along inside
+the report skill directory — harmless, ignore it.
+
+**If anything is missing** (a `PathNotFound` on the hash, or the
+listing shows a nested `reporter-setup` folder inside `cp7-demo`): the
+copy went wrong — usually a `*` copy that skipped the dot-names, or an
+scp into a `cp7-demo` that already existed, which nests instead of
+merging. Do not patch it file by file; wipe and re-copy the folder as
+a whole:
+
+```powershell
+Remove-Item -Recurse -Force "$HOME\cp7-demo"
+scp.exe -r alpercamli@192.168.1.4:reporter-setup "$HOME\cp7-demo"
+```
+
+then re-run the two verification commands above. A `Permission denied`
+from scp here means Remote Login on the Mac got switched off — turn it
+back on (step 5.2) and retry.
 
 ### 5.4 Check Python and set the session's Power BI credential
 
@@ -374,6 +404,14 @@ claude
 
 A browser opens to the demo login provider. Sign in as
 **`reporter`** / **`reporter-dev-pw`**.
+
+If the session asks which MCP servers to approve and offers a
+`contextlayer` under more than one scope, take the **Project** one —
+that is the bundle's `.mcp.json`, pointing at
+`http://192.168.1.4:8100/mcp?profile=reporter`; any other scope is a
+leftover from a previous session on that machine and may point at the
+wrong address or profile. Once in, `/mcp` should show a single
+connected `contextlayer` at that URL.
 
 The login must happen in a browser **on machine 2**, and the session
 token lasts one hour — if the demo runs long, re-run `claude` and log
