@@ -59,10 +59,42 @@ $PG -At -c "
     from audit_records a
    where a.ts >= '$SINCE'::timestamptz and a.tool = 'publish_report';" > publish-results.json
 
+# 5. The two-call publish trail (amended gate, Act 4): per report, the
+#    deliver_model/attest pair from audit plus the server's permanent
+#    delivery and attestation records. A delivery row with no matching
+#    attestation row is the DANGLING state — loud by design.
+$PG -At -F'|' -c "
+  select a.ts, a.result_meta->>'artifact_id', a.result_meta->>'mode',
+         a.decision, coalesce(a.result_meta->>'error','-'),
+         coalesce(a.result_meta->>'dataset_id','-')
+    from audit_records a
+   where a.ts >= '$SINCE'::timestamptz and a.tool = 'publish_report'
+   order by a.ts;" > publish-trail.txt
+{
+  echo "-- model_deliveries --"
+  $PG -At -F'|' -c "
+    select artifact_id, target, revision, workspace_id, dataset_id, delivered_at
+      from model_deliveries order by delivered_at;"
+  echo "-- report_attestations --"
+  $PG -At -F'|' -c "
+    select artifact_id, target, revision, report_id, definition_hash, verified_at, attested_at
+      from report_attestations order by attested_at;"
+  echo "-- dangling (deliveries whose revision has no attestation) --"
+  $PG -At -F'|' -c "
+    select d.artifact_id, d.target, d.revision, d.dataset_id
+      from model_deliveries d
+      left join report_attestations a
+        on a.artifact_id = d.artifact_id and a.target = d.target
+       and a.revision = d.revision
+     where a.report_id is null;"
+} >> publish-trail.txt
+
 echo "wrote:"
-for f in audit-chain.txt audit-chain.json ledger-events.txt publish-results.json; do
+for f in audit-chain.txt audit-chain.json ledger-events.txt publish-results.json publish-trail.txt; do
   printf '  %-22s %s lines\n' "$f" "$(wc -l < "$f" | tr -d ' ')"
 done
 echo
-echo "Denials in the window (expect the two B.3 cases):"
-grep -c '|denied|' audit-chain.txt || echo "  none — B.3 evidence is missing"
+echo "Denials in the window (expect the two Act-3 cases):"
+grep -c '|denied|' audit-chain.txt || echo "  none — Act-3 evidence is missing"
+echo "publish_report mode calls in the window (expect deliver_model+attest per report):"
+cut -d'|' -f3 publish-trail.txt 2>/dev/null | grep -c 'deliver_model\|attest' || true
