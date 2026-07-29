@@ -150,7 +150,8 @@ validated SQL + results instead.
 CP-R4.** The server cannot check whether a human nodded; this checkpoint
 is yours alone, which is exactly why it is absolute.
 
-Behavior follows the effective `create_report` flag read at S1. For a
+Behavior follows the effective `create_report` flag read at S1: for an
+`api` target (Power BI), follow **S8 — the authoring flow** below. For a
 `template_link` target (Looker Studio):
 
 1. **Backing first (SK-6).** Every SQL query in the artifact must carry
@@ -236,6 +237,100 @@ Three rules that are checked, not merely encouraged:
    to improvise a sixth kind.
 
 **CP-R5:** never publish results the user has not confirmed at CP-R4.
+
+## S8 — Authoring flow (api targets; checkpoints CP-R6..CP-R9)
+
+For a target whose effective `create_report` is `api` (Power BI),
+publishing is a **two-call contract**: the server delivers the data
+(call #1), you author and deploy the visuals, and only verified work is
+attested (call #2). The data plane is never yours — every row in the
+model comes from the server executing the artifact's queries through
+the governed gateway. You never hold a database credential, and nothing
+you fetch yourself may feed a model. Your plane is the visual one, and
+every design decision you make is recorded before it ships.
+
+**1. Design (CP-R6).** Decide pages, visual kinds, encodings, and
+titles, and write them into the artifact's `layout` section **before**
+any publish call. Design rules that bind, not suggest:
+
+- The five registry kinds (`table`, `line`, `bar`, `scorecard`,
+  `pivot`) are your default palette; when one fits, use it and set
+  `registry_kind`. A target-native kind beyond them is allowed only
+  when the data shape genuinely warrants it, with a one-line
+  justification in that visual's `notes` — an unjustified exotic chart
+  is refused server-side.
+- **The spine rule:** a series without a calendar spine must not render
+  as an interpolating line. If the backing view has no gapless
+  date/period column, use bars and say so in `notes`. A line chart
+  interpolates over missing periods, and an interpolated gap reads as
+  data that does not exist.
+- Clipped window edges are annotated in the title or notes ("trailing
+  90 days, first/last week partial"); small-cell sensitivity is noted
+  in the trust element's source notes.
+- Titles and labels come from human-doc semantics (`get_metric`,
+  `get_entity`), not from column names, wherever docs exist.
+- `layout.trust_element` is **required** — `content_from:
+  "trust_notes"`, placed on a real page. The artifact is invalid
+  without it, and that is the point: disclosures render inside the
+  report (the transcript scrolls away; the report is what people see).
+
+**2. Deliver (CP-R7).** `publish_report(artifact, target, mode:
+"deliver_model")` — call #1. The server runs every gate, executes each
+artifact query through the gateway under YOUR profile's guardrails, and
+returns `detail.delivered`: the workspace, dataset id, and **table
+schemas as delivered**. Save `delivered` to a file — it is the only
+schema you may author against. Refusals here are the system working:
+`revalidate_required` (snapshot moved — re-validate, re-emit),
+`guardrail` naming a truncated result (narrow or aggregate further in
+the view; a capped result must never become "the model"), or
+`config_error` on an undocumented blend (flag_gap `missing_join_path`;
+never improvise a key).
+
+**3. Author.** Generate the report definition with the bundled tool —
+strictly against the delivered schema, never a guessed field name:
+
+    python3 .claude/skills/report/pbir_tool.py generate \
+      --artifact artifact.json --delivered delivered.json --out parts/
+
+The tool refuses a field the delivered schema lacks; on a mismatch,
+regenerate from the returned schema. A persistent mismatch is a K-FAIL
+flag, not a guess.
+
+**4. Deploy.** First revision creates; every later revision updates the
+**same** `report_id` (that is the promise: a saved report that updates
+instead of orphaning copies):
+
+    python3 .claude/skills/report/pbir_tool.py deploy \
+      --parts parts/ --workspace <workspace_id> \
+      --display-name "<title>"            # + --report-id <id> on revisions
+
+**5. Verify (CP-R8).** Read back what actually landed and prove it is
+what you authored:
+
+    python3 .claude/skills/report/pbir_tool.py verify \
+      --parts parts/ --workspace <workspace_id> \
+      --report-id <report_id> --delivered delivered.json
+
+`verified: true` or you do not proceed. On a mismatch: redeploy once,
+re-verify; still failing → fail loudly and flag. **Never attest
+unverified work** — the attestation is the permanent record, and a
+record of something you did not confirm is a lie with a timestamp.
+
+**6. Attest (CP-R9).** Set `layout.pbir_hash` to the verified
+`definition_hash`, then `publish_report(artifact, target, mode:
+"attest", attestation: {report_id, definition_hash, verified_at})` —
+call #2 (`attest-payload` prints the attestation JSON). The server
+refuses an attest without its matching delivery, so stale work cannot
+be attested; your half of the bargain is that step 5 passed moments
+before. The response carries the workspace report URL.
+
+**7. Hand off.** Relay the URL. `pending_human_steps` is empty or
+`["open the report"]` — if anything more comes back, that is a defect
+to surface, not a step to relay as normal.
+
+Rate note: an api-target report costs **two** publish calls (deliver +
+attest) against the publish rate limit — batch revisions, don't
+republish per tweak.
 
 ---
 

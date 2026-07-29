@@ -34,6 +34,8 @@ export function defaultSkillsRoot(): string {
 export interface CompiledSkill {
   name: string;
   content: string;
+  /** Skill-local files beside SKILL.md (RA-5 tooling), bundle-relative. */
+  files: { path: string; content: string }[];
 }
 
 export interface CompiledSetup {
@@ -72,7 +74,23 @@ async function readSkill(skillsRoot: string, name: string): Promise<CompiledSkil
   if (dir !== path.join(skillsRoot, name)) return null;
   const file = path.join(dir, "SKILL.md");
   if (!existsSync(file)) return null;
-  return { name, content: await readFile(file, "utf-8") };
+  // A skill is its whole directory, not just SKILL.md: skill-local
+  // tooling (report-authoring RA-5 — pbir_tool.py) must reach the
+  // session machine through the same bundle, or "ships inside the
+  // skill" is a sentence rather than a fact.
+  const files: { path: string; content: string }[] = [];
+  const walk = async (sub: string): Promise<void> => {
+    for (const entry of await readdir(path.join(dir, sub), { withFileTypes: true })) {
+      const rel = sub ? `${sub}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) await walk(rel);
+      else if (rel !== "SKILL.md") {
+        files.push({ path: rel, content: await readFile(path.join(dir, rel), "utf-8") });
+      }
+    }
+  };
+  await walk("");
+  files.sort((a, b) => (a.path < b.path ? -1 : 1));
+  return { name, content: await readFile(file, "utf-8"), files };
 }
 
 export async function listShippedSkills(skillsRoot = defaultSkillsRoot()): Promise<string[]> {
@@ -172,6 +190,12 @@ export async function writeSetup(setup: CompiledSetup, outDir: string): Promise<
     await mkdir(dir, { recursive: true });
     await writeFile(path.join(dir, "SKILL.md"), skill.content);
     written.push(`.claude/skills/${skill.name}/SKILL.md`);
+    for (const file of skill.files) {
+      const target = path.join(dir, ...file.path.split("/"));
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, file.content);
+      written.push(`.claude/skills/${skill.name}/${file.path}`);
+    }
   }
 
   return written.sort();
