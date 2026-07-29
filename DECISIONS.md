@@ -3445,3 +3445,18 @@ RULING D-91 — M3 target replaced: text-to-report via Power BI
    accepted evidence standard for now). Both remain CP-8 look-at items.
 4. MCP topology confirmed as built: no Microsoft MCP in the v1 session
    (RA-A/RA-B defaults); escalation triggers unchanged.
+
+RULING D-93 — demo interruption disposition
+
+1. Transcript KEPT and committed as unplanned gate evidence: ungranted
+   api-class target refused server-side; capability_gap 6473a5f1 filed
+   with routing; CP-R4 held against an operator publish request; spine
+   design rule applied unprompted to a novel dataset (token-trend
+   interpolation refused). Field notes to DECISIONS.
+2. Cause: prerequisite #1 (reporter publish_report:powerbi KB PR) not in
+   effect at run time. Fix: merge carrying CL-Resolves: 6473a5f1 —
+   demonstrating the L-5 resolution lifecycle live; verify kb_ref at
+   /healthz; no machine-2 recompile (allow-set is server-side per call).
+3. Act 1 re-runs in a fresh session; CP-R4 answered when asked. Remaining
+   prerequisites unchanged: entities/page.md certification before Act 2;
+   GA4 query wiring confirmed.

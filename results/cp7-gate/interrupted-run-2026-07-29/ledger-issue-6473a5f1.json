@@ -1,0 +1,20 @@
+{
+    "kind": "capability_gap",
+    "links": {
+    },
+    "title": "capability_gap: publish_report:powerbi",
+    "status": "open",
+    "system": "publish_report:powerbi",
+    "issue_id": "6473a5f1-f4f7-4dfd-b702-a15ba760ce14",
+    "last_seen": "2026-07-29T09:21:05.184+00:00",
+    "routed_to": "data-team",
+    "first_seen": "2026-07-29T09:21:05.184+00:00",
+    "object_fqn": "publish_report:powerbi",
+    "resolution": null,
+    "fingerprint": "d1a96aafe9d0cce880ed073f6fe3c9dd205994d0f3e5b65d548bd2c6b22b6f4b",
+    "occurrences": 1,
+    "resolved_at": null,
+    "resolved_by": null,
+    "reopen_count": 0,
+    "distinct_subjects": 1
+}

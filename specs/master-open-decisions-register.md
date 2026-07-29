@@ -57,7 +57,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | CI-C | Publisher probe cadence | Open | On configure + manual re-test | Stale effective flags cause failed journeys |
 | CI-D | Incremental harvest cursors | Open | Reserved field; v1 full-harvests, dedupe by content_hash | First large Drive/Confluence estate |
 | CI-E | SDK↔protocol↔snapshot version matrix | Open | Release notes carry it; manifest declares all three | Multi-version fleet reality |
-| CI-F | Publish depth for Looker Studio — `template_link` only in v1 | Open | A database-backed source cannot be prefilled by a link at all (PostgreSQL is not a Linking API connector — D-89), so every published report carries a manual re-point + password step. GA4/GSC prefill fine | A customer for whom per-report manual wiring is unacceptable; escalation is a community connector or the Data Studio API, both outside the CP-7 fence |
+| CI-F | Publish depth for Looker Studio — `template_link` only in v1 | **Closed** (supersession) | D-91.6 / D-92.1: closed by supersession — the escalation this item was waiting for arrived as the ruling itself. M3's target moved to an api-class publisher where the platform delivers the data and no per-report manual re-point exists; evidence pointer: `specs/report-authoring-spec.md`. The finding stands unchanged for the Looker leg, which remains on main as a secondary target carrying this documented limit (a database-backed source cannot be prefilled by a link at all — PostgreSQL is not a Linking API connector, D-89 — so every Looker-published report keeps its manual re-point + password step; GA4/GSC prefill fine) | — |
 
 ## MCP tool reference (MC-1..5)
 

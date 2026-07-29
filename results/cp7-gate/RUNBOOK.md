@@ -21,6 +21,15 @@ secondary target; its Act-1 evidence from July 27 stands and is not
 re-run. This version's Acts 2–4 are the ruling's amended gate. The
 previous runbook is in git history if you need it.
 
+**What changed on July 29 (this revision).** A prep pass checked every
+prerequisite against the live machine rather than against the page, and
+four things did not survive contact: the publish-budget override never
+reached the server (4.3), GA4 and Search Console had no connection
+registered at all (new step 4.4b), the setup bundle has to be rebuilt
+*after* the grant merges or the session will not attempt the report
+(4.7), and Act 3a's refusal can legitimately arrive without an audit row
+(8a). Each is written up where you hit it.
+
 ---
 
 ## 1. What this demo proves
@@ -77,18 +86,72 @@ system that only ever says yes has not been tested.
 
 ## 3. Before you start
 
+Verified on machine 1 on **July 29** unless the row says otherwise.
+
 | Prerequisite | State |
 |---|---|
 | Reporting views live on the customer database | done — the five views are applied and readable by the query-only role |
 | Views documented in the KB (pull request #25) and given meaning (#26) | merged |
-| Entra app + service principal, workspace membership, tenant settings | done — `make powerbi-preflight` passed all five checks on July 29 |
+| Entra app + service principal, workspace membership, tenant settings | done — `make powerbi-preflight` re-run July 29, every check `ok` |
 | The Power BI leg proven against the real services | done — a live model + report were delivered, verified, attested, and revised on July 29 (`results/cp7-powerbi-live/evidence.json`); two Microsoft-side surprises were found and fixed there rather than here |
-| Platform stack rebuilt with the Power BI leg (step 4.2) | **do during prep** |
-| Power BI connection registered on the stack (step 4.4) | **do during prep** |
-| Reporter profile allows Power BI publishing | **YOURS — a KB pull request** adding `publish_report:powerbi` to `profiles/reporter.yaml` must be merged before Act 1, same review path as every KB change |
-| `entities/page.md` certified | **YOURS — must be merged before Act 2.** Act 2 blends on the page mapping in that document; certifying it is a real verification act, not a status edit |
-| GA4 and Search Console registered with query-capable credentials | **confirm before Act 2** — Act 2's data is pulled by the platform through those connectors' own query paths, not by Looker; if the GA4 property is still unwired, run Acts 1, 3, 4 and return for Act 2 |
+| GA4 and Search Console credentials actually work | done — one live `runReport` (14 rows) and one live Search Console query (25 rows) ran July 29 through the connectors' own executors, and both refused an undocumented dimension. The credentials and the GA4 property id are real. **This is not the same as step 4.4b** — see the next row |
+| Test suites | done — python 721 passed / 14 skipped; core 185 passed across two consecutive full runs |
+| Power BI connection registered on the stack (step 4.4) | done — registered July 29 with the `publish.flags` block and a credential *reference*, no secret in the row |
+| Platform stack rebuilt with the Power BI leg (step 4.1) | **do during prep** |
+| Publish budget raised for the demo window (step 4.3) | **do during prep — and it is not the command line you would expect.** See the warning in 4.3: the override has to go in `.secrets/sync.env`, because the shell prefix never reaches the container |
+| GA4 + Search Console registered on the stack for the gateway (step 4.4b) | **do during prep — new step, and Act 2 cannot run without it.** The two systems have working credentials but *no connection row*, so a Power BI delivery of their data fails with `system ga4 has no connection registered` |
+| Reporter profile allows Power BI publishing | **YOURS — a KB pull request** adding `publish_report:powerbi` to `.contextlayer/profiles/reporter.yaml` must be merged before Act 1, same review path as every KB change. **Not yet open** — it still has to be written. Put `CL-Resolves: 6473a5f1-f4f7-4dfd-b702-a15ba760ce14` in the PR body (see 3.1) |
+| Reporter bundle rebuilt after that merge (steps 4.7 + 5.2) | **do after the merge, before Act 1.** The bundle's `CLAUDE.md` lists the profile's tools, and the AI treats that list as the truth about what it may do — a bundle compiled before the merge tells the session it cannot publish to Power BI. This is what stopped the July 29 attempt |
+| `entities/page.md` certified | **YOURS — must be merged before Act 2.** Still `status: draft`, `last_verified: null` on the KB's main branch. Certifying it is a real verification act, not a status edit — see 3.2 |
 | Machine 2 has Python 3 | **check in step 5.4** — the AI's report-authoring tool is a single Python file with no dependencies |
+
+### 3.1 The publish-grant pull request (and why the trailer matters)
+
+The July 29 attempt stopped here, and the platform recorded the stop
+itself: the AI filed a tracked gap, `6473a5f1`, saying it holds only the
+Looker Studio target and asking who holds Power BI. That gap is still
+open.
+
+If the merged pull request's **body** carries the line
+
+```
+CL-Resolves: 6473a5f1-f4f7-4dfd-b702-a15ba760ce14
+```
+
+then within about five minutes of the merge the platform closes that gap
+by itself and records the pull request as the reason. That is the
+product's own repair loop running live, in the middle of the demo, on a
+problem the demo itself found — worth having on the record.
+
+**Use the full id.** The platform matches the whole 36-character
+identifier and nothing shorter; `CL-Resolves: 6473a5f1` looks right,
+matches nothing, and fails silently.
+
+Check it landed (machine 1, a few minutes after the merge):
+
+```bash
+docker compose exec -T postgres psql -U postgres -d cl_ops \
+  -c "select status, resolved_by, resolution from ledger_issues
+        where issue_id = '6473a5f1-f4f7-4dfd-b702-a15ba760ce14';"
+```
+
+Expect `resolved | pr | {"kind": "enrichment_pr", "pr_url": ...}`.
+
+### 3.2 What certifying `entities/page.md` actually means
+
+Act 2 blends Search Console against GA4 on the page mapping in that
+document, and the success criterion is that the AI cites a **certified**
+document. Today the document says `status: draft`.
+
+The verification is the real work, and it is one question: Search
+Console reports a **full URL** (scheme + host + path) while GA4's
+`pagePath` is **path only**. The document already says so. Confirm that
+what it says matches what the two systems return today, then PR the flip
+to `status: verified` with `last_verified` set, and merge it the same
+way as any other KB change.
+
+If the mapping turns out to be wrong, that is a finding — fix the
+document, not the status field.
 
 ---
 
@@ -132,27 +195,45 @@ has duplicates — edit it down to one.
 
 ### 4.3 Start the stack (new images, new migration)
 
+**First, raise the publish budget — in the env file, not on the command
+line.** A Power BI report costs *two* publish calls (deliver, then
+attest), and the platform's default budget is four per hour: Act 1 plus
+one revision exhausts it and Act 2 dies waiting. The obvious fix does
+not work. `docker-compose.yml` passes only a fixed list of variables
+into the core container, and `CORE_MCP_PUBLISH_PER_HOUR` is not on it,
+so writing it in front of `docker compose up` sets it for your shell and
+never reaches the server. Put it in the env file the core already reads:
+
 *macOS · machine 1:*
 
 ```bash
 cd ~/Desktop/DataProject
+grep -q '^CORE_MCP_PUBLISH_PER_HOUR=' .secrets/sync.env \
+  || echo 'CORE_MCP_PUBLISH_PER_HOUR=12' >> .secrets/sync.env
 set -a; . .secrets/sync.env; set +a
 SYNC_PLATFORM_COMMIT=$(git rev-parse HEAD) CORE_MCP_ENABLED=1 \
-CORE_MCP_PUBLISH_PER_HOUR=12 \
 CL_BIND=0.0.0.0 CL_HOST_ADDR=192.168.1.4 \
   docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d
 ```
 
+Then **confirm it actually arrived** — this is the whole point of the
+detour:
+
+```bash
+docker inspect dataproject-core-1 \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep PUBLISH_PER_HOUR
+```
+
+Expect `CORE_MCP_PUBLISH_PER_HOUR=12`. **No output means the budget is
+still four per hour** and Act 2 will strand — fix it before going on.
+Remove the line from `.secrets/sync.env` after the demo.
+
 *Windows PowerShell · machine 2:* nothing to run.
 
-Three settings matter and are easy to get wrong. `CL_BIND=0.0.0.0`
+Two more settings matter and are easy to get wrong. `CL_BIND=0.0.0.0`
 makes the ports answer from another computer. `CL_HOST_ADDR=192.168.1.4`
 makes the login redirect resolvable from machine 2 — wrong, it looks
-like a login page hanging on `localhost`. **`CORE_MCP_PUBLISH_PER_HOUR=12`
-is new and demo-specific**: a Power BI report costs *two* publish calls
-(deliver, then attest), and the default budget of four per hour would
-strand Act 2 behind Act 1's revisions. Twelve covers the demo with
-retries; drop the override after.
+like a login page hanging on `localhost`.
 
 The `set -a; . .secrets/sync.env; set +a` line is not decoration.
 Without it the stack starts healthy with syncing silently switched off —
@@ -224,6 +305,81 @@ The `publish.flags` block is what tells the server this target uses the
 two-call contract; without it, `mode` is rejected and Act 1 cannot
 publish.
 
+*(This registration is already in place as of July 29 — the step is kept
+for a rebuild from scratch. Re-running it is harmless.)*
+
+### 4.4b Register GA4 and Search Console — **Act 2 depends on this**
+
+Act 2's data is pulled **by the platform**, not by the session: the
+deliver call runs the GA4 and Search Console queries itself, through the
+same governed path Supabase queries use. For that it needs a connection
+row per system, and today there is none — the credentials work
+(confirmed by live queries on July 29), but nothing tells the platform
+where to use them. Without this step the deliver call fails with
+`system ga4 has no connection registered` and Act 2 stops.
+
+`required_for: ["query"]` is the part that matters: it is the marker the
+server looks for when deciding whether a system may be queried on behalf
+of a report. A credential without it is invisible to the deliver path.
+
+*macOS · machine 1:*
+
+```bash
+cd ~/Desktop/DataProject
+.venv/bin/python - <<'PY' > /tmp/ga4-connection.json
+import json
+c = json.load(open(".secrets/ga4-live.json"))
+print(json.dumps({
+  "system": "ga4",
+  "connector": {"name": "ga4", "version_constraint": ">=0.2 <0.3"},
+  "payload": {
+    "config": {"system": "ga4", "mode": "api", "property_id": c["property_id"]},
+    "credentials": [{"ref": "env://GOOGLE_SA_KEY_JSON",
+                     "key": "service_account", "required_for": ["query"]}],
+  },
+}, indent=2))
+PY
+.venv/bin/python - <<'PY' > /tmp/gsc-connection.json
+import json
+c = json.load(open(".secrets/gsc-live.json"))
+print(json.dumps({
+  "system": "gsc",
+  "connector": {"name": "gsc", "version_constraint": ">=0.2 <0.3"},
+  "payload": {
+    "config": {"system": "gsc", "mode": "api", "site_url": c["site_url"]},
+    "credentials": [{"ref": "env://GOOGLE_SA_KEY_JSON",
+                     "key": "service_account", "required_for": ["query"]}],
+  },
+}, indent=2))
+PY
+for s in ga4 gsc; do
+  docker compose cp /tmp/$s-connection.json core:/tmp/$s-connection.json
+  docker compose exec core node dist/cli.js sync systems set /tmp/$s-connection.json
+  docker compose exec core rm /tmp/$s-connection.json
+  rm /tmp/$s-connection.json
+done
+```
+
+Confirm all four systems are registered and that GA4 and Search Console
+are query-capable:
+
+```bash
+docker compose exec -T postgres psql -U postgres -d cl_ops -c \
+  "select system, payload->'credentials' @> '[{\"required_for\":[\"query\"]}]'
+     as query_capable from sync_systems order by system;"
+```
+
+Expect four rows — `ga4`, `gsc`, `supabase` all `t`, and `powerbi` `f`
+(it publishes, it is not queried).
+
+The runner already holds the Google credential in its environment; these
+rows carry a *reference* to it, never the key itself. Registering these
+two systems does **not** start any automatic syncing: the knowledge
+base's sync policy leaves both on manual, so nothing will open a pull
+request behind your back.
+
+*Windows PowerShell · machine 2:* nothing to run.
+
 ### 4.5 Final host checks
 
 *macOS · machine 1:*
@@ -232,7 +388,18 @@ publish.
 curl -s http://192.168.1.4:8100/healthz
 make powerbi-preflight
 docker compose logs runner | grep -i "execution preflight" | tail -1
+
+# Is the server serving the knowledge base as it stands right now?
+# The left value is what the platform has loaded; the right is the KB's
+# main branch. After the publish-grant merge these MUST match, or the
+# session will be told it cannot publish to Power BI.
+curl -s http://192.168.1.4:8100/healthz | grep -o '"kb_ref":"[^"]*"'
+git -C ~/Desktop/kb fetch origin --quiet && git -C ~/Desktop/kb rev-parse origin/main
 ```
+
+If the two differ, the platform is serving a stale knowledge base: wait
+for the next sync tick, or restart the stack with step 4.3's command and
+re-check.
 
 *Windows PowerShell · machine 2 (reachability from the far side — this
 doubles as step 5.1):*
@@ -244,10 +411,11 @@ curl.exe -s http://192.168.1.4:8100/healthz
 > In PowerShell, `curl` is an **alias for `Invoke-WebRequest`**. Always
 > type `curl.exe` when you want the real curl.
 
-Expect: healthz JSON with `"mcp_enabled":true`; all five preflight
-checks `ok`; `execution preflight passed for postgres`. If the runner
-preflight says **FAILED**, it is deliberately refusing to serve queries
-because the database role is too powerful — abort and fix the role.
+Expect: healthz JSON with `"mcp_enabled":true`; every preflight check
+`ok`; `execution preflight passed for postgres`; and the two commit ids
+identical. If the runner preflight says **FAILED**, it is deliberately
+refusing to serve queries because the database role is too powerful —
+abort and fix the role.
 
 ### 4.6 Record the start time
 
@@ -270,12 +438,32 @@ Write it down. Example: `2026-07-29T15:20:00Z`.
 
 ### 4.7 Build the customer's setup bundle
 
+**Do this after the publish-grant pull request is merged and 4.5 shows
+the two commit ids matching — not before.** The bundle's `CLAUDE.md`
+contains the list of tools the profile permits, and the AI reads that
+list as the statement of what it is allowed to do. A bundle compiled
+from yesterday's knowledge base tells the session it may publish only to
+Looker Studio, and the session will politely decline to build the Power
+BI report rather than try. That is exactly how the July 29 attempt
+ended.
+
+The server would have refused anyway — permission is decided per call,
+on the server, and nothing in this file can widen it. But this file can
+*narrow* what the session will even attempt, and that is enough to lose
+an act.
+
 *macOS · machine 1:*
 
 ```bash
 cd ~/Desktop/DataProject/core
 node dist/cli.js compile reporter --kb ~/Desktop/kb --url http://192.168.1.4:8100 --out ~/reporter-setup
+grep publish_report ~/reporter-setup/CLAUDE.md
 ```
+
+The `grep` must show **`publish_report:powerbi`**. If it shows only
+Looker Studio, the grant has not reached the platform yet — go back to
+4.5. Then re-copy the bundle to machine 2 (step 5.2); a stale copy over
+there defeats the rebuild.
 
 Expect **four** files now — `.mcp.json`, `CLAUDE.md`,
 `.claude/skills/report/SKILL.md`, and
@@ -500,7 +688,10 @@ a real relationship on the documented keys, not two charts glued
 side-by-side.
 
 **Runs on:** machine 2. **Requires the `entities/page.md` certification
-PR merged, and GA4 + Search Console registered for governed queries.**
+PR merged (3.2), and GA4 + Search Console registered on the stack
+(4.4b).** Both are hard prerequisites: without the first the blend
+cannot cite a certified document, and without the second the platform
+cannot fetch the data at all.
 
 Background: search data (Search Console) and analytics data (GA4) both
 describe web pages, and the KB's page document records that Search
@@ -551,10 +742,28 @@ same way.
 
 > Publish that same report to Google Sheets instead.
 
-**Expect:** a permission refusal from the **server** — it lands in the
-audit trail as `denied`. The agent should say plainly what targets it
-has and should *not* speculate about others, because it cannot see
-them.
+**Expect:** a refusal. The agent should say plainly what targets it has
+and should *not* speculate about others, because it cannot see them.
+
+**Two shapes are possible, and you should record which one you got.**
+The refusal may come from the **server**, in which case it lands in the
+audit trail as `denied` — or the agent may refuse *before calling*,
+because the bundle's `CLAUDE.md` already tells it which targets the
+profile permits, in which case there is **no audit row at all** and the
+evidence is the transcript plus (usually) a filed gap. The July 29
+attempt produced the second shape: no `publish_report` call was ever
+made, and the platform recorded a tracked gap instead.
+
+Both are the rule working; they are not the same evidence. Record the
+refusal message verbatim either way, and note whether a `denied` row
+appears in Act 4. **Do not re-prompt to force a server call** — coaxing
+the agent into a denial proves nothing about how it behaves when nobody
+is watching.
+
+The server-side gate itself is not in question here: the same audit
+table already holds `denied` rows from earlier runs ("tool execute_sql
+is granted only for supabase, not ga4"), and it is re-checked on every
+call regardless of what any client file says.
 
 ### 8b — joining on a key nobody documented
 
@@ -605,8 +814,13 @@ It writes the evidence files next to the script. Check, in
   delivery is left dangling (a dangling one means a deliver whose
   report never verified; the ops listing `node dist/cli.js publish
   deliveries` prints it loudly if so).
-- Act 3's rows: the Sheets publish as `denied`, the undocumented blend
-  as a refusal plus a `flag_gap` with kind `missing_join_path`.
+- Act 3's rows: the undocumented blend as a refusal plus a `flag_gap`
+  with kind `missing_join_path`. For the Sheets publish, a `denied` row
+  **if** the agent called the server (see 8a) — if it refused from its
+  own permissions list there will be no row, which is the expected
+  second shape, not a missing result. The script's closing line counts
+  denials and says "Act-3 evidence is missing" when it finds none; read
+  that against 8a before treating it as a failure.
 - Every row under the reporter's identity, with the full statement or
   artifact pin recorded for validate/execute/publish calls.
 
