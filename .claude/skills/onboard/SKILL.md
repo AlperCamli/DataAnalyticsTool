@@ -11,8 +11,9 @@ seed reports, steward roles) is `specs/customer-onboarding-playbook.md`;
 this skill is its steps "wire connections" through "KB renders".
 
 Work **one system at a time**, and show the user each result before
-moving on. A completed example of this whole flow exists:
-`.secrets/connections.md` (example-estate.com — git-ignored, local only).
+moving on. `SETUP.md` documents the public configuration shape.
+Deployment-specific identifiers, credentials, and results must remain
+under the git-ignored `.secrets/` directory.
 
 ## Step 0 — Preconditions
 

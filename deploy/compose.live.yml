@@ -1,8 +1,8 @@
 # Live-mode overlay (env-gated; this machine only). Adds the pilot
 # estate's credentials to the runner as its env-file vault and mounts
 # the live job specs into the core for `make stack-live`. Both paths
-# live under .secrets/ (git-ignored, JC-8): see .secrets/connections.md
-# for how to populate them; committed shapes are in deploy/jobs/live-example/.
+# live under .secrets/ (git-ignored, JC-8): see SETUP.md for how to
+# populate them; committed shapes are in deploy/jobs/live-example/.
 #
 #   docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d --build
 
@@ -13,7 +13,7 @@ services:
     env_file:
       # SYNC_ENABLED=1, SYNC_GIT_REMOTE (customer KB), SYNC_GIT_TOKEN
       # (fine-grained PAT, D2), SYNC_PLATFORM_COMMIT — shape described
-      # in .secrets/connections.md (JC-8: never committed)
+      # in SETUP.md (JC-8: never committed)
       - ./.secrets/sync.env
   runner:
     env_file:

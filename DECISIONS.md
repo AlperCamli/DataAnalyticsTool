@@ -1290,7 +1290,7 @@ The CP-2 deliverable: the CVBuilder golden-benchmark harness — suite
 ingestion/validation, the three R1 context conditions, a dual-backend
 journey runner + journey-prompt v1, R4-R6 scoring, the R7 CI integrity gate,
 and the R8/R9 results+report machinery. Landed on branch
-`task/2-benchmark-harness` (commits `d2a81b1`..`cec5347`). Full platform
+`task/2-benchmark-harness` (commits `21c0703`..`143a0b0`). Full platform
 suite green (87 benchmark tests + the existing suite).
 
 ## D-53 — Suite is execution-deferred; correctness scores same-run goldens
@@ -2639,7 +2639,7 @@ it. The failure mode is not lost work — it is a *premise* believed true
 because the work was done, when the branch doing the depending never
 received it.
 
-**3. Uncommitted D-71/D-72 work committed** (`2ff056d`, `e0c4f43`) as a
+**3. Uncommitted D-71/D-72 work committed** (`6041bb9`, `e5910c5`) as a
 precondition of the merge — `DECISIONS.md` was the one dirty file the
 merge touched. Affirmed by the owner as the correct call on the evidence
 (finished PR bodies, both suites green, described as live in the task
@@ -2829,7 +2829,7 @@ publisher demo depends on them.
   runbook: `gh auth refresh -h github.com -s delete_repo` then
   `gh repo delete AlperCamli/cl-baseline-machine-kb --yes` and
   `gh repo delete AlperCamli/cl-baseline-nokb --yes`.
-- `cp5-skills` landed on `main`: merge `b663434` (no-ff), main current
+- `cp5-skills` landed on `main`: merge `48ea11c` (no-ff), main current
   through M2 + CP-5 in one landing.
 - BASELINE-1 added to the master register; MC-1's revisit trigger
   re-pointed at it (was "Baseline v1 … CP-5 per D-62", which D-80.1
@@ -2904,7 +2904,7 @@ preserved trivially, since work is always on `main`; checkpoint
 sign-off still requires green suites at the sign-off commit. The KB
 repo is unchanged: PRs + KB CI + code-owner review remain (it has the
 remote and the enforcement). `cp7-m3` fast-forwarded into `main`
-(`8f04455`) and deleted under this ruling.
+(`15f7b72`) and deleted under this ruling.
 
 ## D-83 — CP-7 publisher build decisions (M3, 2026-07-24)
 
@@ -3062,7 +3062,7 @@ views. The swap changed nothing we can see.
 
 **5. WHEEL: A.3 not triggered, with a reason.** Carry is version-keyed
 and both sides are 0.5.0. `snapshot/` and `generator/` are byte-
-unchanged since the vendored commit `f38b75c`; only `lineage/` moved
+unchanged since the vendored commit `ce8c646`; only `lineage/` moved
 (bbaf5d7), and KB CI runs `generator.validate`, which never reads
 `lineage/graph.json`. So the vendored wheel is honestly current for what
 CI does — including for part B's graph-only PR, which will not re-raise
@@ -3181,7 +3181,7 @@ D-85 changes stashed) is the evidence that it is not ours.
 flake on record. `DECISIONS.md`, the four `PR-*.md` sign-off documents,
 and the commit history contain no CP-6/D-71-era note of an
 unreproducible failure — the only prior JC-4 mentions are its
-implementation (`aabb156`) and D-85's own entry. So this is the first
+implementation (`df62a05`) and D-85's own entry. So this is the first
 record rather than a recurrence, and it arrives with a reproduction
 condition (concurrent load) instead of a shrug. To be looked at before
 CP-8 signs anything off; suspicion is lease TTL versus process-start
@@ -3654,7 +3654,7 @@ reason, no inexpressible report. **No register change is proposed here**
 (the amendment fence); FM-2's row stays Open with this as its CP-7
 evidence, and the CP-8 report carries the disposition motion.
 
-**Suites/state at this entry:** unchanged since `5128036` — no code, spec,
+**Suites/state at this entry:** unchanged since `2f646f9` — no code, spec,
 or KB change was made by the CP-8 session. The last committed suite
 figures stand (python 724 passed / 14 skipped; core 185 passed across two
 consecutive full runs, `READINESS-2026-07-29.md`).
@@ -3816,9 +3816,9 @@ written down.
 
 | Chore | State | Evidence |
 |---|---|---|
-| **C-1** — land the runner-config Power BI line | **DONE** | commit `37f2b22`. CP-7 is no longer closed over unlanded work |
-| **C-6a** — extract + commit the gate evidence | **DONE** | commit `c491ae9`; five dump files + `EVIDENCE-2026-07-29.md` |
-| **C-6b** — graph-only run carries F-4 nodes to the KB | **DONE, awaiting merge** | commit `90f8936`; run `01KYVXMQ8Q0BAHTKC8WM5WBK5S` → KB PR #30, `lineage/graph.json` +115/−0, 28→32 nodes, 25→32 edges, label `sync:additive-only` |
+| **C-1** — land the runner-config Power BI line | **DONE** | commit `9463e61`. CP-7 is no longer closed over unlanded work |
+| **C-6a** — extract + commit the gate evidence | **DONE** | commit `066e916`; five dump files + `EVIDENCE-2026-07-29.md` |
+| **C-6b** — graph-only run carries F-4 nodes to the KB | **DONE, awaiting merge** | commit `8bcadf4`; run `01KYVXMQ8Q0BAHTKC8WM5WBK5S` → KB PR #30, `lineage/graph.json` +115/−0, 28→32 nodes, 25→32 edges, label `sync:additive-only` |
 | **C-6c** — `get_lineage` walks from the report node (CP-7 exit item 2) | **EVIDENCED, NOT CLOSED** | The walk is verified against PR #30's graph (15 nodes / 17 edges at depth 3, three reporting views at hop 1). It closes on the **post-merge** call against the live server; the merge is R2's (SO-B) |
 | bookkeeping batch | **DONE** | this entry + the master-register reconcile below |
 
@@ -3841,7 +3841,7 @@ the D-96 fence):
 
 ## D-96 task 2 — the four accepted small fixes (applied 2026-07-31)
 
-Landed as `1b69529`. Each is small; three of them are small because the
+Landed as `6aea90c`. Each is small; three of them are small because the
 CP-8 review did the diagnosis first.
 
 **JC-4 — test-only, and the diagnosis is the deliverable.** The failing

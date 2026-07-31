@@ -10,8 +10,8 @@ operator re-runs. Nothing here restates a claim without a pointer.
 
 | # | Condition | State | Where it goes |
 |---|---|---|---|
-| **C-1** | Land the runner-config Power BI line | **CLOSED** | commit `37f2b22`. CP-7 is no longer closed over unlanded work |
-| **C-6** | Extract the gate evidence; carry F-4 nodes into the KB | **CLOSED to the point the session can take it** | `c491ae9` (five dump files + reading), `90f8936` (KB PR #30). CP-7 exit item 2 is **evidenced, not closed** — it closes on the post-merge `get_lineage` call |
+| **C-1** | Land the runner-config Power BI line | **CLOSED** | commit `9463e61`. CP-7 is no longer closed over unlanded work |
+| **C-6** | Extract the gate evidence; carry F-4 nodes into the KB | **CLOSED to the point the session can take it** | `066e916` (five dump files + reading), `8bcadf4` (KB PR #30). CP-7 exit item 2 is **evidenced, not closed** — it closes on the post-merge `get_lineage` call |
 | **C-2** | Ship `review-sync`, or record its removal | **OPEN — Phase-2 Track A-1** | D-96.3c ruled BUILD, not despecify. Now *visibly* open: since F-7, `compile steward` fails rather than shipping a bundle without it |
 | **C-3** | Supported bundle delivery **and** bundle freshness | **OPEN — Phase-2 Track A-2** | PA-1 + PA-2. Untouched by this session; it is a product surface, not a chore |
 | **C-4** | Certified metrics + human-verified report-path docs | **OPEN — Phase-2 Track A-5** | Still 41 draft / 1 verified on `origin/main`, still no `metrics/` directory. Onboarding work on a example estate, not engineering |

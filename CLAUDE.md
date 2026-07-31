@@ -19,7 +19,7 @@ trust signals. First deployment: Supabase + GA4 + GSC → Looker Studio.
   (checkpoints CP-0..CP-8). Current position: CP-7 (M3, "the report
   ships"); platform work commits directly to `main` (D-82 — local-only
   repo, no remote); `main` is current through M2 + CP-5
-  (CP-5 closed by amendment, D-80; landing `b663434`). Task 7.0
+  (CP-5 closed by amendment, D-80; landing `48ea11c`). Task 7.0
   (reporting views over RLS, D-80.3/D-81): delta DDL drafted in
   `deploy/reporting-views.sql`, awaiting operator apply as customer
   DBA (we never run DDL against the customer estate), then manual
@@ -54,21 +54,15 @@ trust signals. First deployment: Supabase + GA4 + GSC → Looker Studio.
 - `generator/` — templates + renderer (task 1.5)
 - `fixtures/` — snapshot fixtures per system
 
-## Live example case (this machine only)
-An example estate is wired up for live testing: **example-estate.com**
-(supabase + gsc pulls verified end-to-end; ga4 pending a property id).
-Credentials, ready-to-run configs, and the runbook are in
-`.secrets/connections.md` — git-ignored, local only; never commit or
-echo its contents (JC-8). Convention: the rendered KB the user reviews
-lives at `~/Desktop/kb` (snapshots at `~/Desktop/kb-snapshots/`);
-re-render it after changes that affect generator or connector output.
-Since task 1.6, `~/Desktop/kb` is the clone of the customer KB repo
-`github.com/AlperCamli/DataAnalyticsTool` (public by ruling D-47;
-main protected: KB CI + code-owner review required; changes go via
-PR, steward merges). KB CI runs the validation library from a wheel
-vendored at `.github/vendor/` there — after any validation-library
-change, rebuild the wheel and PR it with its manifest (D-46; a stale
-wheel silently validates against old rules).
+## Live configuration
+Live integrations are optional and must be configured outside version
+control. Keep credentials and deployment-specific job files under
+`.secrets/`, starting from the committed shapes in
+`deploy/jobs/live-example/`; see `SETUP.md`. Never commit or echo
+credential values, customer identifiers, analytics results, or generated
+live evidence (JC-8). Use a separate KB checkout and snapshot directory
+for each deployment, and re-render the KB after connector or generator
+changes.
 
 ## Stack
 Python 3.12 + jsonschema (Draft 2020-12) + PyYAML + pytest + hypothesis.

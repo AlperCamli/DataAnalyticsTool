@@ -106,7 +106,7 @@ refusal (uncertified source) rather than the documented-join success.
 
 ## What this session changed
 
-Platform repo (commit `2445aa7` and this one):
+Platform repo (commit `9df9b45` and this one):
 
 - `DECISIONS.md` — D-94 verbatim; correction notes appended under D-93
   for flags ② and ③ (history appended, never rewritten).

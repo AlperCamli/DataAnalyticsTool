@@ -20,7 +20,7 @@
     "",
     "Host: use the Supabase pooler host if direct :5432 is unreachable",
     "from Google's connector infrastructure; pooler usernames take the",
-    "<role>.<project_ref> form (see .secrets/connections.md)."
+    "<role>.<project_ref> form (see SETUP.md)."
   ],
   "system": "looker_studio",
   "connector": { "name": "looker_studio", "version_constraint": ">=0.1 <0.2" },

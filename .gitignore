@@ -1,6 +1,14 @@
 .venv/
 # live-connection credentials for the real example estate — see CLAUDE.md
 .secrets/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.claude/settings.local.json
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -22,3 +30,8 @@ core/dist/
 # in case one is created here anyway. Journey records carry customer rows.
 /runs/
 /cp2-runs/
+
+# Live/generated evidence can contain customer analytics and deployment IDs.
+/results/cp7-gate/page-certification/
+/results/cp7-powerbi-live/
+/results/manual-*/results.json

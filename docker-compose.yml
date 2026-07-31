@@ -22,6 +22,7 @@ services:
   postgres:
     image: postgres:16
     environment:
+      # DEV ONLY: local fixture password; never use this value in deployment.
       POSTGRES_PASSWORD: contextlayer
     volumes:
       - pgdata:/var/lib/postgresql/data
