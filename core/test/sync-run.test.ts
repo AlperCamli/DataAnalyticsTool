@@ -326,7 +326,7 @@ it("SO-12: a failed run re-run over identical pinned inputs yields byte-identica
   expect(fp3).toBe(fp2); // …byte-identical tree content
 }, 240_000);
 
-it("SO-10: wheel version mismatch → the next sync PR leads with the wheel commit; manifest and CI pin updated; wheel-only manual run supported", async () => {
+it("SO-10: wheel version mismatch → the next sync PR leads with the wheel commit; manifest is the only pin, no workflow file touched (R-6b); wheel-only manual run supported", async () => {
   const rig = await makeRig();
   // seed KB carries an old vendored wheel + manifest + CI pin
   const vendor = path.join(rig.kb.seedClone, ".github", "vendor");
@@ -338,14 +338,20 @@ it("SO-10: wheel version mismatch → the next sync PR leads with the wheel comm
       "package: contextlayer-snapshot\nversion: 0.3.0\n" +
       "wheel: contextlayer_snapshot-0.3.0-py3-none-any.whl\n" +
       "sha256: aaaa\nplatform_commit: 0000000\nbuilt: 2026-07-01\n" +
-      "built_by: seed\nsource: platform repo\nruntime_deps_pinned_in: ../workflows/kb-ci.yml\n",
+      "built_by: seed\nsource: platform repo\n" +
+      "runtime_deps_pinned_in: this file (runtime_deps)\n" +
+      "runtime_deps:\n  - jsonschema==4.26.0\n  - PyYAML==6.0.3\n",
   );
+  // R-6(b): the workflow reads the wheel filename out of the manifest, so
+  // it carries no version at all. The carry must leave it untouched.
   const workflows = path.join(rig.kb.seedClone, ".github", "workflows");
   await mkdir(workflows, { recursive: true });
-  await writeFile(
-    path.join(workflows, "kb-ci.yml"),
-    "steps:\n  - run: pip install .github/vendor/contextlayer_snapshot-0.3.0-py3-none-any.whl\n",
-  );
+  const CI_YAML =
+    "steps:\n" +
+    "  - run: |\n" +
+    "      WHEEL=$(sed -n 's/^wheel: //p' .github/vendor/VENDOR-MANIFEST.yaml)\n" +
+    "      pip install --no-deps \".github/vendor/$WHEEL\"\n";
+  await writeFile(path.join(workflows, "kb-ci.yml"), CI_YAML);
   rig.kb.commitAll("seed vendored wheel");
 
   const wheelPath = path.join(rig.base, "contextlayer_snapshot-0.4.0-py3-none-any.whl");
@@ -378,15 +384,24 @@ it("SO-10: wheel version mismatch → the next sync PR leads with the wheel comm
   )
     .trim()
     .split("\n");
-  expect(wheelFiles.every((f) => f.startsWith(".github/"))).toBe(true);
   const manifest = await readFile(path.join(clone, ".github", "vendor", "VENDOR-MANIFEST.yaml"), "utf-8");
   expect(manifest).toContain("version: 0.4.0");
   expect(manifest).toContain("platform_commit: cafe1234");
   expect(manifest).toContain("built: 2026-07-17");
   expect(manifest).toContain("# Provenance for the vendored validation library.");
+  expect(manifest).toContain("wheel: contextlayer_snapshot-0.4.0-py3-none-any.whl");
+  // KB-owned runtime pins survive the carry — dropping them would leave
+  // CI installing nothing at all.
+  expect(manifest).toContain("jsonschema==4.26.0");
+  expect(manifest).toContain("PyYAML==6.0.3");
+
+  // R-6(b): the wheel commit touches vendor files only. No workflow file
+  // is written, so the sync identity needs no `workflow` write scope —
+  // asserted, because "we don't need it" is the kind of claim that rots.
+  expect(wheelFiles.every((f) => f.startsWith(".github/vendor/"))).toBe(true);
+  expect(wheelFiles.some((f) => f.includes("workflows/"))).toBe(false);
   const ci = await readFile(path.join(clone, ".github", "workflows", "kb-ci.yml"), "utf-8");
-  expect(ci).toContain("contextlayer_snapshot-0.4.0-py3-none-any.whl");
-  expect(ci).not.toContain("0.3.0");
+  expect(ci).toBe(CI_YAML); // byte-identical to what was seeded
   const branchFiles = sh("git", ["ls-tree", "-r", "--name-only", "HEAD", ".github/vendor"], clone);
   expect(branchFiles).not.toContain("0.3.0"); // old wheel removed
 

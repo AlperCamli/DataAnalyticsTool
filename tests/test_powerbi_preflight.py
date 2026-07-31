@@ -129,11 +129,48 @@ def test_all_green(tmp_path):
     checks = by_name(run_preflight(env(tmp_path), fake, sleeper=no_sleep))
     assert all(check.ok for check in checks.values()), checks
     assert set(checks) == {
-        "token:powerbi", "token:fabric", "workspace-membership", "push-api", "fabric-api",
+        "token:powerbi", "token:fabric", "workspace-membership", "sp-scope",
+        "push-api", "fabric-api",
     }
     # Both scopes were requested — the Fabric deploy path has its own token.
     token_calls = [call for call in fake.calls if call[0] == "token"]
     assert len(token_calls) == 2
+
+
+# --- R-5 / RA-10: the SP sees the designated workspace and nothing else -----
+
+
+def test_sp_scope_green_when_only_the_designated_workspace_is_visible(tmp_path):
+    # RA-10 asserted rather than promised: least privilege shows up as a
+    # passing line, so an operator reading the output sees it was checked.
+    checks = by_name(run_preflight(env(tmp_path), FakeMicrosoft(), sleeper=no_sleep))
+    scope = checks["sp-scope"]
+    assert scope.ok and not scope.advisory
+    assert "RA-10" in scope.message
+
+
+def test_sp_scope_advises_but_does_not_fail_when_the_sp_sees_more(tmp_path):
+    other = "3d9b93c6-7b6d-4801-a491-1738910904fd"
+    fake = FakeMicrosoft(groups=[{"id": WORKSPACE}, {"id": other}])
+    checks = by_name(run_preflight(env(tmp_path), fake, sleeper=no_sleep))
+
+    # Membership still holds — the target IS among what the SP can see.
+    assert checks["workspace-membership"].ok
+    scope = checks["sp-scope"]
+    assert not scope.ok
+    # Advisory, not a failure: delivered data is exec-role aggregates, so
+    # this must not gate STOP-A. It must still name the extra workspace.
+    assert scope.advisory
+    assert other in scope.message
+    assert "least privilege" in scope.message
+
+
+def test_sp_scope_is_blocked_not_failed_when_the_listing_never_ran(tmp_path):
+    fake = FakeMicrosoft(token_status=401, aadsts="AADSTS7000215: Invalid client secret.")
+    checks = by_name(run_preflight(env(tmp_path), fake, sleeper=no_sleep))
+    scope = checks["sp-scope"]
+    assert not scope.ok and scope.advisory
+    assert "blocked" in scope.message
 
 
 def test_bad_secret_fails_with_aadsts_hint_and_blocks_dependents(tmp_path):

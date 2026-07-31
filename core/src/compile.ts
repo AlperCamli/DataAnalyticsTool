@@ -46,8 +46,43 @@ export interface CompiledSetup {
   /** `CLAUDE.md` — the profile's fragment plus the compiled preamble. */
   claudeMd: string;
   skills: CompiledSkill[];
-  /** Non-fatal problems the operator should see (missing skills, etc.). */
+  /** Non-fatal problems the operator should see. */
   warnings: string[];
+}
+
+/**
+ * A profile named a skill this release does not ship (F-7).
+ *
+ * This is fatal, not a warning. The compiled bundle's `CLAUDE.md` is read
+ * by the session as the statement of what it may do, so it acts as *de
+ * facto client-side permissions* (PA-2): it cannot widen the server
+ * allow-set, but it silently narrows what the session will even attempt.
+ * A bundle missing a skill therefore ships a quietly smaller product than
+ * the profile describes — which is exactly how the steward's half of the
+ * drift loop went missing for a whole checkpoint while `compile` printed
+ * a warning and exited 0 (CP-8 report C-2/F-7).
+ *
+ * Emitting nothing is the honest outcome: a setup that cannot be built
+ * correctly should not be delivered at all.
+ */
+export class MissingSkillError extends Error {
+  readonly profile: string;
+  readonly missing: string[];
+  readonly shipped: string[];
+
+  constructor(profile: string, missing: string[], shipped: string[]) {
+    super(
+      `profile "${profile}" names skill${missing.length > 1 ? "s" : ""} ` +
+        `${missing.map((s) => `"${s}"`).join(", ")}, which this core release does not ship. ` +
+        `Shipped: ${shipped.join(", ") || "(none)"}. ` +
+        `Fix the profile or install the skill — a bundle missing a skill silently ` +
+        `narrows what the session will attempt.`,
+    );
+    this.name = "MissingSkillError";
+    this.profile = profile;
+    this.missing = missing;
+    this.shipped = shipped;
+  }
 }
 
 export interface CompileOptions {
@@ -62,10 +97,10 @@ function stringList(value: unknown): string[] {
 }
 
 /**
- * Read a skill's SKILL.md from the core image. Returns null (and a
- * warning upstream) when the profile names a skill this release does not
- * ship — an unknown skill must not fail the whole setup, since the rest
- * of the profile is still usable.
+ * Read a skill's SKILL.md from the core image. Returns null when the
+ * profile names a skill this release does not ship, or when the name
+ * escapes the skills root; the caller turns that into a fatal
+ * `MissingSkillError` (F-7, ruling D-96 task 2).
  */
 async function readSkill(skillsRoot: string, name: string): Promise<CompiledSkill | null> {
   // Defend the path join: a profile is customer-editable data, and
@@ -119,10 +154,15 @@ export async function compileProfile(
   const displayName = typeof raw.name === "string" ? raw.name : name;
 
   const skills: CompiledSkill[] = [];
+  const missing: string[] = [];
   for (const skillName of stringList(raw.skills)) {
     const skill = await readSkill(skillsRoot, skillName);
     if (skill) skills.push(skill);
-    else warnings.push(`profile names skill "${skillName}", which this core release does not ship`);
+    else missing.push(skillName);
+  }
+  // F-7 (D-96 task 2): fatal, not a warning. See MissingSkillError.
+  if (missing.length > 0) {
+    throw new MissingSkillError(name, missing, await listShippedSkills(skillsRoot));
   }
 
   const base = opts.publicUrl.replace(/\/+$/, "");

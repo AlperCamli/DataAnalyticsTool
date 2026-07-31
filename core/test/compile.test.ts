@@ -17,8 +17,10 @@ import {
   compileProfile,
   defaultSkillsRoot,
   listShippedSkills,
+  MissingSkillError,
   writeSetup,
 } from "../src/compile.js";
+import { BENCHMARK_PROFILE, REPORTER_PROFILE, STEWARD_PROFILE } from "./mcp-helpers.js";
 
 const REPORTER = `
 name: Reporter
@@ -90,21 +92,31 @@ describe("profile compilation", () => {
     expect(cfg.mcpServers.contextlayer.url).toContain("profile=reporter");
   });
 
-  it("warns rather than fails when a profile names a skill this release does not ship", async () => {
+  it("F-7: fails the compile when a profile names a skill this release does not ship", async () => {
+    // Was warn-and-proceed until the CP-8 review (F-7). A bundle's
+    // CLAUDE.md is read by the session as the statement of what it may
+    // do, so a bundle missing a skill ships a quietly smaller product
+    // than the profile describes. Emitting nothing is the honest outcome.
     const skillsRoot = await scratchSkills({ report: "# report\n" });
     const raw = YAML.parse(REPORTER) as Record<string, unknown>;
     raw.skills = ["report", "clairvoyance"];
 
-    const setup = await compileProfile("reporter", raw, {
+    await expect(
+      compileProfile("reporter", raw, { publicUrl: "https://ctx.acme.internal", skillsRoot }),
+    ).rejects.toThrow(MissingSkillError);
+
+    const err = await compileProfile("reporter", raw, {
       publicUrl: "https://ctx.acme.internal",
       skillsRoot,
-    });
+    }).catch((e: unknown) => e as MissingSkillError);
 
-    // The rest of the profile is still usable — an unknown skill must not
-    // cost the operator their whole setup.
-    expect(setup.skills.map((s) => s.name)).toEqual(["report"]);
-    expect(setup.warnings).toHaveLength(1);
-    expect(setup.warnings[0]).toContain("clairvoyance");
+    expect(err.missing).toEqual(["clairvoyance"]);
+    expect(err.shipped).toEqual(["report"]);
+    // The message must name the profile, the gap, and what does ship —
+    // an operator reading only stderr has to be able to act on it.
+    expect(err.message).toContain("reporter");
+    expect(err.message).toContain("clairvoyance");
+    expect(err.message).toContain("report");
   });
 });
 
@@ -132,18 +144,20 @@ describe("D-75.1 — skills come from the core image, never the KB", () => {
 
   it("does not read outside the skills root even when the profile asks it to", async () => {
     // Profiles are customer-editable data; a traversal in `skills:` must
-    // not turn compilation into an arbitrary-file read.
+    // not turn compilation into an arbitrary-file read. Since F-7 it is
+    // also fatal — the traversal resolves to no skill, which is the same
+    // failure as naming one that does not exist, and nothing is written.
     const skillsRoot = await scratchSkills({ report: "# report\n" });
     const raw = YAML.parse(REPORTER) as Record<string, unknown>;
     raw.skills = ["../../../etc"];
 
-    const setup = await compileProfile("reporter", raw, {
+    const err = await compileProfile("reporter", raw, {
       publicUrl: "https://ctx.acme.internal",
       skillsRoot,
-    });
+    }).catch((e: unknown) => e as MissingSkillError);
 
-    expect(setup.skills).toEqual([]);
-    expect(setup.warnings).toHaveLength(1);
+    expect(err).toBeInstanceOf(MissingSkillError);
+    expect(err.missing).toEqual(["../../../etc"]);
   });
 
   it("ships the CP-5 skills in the core image", async () => {
@@ -152,5 +166,82 @@ describe("D-75.1 — skills come from the core image, never the KB", () => {
     const shipped = await listShippedSkills(defaultSkillsRoot());
     expect(shipped).toContain("report");
     expect(shipped).toContain("enrich");
+  });
+});
+
+/**
+ * R-8 (D-79 watch-note, amended to a test by the CP-8 review). The watch
+ * note said "fixture profiles must track product profiles" and was held
+ * twice by discipline and once by luck. This is its mechanical form.
+ *
+ * The failure it exists to catch: a profile — fixture or product — names
+ * a skill the core does not ship, and nothing notices. That is exactly
+ * how `review-sync` was specified (skill spec §7, AS-7), written into
+ * both the shipped steward profile and its fixture twin, and never built.
+ */
+describe("R-8 — every skill named by a shipped profile exists in the core image", () => {
+  /**
+   * Skills a profile may name that the core does not yet ship. Every
+   * entry is a KNOWN, RULED gap with an owner and an exit — never a
+   * convenience. The list is asserted to be exhausted below, so an entry
+   * whose skill has shipped fails the suite and forces its own removal.
+   */
+  const KNOWN_UNSHIPPED: Record<string, string> = {
+    // CP-8 condition C-2, ruled BUILD (not despecify) by D-96.3c;
+    // Phase-2 Track A-1. Named by the product steward profile and its
+    // fixture twin. Remove this entry when core/skills/review-sync lands.
+    "review-sync": "C-2 / D-96.3c — build under Track A-1",
+  };
+
+  const skillsOf = (yaml: string): string[] =>
+    stringList((YAML.parse(yaml) as { skills?: unknown }).skills);
+
+  function stringList(value: unknown): string[] {
+    return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+  }
+
+  it("holds for every fixture profile the conformance rigs ship", async () => {
+    const shipped = new Set(await listShippedSkills(defaultSkillsRoot()));
+    const profiles: Record<string, string> = {
+      reporter: REPORTER_PROFILE,
+      steward: STEWARD_PROFILE,
+      benchmark: BENCHMARK_PROFILE,
+    };
+
+    const gaps: string[] = [];
+    for (const [profile, yaml] of Object.entries(profiles)) {
+      for (const skill of skillsOf(yaml)) {
+        if (shipped.has(skill)) continue;
+        if (skill in KNOWN_UNSHIPPED) continue;
+        gaps.push(`${profile} names "${skill}" (shipped: ${[...shipped].sort().join(", ")})`);
+      }
+    }
+    expect(gaps, `profiles name skills this core release does not ship:\n${gaps.join("\n")}`)
+      .toEqual([]);
+  });
+
+  it("forces every known-unshipped entry to be removed once its skill ships", async () => {
+    // Without this, the exception list silently becomes permanent — the
+    // failure mode that made R-8 a watch-note nobody actioned.
+    const shipped = await listShippedSkills(defaultSkillsRoot());
+    const stale = Object.keys(KNOWN_UNSHIPPED).filter((s) => shipped.includes(s));
+    expect(stale, `these skills now ship — delete their KNOWN_UNSHIPPED entries: ${stale.join(", ")}`)
+      .toEqual([]);
+  });
+
+  it("would have caught C-2: an unlisted missing skill fails, and compile refuses it", async () => {
+    // The counterfactual, run for real. A profile naming an unshipped
+    // skill that is NOT a ruled exception must be a hard failure at both
+    // levels: this test's inventory check, and the compile itself (F-7).
+    const skillsRoot = await scratchSkills({ enrich: "# enrich\n" });
+    const raw = YAML.parse(STEWARD_PROFILE) as Record<string, unknown>;
+
+    const err = await compileProfile("steward", raw, {
+      publicUrl: "https://ctx.acme.internal",
+      skillsRoot,
+    }).catch((e: unknown) => e as MissingSkillError);
+
+    expect(err).toBeInstanceOf(MissingSkillError);
+    expect(err.missing).toEqual(["review-sync"]);
   });
 });

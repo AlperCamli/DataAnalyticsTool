@@ -52,6 +52,9 @@ class Check:
     name: str
     ok: bool
     message: str
+    #: An advisory does not gate STOP-A. It reports a posture the product
+    #: cannot enforce and the operator may legitimately accept (R-5).
+    advisory: bool = False
 
 
 def _requests_transport(method: str, url: str, headers: dict | None = None,
@@ -130,6 +133,7 @@ def run_preflight(env: PowerBIEnv, transport: Transport | None = None,
     if pbi_token is None:
         skip = "blocked: no Power BI token (fix the token check first)"
         checks.append(Check("workspace-membership", False, skip))
+        checks.append(Check("sp-scope", False, skip, advisory=True))
         checks.append(Check("push-api", False, skip))
     else:
         status, ids = _visible_workspaces(pbi_token, transport)
@@ -140,6 +144,8 @@ def run_preflight(env: PowerBIEnv, transport: Transport | None = None,
                 "Tenant settings → Developer settings) for the SP's security group, then wait "
                 "a few minutes and re-run."
             )))
+            checks.append(Check("sp-scope", False, "blocked: workspace listing failed",
+                                advisory=True))
             checks.append(Check("push-api", False, "blocked: workspace listing failed"))
         else:
             member = env.workspace_id.lower() in ids
@@ -165,6 +171,21 @@ def run_preflight(env: PowerBIEnv, transport: Transport | None = None,
                 "workspace (workspace → Manage access), re-check POWERBI_WORKSPACE_ID, then "
                 "re-run."
             )))
+            # R-5 / RA-10: "member of the designated workspace(s) only".
+            # The membership check above asserts the target IS among what
+            # the SP can see; it says nothing about what else it can see.
+            # Least privilege here was a human promise until this line —
+            # the check RA-10 implies, stated rather than assumed.
+            extra = sorted(ids - {env.workspace_id.lower()})
+            checks.append(Check("sp-scope", not extra, (
+                "service principal sees only the designated workspace (RA-10)" if not extra else
+                f"RA-10 advisory: the SP can see {len(ids)} workspaces, {len(extra)} beyond the "
+                f"designated one — {', '.join(extra[:5])}"
+                f"{', …' if len(extra) > 5 else ''}. Delivered data is exec-role aggregates, so "
+                "this does not gate the demo; but least privilege for this SP is a human promise "
+                "until the extra memberships are removed (each workspace → Manage access) or "
+                "accepted on the record."
+            ), advisory=bool(extra)))
             status, _ = _get("datasets.list_in_group", pbi_token, transport,
                              groupId=env.workspace_id)
             checks.append(Check("push-api", status == 200, (
@@ -217,13 +238,20 @@ def main(argv: list[str] | None = None) -> int:
     checks = run_preflight(env)
     print()
     for check in checks:
-        print(f"{'ok  ' if check.ok else 'FAIL'}  {check.name:<20} {check.message}")
-    failed = [c for c in checks if not c.ok]
+        marker = "ok  " if check.ok else ("warn" if check.advisory else "FAIL")
+        print(f"{marker}  {check.name:<20} {check.message}")
+    failed = [c for c in checks if not c.ok and not c.advisory]
+    advisories = [c for c in checks if not c.ok and c.advisory]
     print()
     if failed:
         print(f"{len(failed)} of {len(checks)} checks failed. Fix the first failure and re-run;")
         print("later failures are often consequences of it.")
         return 3
+    if advisories:
+        # R-5: an advisory reports a posture the product cannot enforce.
+        # It is loud and it does not block — the operator decides.
+        print(f"{len(advisories)} advisory (not blocking): "
+              f"{', '.join(c.name for c in advisories)}.")
     print("All checks passed. STOP-A clears on your word — the build resumes on it.")
     return 0
 

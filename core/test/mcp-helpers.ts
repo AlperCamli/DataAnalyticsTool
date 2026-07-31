@@ -82,7 +82,7 @@ roles:
 // target-qualified. Keeping the fixture reporter frozen at an older
 // shape would exercise a profile the product no longer ships — the
 // divergence D-79.2 flags.
-const REPORTER_PROFILE = `name: Reporter
+export const REPORTER_PROFILE = `name: Reporter
 description: Read + validate + execute + publish for business users (publish added CP-7)
 roles: [reporter, salesonly]
 skills: [report]
@@ -93,7 +93,7 @@ tools:
 limits: { row_cap: 50000, timeout_s: 60 }
 `;
 
-const STEWARD_PROFILE = `name: Steward
+export const STEWARD_PROFILE = `name: Steward
 description: Full read surface + triage
 roles: [steward, auditlite]
 skills: [enrich, review-sync]
@@ -103,7 +103,7 @@ tools:
 limits: { row_cap: 100000, timeout_s: 120 }
 `;
 
-const BENCHMARK_PROFILE = `name: Benchmark
+export const BENCHMARK_PROFILE = `name: Benchmark
 description: Golden-suite harness profile (SP-2 waiver keys on this, server-resolved)
 roles: [benchmark]
 skills: [benchmark]

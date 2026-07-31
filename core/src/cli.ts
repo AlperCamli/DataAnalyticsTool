@@ -295,7 +295,7 @@ async function runCompile(args: string[]): Promise<number> {
   const { existsSync } = await import("node:fs");
   const pathMod = await import("node:path");
   const YAML = (await import("yaml")).default;
-  const { compileProfile, writeSetup, listShippedSkills } = await import("./compile.js");
+  const { compileProfile, writeSetup, MissingSkillError } = await import("./compile.js");
 
   let file = pathMod.join(kbDir, ".contextlayer", "profiles", `${profileName}.yaml`);
   if (!existsSync(file)) file = pathMod.join(kbDir, ".contextlayer", "profiles", `${profileName}.yml`);
@@ -305,13 +305,21 @@ async function runCompile(args: string[]): Promise<number> {
   }
 
   const raw = YAML.parse(await readFile(file, "utf-8")) as Record<string, unknown>;
-  const setup = await compileProfile(profileName, raw, { publicUrl });
+  let setup;
+  try {
+    setup = await compileProfile(profileName, raw, { publicUrl });
+  } catch (err) {
+    // F-7: a missing skill fails the compile and writes nothing. Report
+    // it as an operator-actionable error, not a stack trace.
+    if (err instanceof MissingSkillError) {
+      console.error(`compile failed: ${err.message}`);
+      return 1;
+    }
+    throw err;
+  }
   const written = await writeSetup(setup, outDir);
 
   for (const warning of setup.warnings) console.error(`warning: ${warning}`);
-  if (setup.warnings.length) {
-    console.error(`this release ships: ${(await listShippedSkills()).join(", ") || "(no skills)"}`);
-  }
   console.log(`compiled ${setup.displayName} -> ${outDir}`);
   for (const rel of written) console.log(`  ${rel}`);
   return 0;

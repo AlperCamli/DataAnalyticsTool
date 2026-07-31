@@ -2,10 +2,24 @@
  * Vendored-wheel maintenance (sync spec §10). When the platform
  * release's wheel version differs from the KB's provenance manifest, the
  * next sync PR leads with a wheel-update commit: new wheel + rewritten
- * manifest (version, sha256, platform commit) + the kb-ci.yml install
- * line repointed — so the PR's own KB CI run validates with the wheel
- * that will govern after merge. The D-46 exception boundary is
- * unchanged: wheel + manifest + the CI pin, nothing else.
+ * manifest (version, sha256, platform commit) — so the PR's own KB CI
+ * run validates with the wheel that will govern after merge.
+ *
+ * **The carry never touches a workflow file** (R-6 option (b), ruling
+ * D-96 task 2). It used to repoint `kb-ci.yml`'s install line at the new
+ * wheel filename, which meant the sync identity needed `workflow` write
+ * scope on the customer's repo — a token that can rewrite CI is a token
+ * that can rewrite the thing checking the work. `kb-ci.yml` now reads
+ * `wheel:` (and the runtime dep pins) out of `VENDOR-MANIFEST.yaml` at
+ * job time, so the manifest is the single pin and the workflow is
+ * static. The D-46 exception boundary narrows accordingly: wheel +
+ * manifest, nothing else.
+ *
+ * The bootstrapped `kb-ci.yml` must therefore read the manifest. A KB
+ * whose workflow still hardcodes a wheel filename keeps working (the
+ * install line just names a file that is no longer there — a loud CI
+ * failure, not a silent stale-wheel validation), but it must be migrated;
+ * the platform emits the manifest-reading form.
  */
 
 import { createHash } from "node:crypto";
@@ -15,7 +29,6 @@ import { parse as parseYaml } from "yaml";
 import type { SyncConfig } from "./config.js";
 
 export const MANIFEST_PATH = ".github/vendor/VENDOR-MANIFEST.yaml";
-export const KB_CI_PATH = ".github/workflows/kb-ci.yml";
 
 export interface WheelCarry {
   fromVersion: string | null;
@@ -104,26 +117,21 @@ export async function applyWheelCarry(
     `built: ${built}`,
     `built_by: contextlayer-sync (sync spec §10 wheel carry)`,
     `source: ${keep("source", "platform repo")}`,
-    `runtime_deps_pinned_in: ${keep("runtime_deps_pinned_in", "../workflows/kb-ci.yml")}`,
+    `runtime_deps_pinned_in: ${keep("runtime_deps_pinned_in", "this file (runtime_deps)")}`,
   ];
+  // `runtime_deps` is KB-owned data the carry must not silently drop: the
+  // workflow installs exactly this list, so losing it would leave CI with
+  // no dependency pins at all. Preserved verbatim, never rewritten here.
+  const deps = manifest?.fields.runtime_deps;
+  if (Array.isArray(deps)) {
+    fields.push("runtime_deps:");
+    for (const dep of deps) fields.push(`  - ${String(dep)}`);
+  }
   await writeFile(path.join(kbDir, MANIFEST_PATH), header + fields.join("\n") + "\n");
   touched.push(MANIFEST_PATH);
 
-  // Repoint the KB CI install line at the new wheel filename.
-  if (carry.oldWheelBasename && carry.oldWheelBasename !== carry.wheelBasename) {
-    try {
-      const ciPath = path.join(kbDir, KB_CI_PATH);
-      const ci = await readFile(ciPath, "utf-8");
-      if (ci.includes(carry.oldWheelBasename)) {
-        await writeFile(
-          ciPath,
-          ci.split(carry.oldWheelBasename).join(carry.wheelBasename),
-        );
-        touched.push(KB_CI_PATH);
-      }
-    } catch {
-      // no workflow in this KB (scratch repos) — the manifest still governs
-    }
-  }
+  // R-6(b): no workflow file is touched. kb-ci.yml reads `wheel:` from
+  // the manifest at job time, so the manifest is the only pin and the
+  // sync identity needs no `workflow` write scope.
   return touched;
 }

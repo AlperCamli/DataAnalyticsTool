@@ -65,6 +65,11 @@ async function spawnRunner(
       runner_id: runnerId,
       connectors,
       classes: ["batch"],
+      // Pin the heartbeat instead of inheriting lease_ttl/2. The SDK's
+      // default would give a 1 s beat against this file's compressed
+      // lease, and one scheduling stall on a loaded machine then expires
+      // a LIVE lease — the JC-4 flake (D-85/D-86.2, watch item).
+      heartbeat_interval_s: 0.5,
       wait_s: 2,
       claim_backoff_s: 0.5,
       resolver: { kind: "process-env" },
@@ -100,7 +105,10 @@ let runnerA: RunnerProc;
 let runnerB: RunnerProc | null = null;
 
 beforeAll(async () => {
-  core = await startCore({ leaseTtlS: 2, sweepIntervalMs: 200 });
+  // 8 s lease + 0.5 s heartbeat = 16:1 margin (production is 60 s).
+  // Still short enough that JC-4's reclaim happens inside the test's
+  // budget; long enough that suite load cannot expire a live lease.
+  core = await startCore({ leaseTtlS: 8, sweepIntervalMs: 200 });
   client = new WireClient(core.baseUrl, TEST_TOKEN, TEST_OPS_TOKEN);
   stopSweeper = startSweeper(core.pool, core.cfg, () => {});
 
@@ -235,12 +243,14 @@ it("JC-4: runner killed mid-job → reclaim by a second runner → identical can
   await client.waitForState(jobId, ["running"], 30_000);
   runnerA.kill("SIGKILL");
 
-  // lease (2 s) expires; sweeper (200 ms) requeues with attempt+1
-  const requeued = await client.waitForState(jobId, ["queued"], 15_000);
+  // lease (8 s) expires; sweeper (200 ms) requeues with attempt+1.
+  // Left deliberately strict: at a 16:1 heartbeat margin a spurious
+  // expiry is a real signal and should still fail the test.
+  const requeued = await client.waitForState(jobId, ["queued"], 25_000);
   expect(requeued.attempt).toBe(2);
 
   runnerB = await spawnRunner("runner-b1", ["tests.job_fixtures.slow_demo:connector"]);
-  const done = await client.waitForState(jobId, ["succeeded", "dead_lettered"], 60_000);
+  const done = await client.waitForState(jobId, ["succeeded", "dead_lettered"], 90_000);
   expect(done.state, JSON.stringify(done.error)).toBe("succeeded");
   expect(done.runner_id).toBe("runner-b1");
 
@@ -256,4 +266,4 @@ it("JC-4: runner killed mid-job → reclaim by a second runner → identical can
   const events = (await client.get(`/v1/health-events?job_id=${jobId}`)).json
     .events as Record<string, unknown>[];
   expect(events.some((e) => e.kind === "lease_expired")).toBe(true);
-}, 120_000);
+}, 180_000);
