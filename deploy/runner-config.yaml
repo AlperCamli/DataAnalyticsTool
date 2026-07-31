@@ -10,9 +10,14 @@ connectors:
   - connectors.postgres.connector:connector
   - connectors.ga4.connector:connector
   - connectors.gsc.connector:connector
-  # CP-7: publisher adapter — publish jobs ride the same interactive
-  # lane as execute; template_link needs no credentials at all.
+  # CP-7: publisher adapters — publish jobs ride the same interactive
+  # lane as execute. looker_studio is template_link and needs no
+  # credentials at all; powerbi is the api-class leg (D-91) and resolves
+  # its POWERBI_* keys through the same process-env resolver. Without
+  # the powerbi line a clean checkout builds a runner that cannot claim
+  # a `powerbi` publish job — the READINESS-2026-07-29 NO-GO (D-96.4 C-1).
   - connectors.looker_studio.connector:connector
+  - connectors.powerbi.connector:connector
 # `interactive` is the execute/publish lane (CP-6). Without it this
 # runner claims snapshot work only and execute_sql has nobody to serve it.
 classes: [batch, interactive]
