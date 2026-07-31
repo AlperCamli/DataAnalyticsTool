@@ -20,8 +20,10 @@ Determinism rules that make C-2/C-3 byte-testable (DECISIONS.md D-19):
   every fresh ddl-file container); the eventual ddl→live switch adds
   estimates as a metadata-only diff, which is expected fresh
   information, never a spurious structural change (hash-excluded).
-- `stats.indexes` is sorted lexicographically here (the §4.5 registered
-  form); every other ordering is the 1.1 canonicalizer's job.
+- `stats.indexes` and `stats.checks` are sorted lexicographically here
+  (the §4.5 registered form); every other ordering is the 1.1
+  canonicalizer's job. `pg_constraint` order in particular is not stable
+  across dump/restore, so C-2 byte-identity depends on that sort.
 """
 
 from collections import defaultdict
@@ -95,6 +97,27 @@ WHERE i.indrelid = ANY(%(relids)s::oid[])
   AND i.indisvalid AND i.indislive
   AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint con
                   WHERE con.conindid = i.indexrelid)
+"""
+
+# SS-5 capture (spec §4.5 registration record, ruling D-96.3d). Verbatim
+# `pg_get_constraintdef` output — the engine's own rendering of its own
+# constraint, never parsed into a vocabulary here (S-8).
+#
+# `contype = 'c'` is the whole filter, and it does the scope work by
+# construction rather than by convention: NOT NULL arrives as 'n' on
+# PG17+ and is already carried by `columns[].nullable`; PRIMARY KEY /
+# UNIQUE / FOREIGN KEY ('p'/'u'/'f') ride `keys`; exclusion constraints
+# ('x') and domain constraints stay dropped as SS-6/SS-7 territory.
+#
+# `conrelid <> 0` excludes domain constraints, which live in pg_constraint
+# with contypid set and conrelid zero — they would otherwise attach to
+# whatever table oid 0 sorts against.
+_CHECKS_SQL = """
+SELECT con.conrelid, pg_catalog.pg_get_constraintdef(con.oid, true) AS definition
+FROM pg_catalog.pg_constraint con
+WHERE con.conrelid = ANY(%(relids)s::oid[])
+  AND con.contype = 'c'
+  AND con.conrelid <> 0
 """
 
 _SERVER_VERSION_SQL = "SELECT current_setting('server_version_num')::int"
@@ -179,6 +202,22 @@ def _indexes_by_rel(conn, relids: list[int]) -> dict[int, list[str]]:
     return {relid: sorted(defs) for relid, defs in out.items()}
 
 
+def _checks_by_rel(conn, relids: list[int]) -> dict[int, list[str]]:
+    """SS-5: CHECK definitions per relation, lexicographically sorted.
+
+    Sorted here rather than left to the catalog: `pg_constraint` order is
+    not stable across dump/restore, and S-3 requires the same source state
+    to produce a byte-identical canonical body. Duplicates are impossible
+    (constraint names are unique per relation), so no dedupe is needed.
+    """
+    if not relids:
+        return {}
+    out = defaultdict(list)
+    for relid, definition in conn.execute(_CHECKS_SQL, {"relids": relids}):
+        out[relid].append(definition)
+    return {relid: sorted(defs) for relid, defs in out.items()}
+
+
 def introspect_connection(conn, schemas: list[str] | None) -> tuple[list[dict], dict]:
     """Introspect one open psycopg connection into (objects, source_properties)."""
     for statement in SESSION_SETUP:
@@ -189,6 +228,7 @@ def introspect_connection(conn, schemas: list[str] | None) -> tuple[list[dict], 
     columns = _columns_by_rel(conn, relids)
     keys = _keys_by_rel(conn, relids)
     indexes = _indexes_by_rel(conn, relids)
+    checks = _checks_by_rel(conn, relids)
 
     objects = []
     for oid, nsp, rel, relkind, row_estimate, description, definition in rels:
@@ -201,6 +241,11 @@ def introspect_connection(conn, schemas: list[str] | None) -> tuple[list[dict], 
                 stats["row_estimate"] = row_estimate
             if oid in indexes:
                 stats["indexes"] = indexes[oid]
+        # SS-5: `table` only — §4.5 registers `checks` on that kind alone.
+        # Omitted entirely when there are none: `{}` and `{"checks": []}`
+        # hash differently, so there is exactly one form (D-4).
+        if kind == "table" and oid in checks:
+            stats["checks"] = checks[oid]
         objects.append(
             {
                 "kind": kind,

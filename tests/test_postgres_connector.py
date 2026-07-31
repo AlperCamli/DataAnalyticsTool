@@ -290,6 +290,81 @@ def test_indexes_mapping(ddl_doc):
     ]
 
 
+# --- SS-5: CHECK constraints at the boundary (§4.5, ruling D-96.3d) ---
+
+
+def test_ss5_checks_captured_verbatim_and_sorted(ddl_doc):
+    checks = get(ddl_doc, "orders")["stats"]["checks"]
+    # Verbatim pg_get_constraintdef(oid, true) output — the engine's own
+    # rendering, never parsed into a value set on this side (S-8). The
+    # `true` is pretty-print, matching how view definitions are already
+    # taken (`pg_get_viewdef(oid, true)`), so both read the same way.
+    assert checks == ["CHECK (total_cents >= 0)"]
+    assert checks == sorted(checks)  # §4.5 registered form
+
+
+def test_ss5_checks_omitted_where_the_kind_has_none(ddl_doc):
+    # Absent, not empty: `{}` and `{"checks": []}` hash differently, so
+    # there is exactly one form for "no CHECKs" (D-4).
+    assert "checks" not in get(ddl_doc, "users")["stats"]
+    # Registered on `table` only — a view/matview must never carry it.
+    assert "checks" not in get(ddl_doc, "v_daily_revenue")["stats"]
+    assert "checks" not in get(ddl_doc, "mv_user_ltv")["stats"]
+
+
+def test_ss5_not_null_is_not_a_check(ddl_doc):
+    # NOT NULL is already `columns[].nullable`; on PG17+ it also appears
+    # in pg_constraint as contype 'n'. The contype='c' filter excludes it
+    # by construction, so the fact is carried once, in one place.
+    orders = get(ddl_doc, "orders")
+    assert not any("NOT NULL" in c for c in orders["stats"]["checks"])
+    assert any(c["name"] == "total_cents" and not c["nullable"] for c in orders["columns"])
+
+
+def test_ss5_check_is_hash_included_so_a_widened_constraint_contaminates(scratch):
+    """The polarity argument, executed.
+
+    This is the D-86.3b case in miniature: `ai_runs.status` was documented
+    from a CHECK vocabulary. If widening that CHECK moved no hash, the doc
+    explaining it would stay `verified` while the source no longer backed
+    it. Hash-included is what makes the drift reachable by the
+    contamination scan.
+    """
+    before = run_ok(live_config(scratch.dsn))
+    execute(
+        scratch.admin,
+        "ALTER TABLE public.orders DROP CONSTRAINT orders_total_cents_check",
+        "ALTER TABLE public.orders ADD CONSTRAINT orders_total_cents_check "
+        "CHECK (total_cents >= -100)",
+    )
+    after = run_ok(live_config(scratch.dsn))
+
+    assert get(after, "orders")["stats"]["checks"] == ["CHECK (total_cents >= '-100'::integer)"]
+    # Exactly one hash moves, and it is the table whose constraint changed.
+    changed = {i for i, h in hashes(before).items() if hashes(after)[i] != h}
+    assert changed == {("table", "public", "orders")}
+
+
+def test_ss5_multiple_checks_sort_lexicographically(scratch):
+    # pg_constraint order is not stable across dump/restore, so the sort
+    # is what C-2 byte-identity rests on when a table has several CHECKs.
+    execute(
+        scratch.admin,
+        "ALTER TABLE public.users ADD CONSTRAINT aa_users_email_len CHECK (length(email) > 3)",
+        "ALTER TABLE public.users ADD CONSTRAINT zz_users_created_past "
+        "CHECK (created_at < 'infinity'::timestamptz)",
+    )
+    doc = run_ok(live_config(scratch.dsn))
+    checks = get(doc, "users")["stats"]["checks"]
+    assert len(checks) == 2
+    assert checks == sorted(checks)
+    # Sorted by rendered definition, not by constraint name: the `aa_`/`zz_`
+    # names are deliberately anti-correlated with the expression text, so a
+    # sort-by-name regression puts them in the wrong order here.
+    assert checks[0].startswith("CHECK (created_at")
+    assert checks[1].startswith("CHECK (length(email)")
+
+
 def test_view_definition_verbatim_and_qualified(ddl_doc):
     definition = get(ddl_doc, "v_daily_revenue")["stats"]["definition"]
     assert "public.orders o" in definition  # search_path = '' → qualified (D-19)

@@ -341,6 +341,20 @@ def _sql_object_context(
             ", ".join(code(c) for c in group) for group in keys.get("unique", [])
         ],
         "indexes": [cell(i) for i in stats.get("indexes", [])],
+        # SS-5: rendered verbatim, never parsed into a vocabulary (S-8).
+        # This is the line that would have stopped D-86.3b's false claim —
+        # a reader working only from the KB now sees the constraint.
+        #
+        # None (not []) on any kind but `table`, so the section is absent
+        # rather than showing "—". §4.5 registers `checks` on `table`
+        # alone, and "Check constraints: —" on a view would assert an
+        # absence the snapshot never looked for — the same confident
+        # silence SS-5 exists to remove.
+        "checks": (
+            [cell(c) for c in stats.get("checks", [])]
+            if obj["kind"] == "table"
+            else None
+        ),
         "row_estimate": str(row_estimate) if row_estimate is not None else DASH,
         "referenced_by": referenced_by,
         "definition": (

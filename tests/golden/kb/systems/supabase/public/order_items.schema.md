@@ -46,6 +46,8 @@ Unique constraints:
 
 Indexes: —
 
+Check constraints: —
+
 ## Row estimate & freshness
 
 Row estimate: 8240

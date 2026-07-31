@@ -14,7 +14,15 @@ name = "contextlayer-snapshot"
 # 0.5.0: CP-4 sqlval — the validate_sql SQL dialect as a stage CLI
 # (MCP §6.6, MCP-R6/R7). No validation-rule changes to the KB CI
 # surface; the bump keeps the §10 wheel carry honest.
-version = "0.5.0"
+# 0.6.0: SS-5 capture (ruling D-96.3d) — `stats.checks` registered on
+# `table` (hash-included) plus the generator's Check-constraints line.
+# This one DOES change the KB CI surface twice over: C-8 now admits a
+# stats field it used to reject, and KB-8 render consistency compares
+# against a template that emits a new section. A KB validating with the
+# 0.5.0 wheel would call the new machine docs stale — which is exactly
+# the stale-wheel failure D-46 exists to make visible, so the carry is
+# not optional here.
+version = "0.6.0"
 description = "Snapshot layer (task 1.1) + connector SDK (1.2-1.4) + generator (1.5) + lineage (1.9)"
 requires-python = ">=3.12"
 dependencies = [

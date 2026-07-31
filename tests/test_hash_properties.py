@@ -31,7 +31,21 @@ _STAT_VALUES = {
     "row_estimate": st.integers(min_value=0, max_value=10**9),
     # registered form is lexicographically sorted (§4.5, task 1.2 amendment)
     "indexes": st.lists(st.text(min_size=1, max_size=60), max_size=3, unique=True).map(sorted),
+    # SS-5 (§4.5, D-96.3d): same sorted-list shape as `indexes`, opposite
+    # hash polarity — a CHECK is a documented meaning, an index is not.
+    "checks": st.lists(st.text(min_size=1, max_size=60), max_size=3, unique=True).map(sorted),
 }
+
+# Every registered stats field needs a value strategy, or the property
+# suite silently stops covering the kind that owns it (it raised KeyError
+# when `checks` was registered — kept as an explicit guard so the next
+# registration fails here rather than deep inside a draw).
+_UNCOVERED = {
+    field
+    for spec in KIND_REGISTRY.values()
+    for field in spec.hash_included_stats | spec.hash_excluded_stats
+} - set(_STAT_VALUES)
+assert not _UNCOVERED, f"registered stats fields with no strategy: {sorted(_UNCOVERED)}"
 
 
 @st.composite

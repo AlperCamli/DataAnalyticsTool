@@ -22,7 +22,16 @@ KIND_REGISTRY: dict[str, KindSpec] = {
     # cannot break a dependent or contradict a documented meaning;
     # semantic uniqueness belongs in a UNIQUE constraint (keys.unique,
     # hash-included), not in a bare unique index.
-    "table": KindSpec("sql", hash_excluded_stats=frozenset({"row_estimate", "indexes"})),
+    # `checks` registered by the SS-5 capture (spec §4.5 registration
+    # record, ruling D-96.3d): hash-INCLUDED, unlike `indexes`. The S-2
+    # test is "can this contradict a documented meaning?" — an index
+    # cannot; a CHECK *is* a documented meaning, so dropping or widening
+    # one must be able to contaminate the doc that explains it.
+    "table": KindSpec(
+        "sql",
+        hash_included_stats=frozenset({"checks"}),
+        hash_excluded_stats=frozenset({"row_estimate", "indexes"}),
+    ),
     "view": KindSpec("sql", hash_included_stats=frozenset({"definition"})),
     "materialized_view": KindSpec(
         "sql",

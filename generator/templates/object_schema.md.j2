@@ -59,6 +59,18 @@ Indexes:
 {% else %}
 Indexes: —
 {% endif %}
+{% if o.checks is not none %}
+
+{% if o.checks %}
+Check constraints:
+
+{% for c in o.checks %}
+- `{{ c }}`
+{% endfor %}
+{% else %}
+Check constraints: —
+{% endif %}
+{% endif %}
 
 ## Row estimate & freshness
 

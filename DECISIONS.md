@@ -3838,3 +3838,164 @@ the D-96 fence):
    external`, `resolved: false`) already sits in HEAD's graph with an
    `aggregate` edge into `v_daily_activity` — an unresolved reference
    that parsed to an empty object name.
+
+## D-96 task 2 — the four accepted small fixes (applied 2026-07-31)
+
+Landed as `1b69529`. Each is small; three of them are small because the
+CP-8 review did the diagnosis first.
+
+**JC-4 — test-only, and the diagnosis is the deliverable.** The failing
+assertion was never a product defect: `core/test/e2e.test.ts` is the only
+suite that compresses the lease to 2 s, and the SDK heartbeats at
+`lease_ttl / 2`, so it ran a **1 s beat against a 2 s lease** while
+production runs 60 s. One scheduling stall on a loaded machine expires a
+**live** lease; the 200 ms sweeper requeues work that is still running,
+and every downstream assertion mismatches. Fix: pin the heartbeat at
+0.5 s, widen the lease to 8 s (16:1 margin), widen the waits to match.
+`expect(requeued.attempt).toBe(2)` stays strict deliberately — at that
+margin a spurious expiry is a real signal, and softening it would trade
+the flake for blindness. Verification standard, per D-96.3f: **three
+consecutive full-suite runs under deliberate load**, reported below.
+
+**F-7 — a profile naming a missing skill now fails the compile.** It
+warned and proceeded, and that is precisely how a steward bundle shipped
+without `review-sync` for an entire checkpoint while `compile` exited 0.
+The bundle's `CLAUDE.md` is what the session reads as the statement of
+what it may do (PA-2), so a bundle missing a skill ships a **quietly
+smaller product than the profile describes**. `compileProfile` now throws
+`MissingSkillError` naming the profile, the gap, and what does ship; the
+CLI prints it and exits 1 **without writing a bundle** — emitting nothing
+is the honest outcome when the thing cannot be built correctly.
+
+> **Consequence, stated rather than discovered:** `compile steward`
+> **fails today.** The shipped steward profile names `review-sync`, and
+> D-96.3c ruled BUILD rather than despecify, so the skill genuinely does
+> not exist. That is the intended signal — C-2 is real and now visible at
+> the point of use. Server-side steward access is untouched (the
+> allow-set is enforced per call); only the compiled bundle is blocked,
+> until Track A-1 ships the skill.
+
+**R-8 — the D-79 watch-note becomes a test.** Every skill named by a
+shipped fixture profile must exist in `core/skills/`. The exception list
+carries exactly one ruled entry (`review-sync` → C-2 / Track A-1), and a
+second test **fails the moment an exception's skill ships**, so the list
+cannot quietly become permanent — which is how the watch-note itself went
+unactioned. A third test runs the counterfactual for real: compiling the
+steward profile against a core without `review-sync` raises. The claim
+"this test would have caught C-2" is therefore executed, not asserted.
+
+**R-5 — RA-10 asserted instead of implied.** The preflight's membership
+check only ever proved the target workspace was *among* what the SP can
+see; "member of the designated workspace(s) **only**" was a human
+promise. New `sp-scope` check: green when the SP sees nothing else,
+**advisory** (loud, non-blocking, naming the extra workspaces) when it
+does. Advisory rather than fatal because delivered data is exec-role
+aggregates — this must not gate STOP-A — and because the operator may
+legitimately accept the posture. What it must not do is stay unsaid.
+
+**R-6(b) — the wheel pin leaves the workflow.** `core/src/wheel.ts` no
+longer writes any workflow file; `kb-ci.yml` reads `wheel:` and
+`runtime_deps:` from `VENDOR-MANIFEST.yaml` at job time (KB **PR #32**,
+CI green on the new install path). The carry preserves `runtime_deps`
+verbatim — dropping it would leave CI installing no pins at all. Sync
+spec §10 amended; **SO-10 now asserts** the wheel commit stages
+`.github/vendor/**` only and leaves `kb-ci.yml` byte-identical, because
+"we don't need that scope" is the kind of claim that rots silently.
+
+The KB PR is only half. **R-6 closes on the operator dropping `workflow`
+write from the sync PAT** — exact steps are in PR #32's body, including
+the verification step (trigger a manual sync and confirm a PR still
+opens; a PAT that lost `contents` write fails loudly at push). Until
+then this is a change that makes the narrowing *possible*, and the risk
+is still carried.
+
+## D-96.3d — SS-5 CLOSED BY CAPTURE (applied 2026-07-31)
+
+The finding that started this closes by making the fact available, not by
+writing a convention about it. Spec diff led, per the fence.
+
+**What was registered.** `stats.checks` on `kind: table`,
+**hash-included**: the verbatim `pg_get_constraintdef(oid, true)` text of
+every `contype = 'c'` constraint, lexicographically sorted. Postgres only.
+Snapshot spec §4.5 carries the registration record and its arguments;
+master register SS-5 → *Closed by capture*; **SS-6 (enum type labels)
+stays Open and is explicitly not pre-empted.**
+
+**The three judgement calls, and why.**
+
+1. **Hash-included, where `indexes` is hash-excluded.** The S-2 test is
+   "can this contradict a documented meaning?" An index cannot. A CHECK
+   *is* a documented meaning, stated by the source — so a widened or
+   dropped one must be able to reach the contamination scan and mark the
+   doc that explains it. `test_ss5_check_is_hash_included_so_a_widened_constraint_contaminates`
+   executes exactly that: widen `orders_total_cents_check`, and exactly
+   one schema hash moves — the table's.
+2. **Verbatim, never parsed.** S-8: the connector emits the engine's own
+   rendering. Turning `status = ANY (ARRAY['pending', …])` into an enum
+   set would be the boundary *inferring* a vocabulary, which is the
+   generator's and the human's job. Consumers that want the vocabulary
+   read the expression — which is all D-86.3b's reader ever needed.
+3. **Scope by construction, not by convention.** `contype = 'c'` alone
+   excludes NOT NULL (already `columns[].nullable`; `'n'` on PG17+),
+   keys (`'p'`/`'u'`/`'f'`, carried by `keys`), and exclusion
+   constraints (`'x'`). `conrelid <> 0` drops domain constraints, which
+   would otherwise attach to oid 0.
+
+**Determinism.** Sorted in the connector, not left to the catalog:
+`pg_constraint` order is not stable across dump/restore and S-3 requires
+byte-identical canonical bodies from identical source state.
+`test_ss5_multiple_checks_sort_lexicographically` uses constraint names
+(`aa_`/`zz_`) deliberately anti-correlated with the expression text, so a
+sort-by-name regression fails.
+
+**Generator.** One template section, and it is `None` — absent, not
+"—" — on every kind but `table`. "Check constraints: —" on a view would
+assert an absence the snapshot never looked for, which is the same
+confident silence SS-5 exists to remove.
+
+**Wheel (D-46).** Version bumped 0.5.0 → **0.6.0**. This one genuinely
+changes the KB CI surface twice: C-8 now admits a stats field it used to
+reject, and KB-8 render consistency compares against a template emitting
+a new section. A KB validating with the 0.5.0 wheel would call the new
+machine docs stale — the stale-wheel failure D-46 exists to make visible
+— so the carry is not optional, and it rides the drift PR as sync spec
+§10 designs it (wheel commit first, so the PR's own CI runs the wheel
+that will govern after merge).
+
+**Verified, not asserted** (`results/cp8/ss5-capture-verification.md`):
+25/25 container-backed postgres tests including C-1/C-2/C-3/C-4/C-8
+re-run against the changed connector; full python suite 732 passed / 14
+skipped. On the **live example estate**, two consecutive pulls through the
+product path returned canonical body `bef2fa14c60a3520…` **byte-identical**
+with `checks` in it — C-2 holds on the example estate. C-3 is *not* claimed
+there and cannot be: mode invariance needs the same state through
+`ddl-file` and `live`, and a hosted Supabase offers only `live`; its
+evidence is the container suite.
+
+**What it found.** 15 of the estate's 17 tables carry CHECKs — ~40
+constraints the boundary had been dropping since task 1.2, mostly the
+enum-like vocabularies (`status`, `flow_type`, `format`, `locale`,
+`progress_stage`) that report semantics rest on. Including, closing on
+itself, `public.ai_runs`:
+
+```
+CHECK (status = ANY (ARRAY['pending'::text, 'completed'::text, 'failed'::text]))
+CHECK (status = 'pending'::text AND completed_at IS NULL
+       OR (status = ANY (ARRAY['completed'::text, 'failed'::text]))
+          AND completed_at IS NOT NULL)
+```
+
+Both existed the whole time D-81 called the column "free text with no
+CHECK constraint".
+
+**STOP — and one required ordering, stated because it is a real
+constraint and not a defect.** The drift PR was deliberately **not**
+opened. The 0.6.0 carry deletes the 0.5.0 wheel file; `origin/main`'s
+`kb-ci.yml` still hardcodes that filename; and since R-6(b) the carry no
+longer edits workflow files — which is the entire point of R-6(b). A
+drift PR opened today would install a wheel its own branch deleted and
+fail loudly. **KB PR #32 must merge first**, after which `kb-ci.yml`
+reads the filename from the manifest the carry rewrites. The operator's
+sequence (merge #32, then `sync now supabase`, then review as R2) is in
+the verification note. Also noted there: the estate has moved 34 → 38
+objects since 2026-07-27, so the pending drift is not only this capture.
