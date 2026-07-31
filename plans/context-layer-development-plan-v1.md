@@ -31,8 +31,8 @@ Two parallel windows: **Window A** (CP-2 ∥ CP-3, after CP-1) and **Window B** 
 | CP-4 | Context + validated SQL | **M1** | Pilot users get read-only value, safely | CP-2 and CP-3 |
 | CP-5 | The loop closes | — | Usage grows the KB | CP-4 |
 | CP-6 | Governed execution | **M2** | Queries run under user identity, bounded | CP-4 |
-| CP-7 | One click to a report | **M3** | A non-analyst ships a real report | CP-5 and CP-6 |
-| CP-8 | Go/no-go | — | The pilot converts on evidence | CP-7 + metrics window |
+| CP-7 | One click to a report — **CLOSED** (D-95; amended target per D-91, see §7) | **M3** | A non-analyst ships a real report | CP-5 and CP-6 |
+| CP-8 | Go/no-go — **CLOSED** (D-96.1; amended shape, see §8) | — | The pilot converts on evidence | CP-7 + metrics window |
 
 **Platform-plan mapping.** CP-1 = phase 1 (with the platform plan's phase 3 — source connectors + entities — folded in, since customer 2's "SAP phase" is the GA4/GSC connectors and entity docs, already tasks 1.3/1.4/1.8). CP-2 = phase 2. CP-3 = phase 4. CP-4 = phase 5. CP-5 = phase 6. CP-6 = phase 7. CP-7 = phase 8 with the Looker Studio adapter substituted for Power BI. CP-8 = phase 9.
 
@@ -268,7 +268,11 @@ One codebase, config-customized, per platform-architecture §6. Build order: **C
 
 ## 7. CP-7 — M3: One click to a report
 
-**Purpose:** the full J3 journey for a non-analyst, within the Looker Studio ceiling recorded at CP-0: the agent ships the reporting view as a migration PR, hands over a pre-wired template link, one human click instantiates the report.
+**Status: CLOSED** (ruling D-95, 2026-07-30), against the **amended** target: ruling D-91 replaced the Looker Studio template-link gate with text-to-report via Power BI (plain-language request → finished, AI-designed, trust-annotated report in the customer workspace; `pending_human_steps` empty or "open the report"). The Looker leg remains on `main` as a registered secondary target under its documented CI-F limits. Sign-off is an **owner acceptance on attestation** — the ruling party did not inspect the evidence (D-95.1, same class as D-80.2). Closure bookkeeping, including what the server record does and does not support, is `DECISIONS.md` § "D-95 part C"; the gate demo's own record lives in the ops database (window `2026-07-29T11:11:49Z`–`12:05:16Z`) and has **not** been extracted into `results/cp7-gate/`.
+
+Exit-gate status as recorded at closure: item 1 **met** (Act 1, evidenced by four succeeded `powerbi` publish jobs, two attestations on one `report_id`, and the artifact's layout + trust notes); item 2 **pending** (F-4 attestations written in ops, but no graph-only drift run has carried them into the KB, so `get_lineage` cannot yet walk from the report node); item 3 **partially met** (see §9 — gate items 3, 4 and 6 do not hold on the example estate). Two acts of the demo — cross-source (Act 2) and the undocumented-blend refusal (Act 3b) — carry no server-side trace and rest on the attestation alone.
+
+**Purpose (as planned):** the full J3 journey for a non-analyst, within the Looker Studio ceiling recorded at CP-0: the agent ships the reporting view as a migration PR, hands over a pre-wired template link, one human click instantiates the report.
 
 **Entry:** CP-5 and CP-6 passed.
 
@@ -294,7 +298,13 @@ One codebase, config-customized, per platform-architecture §6. Build order: **C
 
 ## 8. CP-8 — Go/no-go
 
-**Purpose:** run the success metrics over a defined usage window, harden from findings, and assemble the evidence pack for converting pilot to contract. Also the point where the pilot-data register items close.
+**Status: CLOSED** (ruling D-96.1, 2026-07-31), on `results/cp8/go-no-go-report.md`. The verdict is **GO with conditions for a real, vendor-assisted onboarding; NO-GO for an unassisted one from the playbook alone** — the platform passes, the playbook does not. The two-track Phase-2 shape proposed in that report is adopted as the planning basis (D-96.1/D-96.6).
+
+**Closed against an amended shape, stated plainly.** The checkpoint as planned rests on a usage window that never ran, so three of its six tasks were not performed as written: **8.1** (no metrics window), **8.4** (no pilot-data register closure — 235 audit rows is not enough traffic to set OD-2/MC-4/SP-1/FL-C values; re-scheduled to the first customer's first month), and **8.5**'s benchmark half (BASELINE-1 skipped at CP-5 by D-80.1 and deliberately not revived here — D-96 carries the standing no-quantitative-claims constraint into Phase 2 instead). What the checkpoint *did* produce is a readiness review graded against a harder bar than the plan set: *can this product onboard the next customer from its own playbook, without the vendor in the loop?* Tasks **8.2**, **8.3** and **8.6** are answered by the report's disposition block and D-96's rulings on it.
+
+**Exit-gate status at closure:** item 1 **not met as written** (no metrics window, no benchmark evidence pack) — the evidence pack is the go/no-go report itself; item 2 **met** (D-96.1); item 3 **partially met** — the bookkeeping reconcile landed (OB-3, JP-4, the missing SO-* section, SS-5 by capture), the pilot-data items are deferred with a named trigger, and the **v1.1 consolidation pass is not done** and is not claimed.
+
+**Purpose (as planned):** run the success metrics over a defined usage window, harden from findings, and assemble the evidence pack for converting pilot to contract. Also the point where the pilot-data register items close.
 
 **Entry:** CP-7 passed; usage window defined and agreed with the customer (length set here, not promised earlier — OB-4 discipline).
 
