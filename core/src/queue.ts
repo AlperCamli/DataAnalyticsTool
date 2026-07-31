@@ -553,17 +553,40 @@ export async function deferJob(
         "attempts_exhausted",
       );
     }
+    let triggers = row.triggers;
+    if (row.class === "batch") {
+      // A follower may have queued while this job was leased/running.
+      // Deferring the active job makes it queued again, so absorb that
+      // follower first to preserve the §8 single-queued invariant.
+      const { rows: followers } = await client.query<JobRow>(
+        `SELECT * FROM jobs
+          WHERE system = $1 AND type = $2 AND class = 'batch' AND state = 'queued'
+            AND job_id <> $3
+          FOR UPDATE`,
+        [row.system, row.type, row.job_id],
+      );
+      const follower = followers[0];
+      if (follower) {
+        await client.query(`DELETE FROM jobs WHERE job_id = $1`, [follower.job_id]);
+        triggers = [
+          ...triggers,
+          ...follower.triggers.map((t) => ({ ...t, merged_from: follower.job_id })),
+        ];
+      }
+    }
     await client.query(
       `UPDATE jobs
           SET state = 'queued', not_before = now() + make_interval(secs => $2),
               deferrals = deferrals + 1,
-              error = $3::jsonb,
+              triggers = $3::jsonb,
+              error = $4::jsonb,
               lease_token = NULL, lease_expires_at = NULL, runner_id = NULL,
               progress = NULL, updated_at = now()
         WHERE job_id = $1`,
       [
         jobId,
         retryAfterS,
+        JSON.stringify(triggers),
         JSON.stringify({ ...reason, via: "defer", retryable: true }),
       ],
     );

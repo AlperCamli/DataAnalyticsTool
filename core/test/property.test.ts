@@ -150,6 +150,59 @@ it("dedupe invariant holds under arbitrary interleavings (§8)", async () => {
   );
 }, 240_000);
 
+it("defer absorbs a queued follower before requeueing the active batch", async () => {
+  const system = `defer-follower-${namespace++}`;
+  const connector = `conn-${system}`;
+  const first = await enqueue(core.pool, core.cfg, {
+    type: "snapshot",
+    system,
+    connector: { name: connector, version_constraint: "*" },
+    payload: {},
+    trigger: { kind: "manual", detail: { source: "first" } },
+  });
+  const claimed = await claimOnce(core.pool, core.cfg, {
+    runnerId: "defer-follower-runner",
+    connectors: [{ name: connector, version: "1.0.0" }],
+    classes: ["batch"],
+  });
+  expect(claimed?.row.job_id).toBe(first.jobId);
+
+  const follower = await enqueue(core.pool, core.cfg, {
+    type: "snapshot",
+    system,
+    connector: { name: connector, version_constraint: "*" },
+    payload: {},
+    trigger: { kind: "manual", detail: { source: "follower" } },
+  });
+  expect(follower.jobId).not.toBe(first.jobId);
+
+  const outcome = await deferJob(
+    core.pool,
+    core.cfg,
+    first.jobId,
+    claimed!.lease.token,
+    0,
+    { code: "quota", message: "staged" },
+  );
+  expect(outcome).toBe("deferred");
+
+  const { rows } = await core.pool.query<{
+    job_id: string;
+    state: string;
+    triggers: Array<{ merged_from?: string }>;
+  }>(
+    `SELECT job_id, state, triggers
+       FROM jobs
+      WHERE system = $1 AND type = 'snapshot'`,
+    [system],
+  );
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.job_id).toBe(first.jobId);
+  expect(rows[0]!.state).toBe("queued");
+  expect(rows[0]!.triggers).toHaveLength(2);
+  expect(rows[0]!.triggers[1]!.merged_from).toBe(follower.jobId);
+});
+
 it("repeated lease expiry reclaims exactly max_attempts times, then dead-letters", async () => {
   await fc.assert(
     fc.asyncProperty(fc.integer({ min: 1, max: 4 }), async (maxAttempts) => {
