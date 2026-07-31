@@ -1,0 +1,255 @@
+[
+    {
+        "ts": "2026-07-29T11:39:53.311972+00:00",
+        "tool": "publish_report",
+        "roles": [
+            "reporter"
+        ],
+        "kb_ref": "d946511ee09bf2a104d856529dbf292ccf721dcb",
+        "profile": "reporter",
+        "subject": "reporter",
+        "audit_id": "dbfe38de-6a62-44f2-b6cf-d174f9cfb152",
+        "decision": "allowed",
+        "session_id": null,
+        "args_digest": "1f9936d10459a02ad23dc722eaf6f5d460b2fe187ce4e7face4f33830abcea98",
+        "duration_ms": 5,
+        "result_meta": {
+            "mode": "deliver_model",
+            "error": "invalid_argument",
+            "target": "powerbi",
+            "problems": [
+                "layout.designed_by is required (the deciding skill and version, formats §4.7)",
+                "layout.pages[0].visuals[0].kind is required",
+                "layout.pages[0].visuals[1].kind is required",
+                "layout.pages[1].visuals[0].kind is required",
+                "layout.pages[1].visuals[1].kind is required",
+                "layout.pages[1].visuals[2].kind is required",
+                "layout.pages[1].visuals[3].kind is required"
+            ],
+            "artifact_id": "ra-85561dbe-8572-4391-95c9-4e1b897d8325",
+            "content_hash": "sha256:e9ffd9c712d58334f905d80182161a9bc198e2efa32543b40e3876f190da10ae"
+        },
+        "snapshot_ref": {
+            "ga4": "sha256:737f0205d50c76329cf820e622cf7c324bb250aa125f106f87c9b28513457d6a",
+            "gsc": "sha256:a40d0fab958dd8bbca4502d1a084a2947ee562e9c0fb7c8db402cea016ab836e",
+            "demo": "sha256:ac7e1c5b6a2462d128d1cff0520b8105de018b1d44aa1ea16751a7159999dde1",
+            "supabase": "sha256:751998b390479736b738b363f7d03d9af69be3df15e6a7a5acbbd779c4715645",
+            "supabase-demo": "sha256:f95d0a5c9eb5b667090c55c5b8272f02f0ad2ddda297d4be0d7e51603ba73d42"
+        },
+        "statement_text": "publish_report target=powerbi artifact=ra-85561dbe-8572-4391-95c9-4e1b897d8325 content=sha256:e9ffd9c712d58334f905d80182161a9bc198e2efa32543b40e3876f190da10ae mode=deliver_model",
+        "decision_reason": null
+    },
+    {
+        "ts": "2026-07-29T11:41:02.467974+00:00",
+        "tool": "publish_report",
+        "roles": [
+            "reporter"
+        ],
+        "kb_ref": "d946511ee09bf2a104d856529dbf292ccf721dcb",
+        "profile": "reporter",
+        "subject": "reporter",
+        "audit_id": "8cd348f3-39d1-47af-a750-29fa33db8e5a",
+        "decision": "allowed",
+        "session_id": null,
+        "args_digest": "98159f4c440af864df352d3c1f330912d680830407989613e695a09110efe7ed",
+        "duration_ms": 2,
+        "result_meta": {
+            "mode": "deliver_model",
+            "error": "invalid_argument",
+            "target": "powerbi",
+            "problems": [
+                "layout.designed_by is required (the deciding skill and version, formats §4.7)"
+            ],
+            "artifact_id": "ra-85561dbe-8572-4391-95c9-4e1b897d8325",
+            "content_hash": "sha256:5dfdf404f2be8cd6907b42a97592a606735ae7c9f7dd7a026b61fc9b1490633e"
+        },
+        "snapshot_ref": {
+            "ga4": "sha256:737f0205d50c76329cf820e622cf7c324bb250aa125f106f87c9b28513457d6a",
+            "gsc": "sha256:a40d0fab958dd8bbca4502d1a084a2947ee562e9c0fb7c8db402cea016ab836e",
+            "demo": "sha256:ac7e1c5b6a2462d128d1cff0520b8105de018b1d44aa1ea16751a7159999dde1",
+            "supabase": "sha256:751998b390479736b738b363f7d03d9af69be3df15e6a7a5acbbd779c4715645",
+            "supabase-demo": "sha256:f95d0a5c9eb5b667090c55c5b8272f02f0ad2ddda297d4be0d7e51603ba73d42"
+        },
+        "statement_text": "publish_report target=powerbi artifact=ra-85561dbe-8572-4391-95c9-4e1b897d8325 content=sha256:5dfdf404f2be8cd6907b42a97592a606735ae7c9f7dd7a026b61fc9b1490633e mode=deliver_model",
+        "decision_reason": null
+    },
+    {
+        "ts": "2026-07-29T11:41:55.249446+00:00",
+        "tool": "publish_report",
+        "roles": [
+            "reporter"
+        ],
+        "kb_ref": "d946511ee09bf2a104d856529dbf292ccf721dcb",
+        "profile": "reporter",
+        "subject": "reporter",
+        "audit_id": "1c6961ae-42ef-4e89-8f43-74cb93cee960",
+        "decision": "allowed",
+        "session_id": null,
+        "args_digest": "ee94ad51de37e94a8d26e69dbf7fc7430ca0ea3a1897cca065a357ce3c8ece12",
+        "duration_ms": 9048,
+        "result_meta": {
+            "mode": "deliver_model",
+            "job_id": "01KYPTWM9JYE8S3EG8BJSRB32Y",
+            "target": "powerbi",
+            "revision": 1,
+            "dataset_id": "0e208ebc-18e3-43e1-9b13-7e073653ef18",
+            "artifact_id": "ra-85561dbe-8572-4391-95c9-4e1b897d8325",
+            "content_hash": "sha256:9596aeb09467a40f63bfb6ec5745ddebbe639c3153f1bdd3964125ecfa3c31ea",
+            "created_urls": [
+                "https://app.powerbi.com/groups/11111111-1111-4111-8111-111111111111/datasets/0e208ebc-18e3-43e1-9b13-7e073653ef18"
+            ],
+            "pending_steps": 0
+        },
+        "snapshot_ref": {
+            "ga4": "sha256:737f0205d50c76329cf820e622cf7c324bb250aa125f106f87c9b28513457d6a",
+            "gsc": "sha256:a40d0fab958dd8bbca4502d1a084a2947ee562e9c0fb7c8db402cea016ab836e",
+            "demo": "sha256:ac7e1c5b6a2462d128d1cff0520b8105de018b1d44aa1ea16751a7159999dde1",
+            "supabase": "sha256:751998b390479736b738b363f7d03d9af69be3df15e6a7a5acbbd779c4715645",
+            "supabase-demo": "sha256:f95d0a5c9eb5b667090c55c5b8272f02f0ad2ddda297d4be0d7e51603ba73d42"
+        },
+        "statement_text": "publish_report target=powerbi artifact=ra-85561dbe-8572-4391-95c9-4e1b897d8325 content=sha256:9596aeb09467a40f63bfb6ec5745ddebbe639c3153f1bdd3964125ecfa3c31ea mode=deliver_model",
+        "decision_reason": null
+    },
+    {
+        "ts": "2026-07-29T11:54:13.224278+00:00",
+        "tool": "publish_report",
+        "roles": [
+            "reporter"
+        ],
+        "kb_ref": "d946511ee09bf2a104d856529dbf292ccf721dcb",
+        "profile": "reporter",
+        "subject": "reporter",
+        "audit_id": "68c7603d-ecf3-4c4c-b668-d3c8a1b300a3",
+        "decision": "allowed",
+        "session_id": null,
+        "args_digest": "1f2a2eb3f5722a69caa7da0c0c2a889431141d85f0a1534d5bb81f8e0710c4ad",
+        "duration_ms": 273,
+        "result_meta": {
+            "mode": "attest",
+            "job_id": "01KYPVK9TMWSXTM94FMXW8CWTK",
+            "target": "powerbi",
+            "revision": 1,
+            "artifact_id": "ra-85561dbe-8572-4391-95c9-4e1b897d8325",
+            "content_hash": "sha256:9596aeb09467a40f63bfb6ec5745ddebbe639c3153f1bdd3964125ecfa3c31ea",
+            "created_urls": [
+                "https://app.powerbi.com/groups/11111111-1111-4111-8111-111111111111/reports/bae55769-0cb3-41ba-877a-e9cd77a964d8"
+            ],
+            "pending_steps": 0
+        },
+        "snapshot_ref": {
+            "ga4": "sha256:737f0205d50c76329cf820e622cf7c324bb250aa125f106f87c9b28513457d6a",
+            "gsc": "sha256:a40d0fab958dd8bbca4502d1a084a2947ee562e9c0fb7c8db402cea016ab836e",
+            "demo": "sha256:ac7e1c5b6a2462d128d1cff0520b8105de018b1d44aa1ea16751a7159999dde1",
+            "supabase": "sha256:751998b390479736b738b363f7d03d9af69be3df15e6a7a5acbbd779c4715645",
+            "supabase-demo": "sha256:f95d0a5c9eb5b667090c55c5b8272f02f0ad2ddda297d4be0d7e51603ba73d42"
+        },
+        "statement_text": "publish_report target=powerbi artifact=ra-85561dbe-8572-4391-95c9-4e1b897d8325 content=sha256:9596aeb09467a40f63bfb6ec5745ddebbe639c3153f1bdd3964125ecfa3c31ea mode=attest",
+        "decision_reason": null
+    },
+    {
+        "ts": "2026-07-29T12:02:49.330643+00:00",
+        "tool": "publish_report",
+        "roles": [
+            "reporter"
+        ],
+        "kb_ref": "d946511ee09bf2a104d856529dbf292ccf721dcb",
+        "profile": "reporter",
+        "subject": "reporter",
+        "audit_id": "63688897-a9a5-4dad-949b-c72f30cabbbd",
+        "decision": "allowed",
+        "session_id": null,
+        "args_digest": "611691d15d13fded1741ed0e38ba07b75b4cc287fbeb9996b90d9ebecff572cd",
+        "duration_ms": 217,
+        "result_meta": {
+            "mode": "attest",
+            "error": "revalidate_required",
+            "target": "powerbi",
+            "revision": 2,
+            "artifact_id": "ra-85561dbe-8572-4391-95c9-4e1b897d8325",
+            "content_hash": "sha256:3697f052c476bdf04617b387f38e49d8b49b48b4b45f8f242695d99b7089b5a1",
+            "delivered_revision": 1
+        },
+        "snapshot_ref": {
+            "ga4": "sha256:737f0205d50c76329cf820e622cf7c324bb250aa125f106f87c9b28513457d6a",
+            "gsc": "sha256:a40d0fab958dd8bbca4502d1a084a2947ee562e9c0fb7c8db402cea016ab836e",
+            "demo": "sha256:ac7e1c5b6a2462d128d1cff0520b8105de018b1d44aa1ea16751a7159999dde1",
+            "supabase": "sha256:751998b390479736b738b363f7d03d9af69be3df15e6a7a5acbbd779c4715645",
+            "supabase-demo": "sha256:f95d0a5c9eb5b667090c55c5b8272f02f0ad2ddda297d4be0d7e51603ba73d42"
+        },
+        "statement_text": "publish_report target=powerbi artifact=ra-85561dbe-8572-4391-95c9-4e1b897d8325 content=sha256:3697f052c476bdf04617b387f38e49d8b49b48b4b45f8f242695d99b7089b5a1 mode=attest",
+        "decision_reason": null
+    },
+    {
+        "ts": "2026-07-29T12:03:50.885533+00:00",
+        "tool": "publish_report",
+        "roles": [
+            "reporter"
+        ],
+        "kb_ref": "d946511ee09bf2a104d856529dbf292ccf721dcb",
+        "profile": "reporter",
+        "subject": "reporter",
+        "audit_id": "a09ea5c2-aa56-4202-b59d-10f24fa320d9",
+        "decision": "allowed",
+        "session_id": null,
+        "args_digest": "0457b03e9a25c2d1677ba6f15e3d2cbaf2ef76fceccbbf4c5cf23b59c7b1f61d",
+        "duration_ms": 10680,
+        "result_meta": {
+            "mode": "deliver_model",
+            "job_id": "01KYPW4QT85HNZTPHZF36FD4BJ",
+            "target": "powerbi",
+            "revision": 2,
+            "dataset_id": "0e208ebc-18e3-43e1-9b13-7e073653ef18",
+            "artifact_id": "ra-85561dbe-8572-4391-95c9-4e1b897d8325",
+            "content_hash": "sha256:3697f052c476bdf04617b387f38e49d8b49b48b4b45f8f242695d99b7089b5a1",
+            "created_urls": [
+                "https://app.powerbi.com/groups/11111111-1111-4111-8111-111111111111/datasets/0e208ebc-18e3-43e1-9b13-7e073653ef18"
+            ],
+            "pending_steps": 0
+        },
+        "snapshot_ref": {
+            "ga4": "sha256:737f0205d50c76329cf820e622cf7c324bb250aa125f106f87c9b28513457d6a",
+            "gsc": "sha256:a40d0fab958dd8bbca4502d1a084a2947ee562e9c0fb7c8db402cea016ab836e",
+            "demo": "sha256:ac7e1c5b6a2462d128d1cff0520b8105de018b1d44aa1ea16751a7159999dde1",
+            "supabase": "sha256:751998b390479736b738b363f7d03d9af69be3df15e6a7a5acbbd779c4715645",
+            "supabase-demo": "sha256:f95d0a5c9eb5b667090c55c5b8272f02f0ad2ddda297d4be0d7e51603ba73d42"
+        },
+        "statement_text": "publish_report target=powerbi artifact=ra-85561dbe-8572-4391-95c9-4e1b897d8325 content=sha256:3697f052c476bdf04617b387f38e49d8b49b48b4b45f8f242695d99b7089b5a1 mode=deliver_model",
+        "decision_reason": null
+    },
+    {
+        "ts": "2026-07-29T12:05:16.023185+00:00",
+        "tool": "publish_report",
+        "roles": [
+            "reporter"
+        ],
+        "kb_ref": "d946511ee09bf2a104d856529dbf292ccf721dcb",
+        "profile": "reporter",
+        "subject": "reporter",
+        "audit_id": "7124cbef-0429-4c6c-8e70-fb1f31080f7b",
+        "decision": "allowed",
+        "session_id": null,
+        "args_digest": "d5bc680ca3ec8d6238b5ea31f41420a62d08d2453259f897df8fd88a1851a83b",
+        "duration_ms": 257,
+        "result_meta": {
+            "mode": "attest",
+            "job_id": "01KYPW7H39HKYF2NQ7B6NKWFFZ",
+            "target": "powerbi",
+            "revision": 2,
+            "artifact_id": "ra-85561dbe-8572-4391-95c9-4e1b897d8325",
+            "content_hash": "sha256:3697f052c476bdf04617b387f38e49d8b49b48b4b45f8f242695d99b7089b5a1",
+            "created_urls": [
+                "https://app.powerbi.com/groups/11111111-1111-4111-8111-111111111111/reports/bae55769-0cb3-41ba-877a-e9cd77a964d8"
+            ],
+            "pending_steps": 0
+        },
+        "snapshot_ref": {
+            "ga4": "sha256:737f0205d50c76329cf820e622cf7c324bb250aa125f106f87c9b28513457d6a",
+            "gsc": "sha256:a40d0fab958dd8bbca4502d1a084a2947ee562e9c0fb7c8db402cea016ab836e",
+            "demo": "sha256:ac7e1c5b6a2462d128d1cff0520b8105de018b1d44aa1ea16751a7159999dde1",
+            "supabase": "sha256:751998b390479736b738b363f7d03d9af69be3df15e6a7a5acbbd779c4715645",
+            "supabase-demo": "sha256:f95d0a5c9eb5b667090c55c5b8272f02f0ad2ddda297d4be0d7e51603ba73d42"
+        },
+        "statement_text": "publish_report target=powerbi artifact=ra-85561dbe-8572-4391-95c9-4e1b897d8325 content=sha256:3697f052c476bdf04617b387f38e49d8b49b48b4b45f8f242695d99b7089b5a1 mode=attest",
+        "decision_reason": null
+    }
+]

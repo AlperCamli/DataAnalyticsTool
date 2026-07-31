@@ -862,6 +862,18 @@ records rather than from prose.
 
 **Runs on:** machine 1, after machine 2's session is finished.
 
+> **STANDING RULE — extract same-day** (ruling D-96.2). The extraction
+> runs on the **same day as the demo**, before the session that ran it
+> ends. It is not a bookkeeping tail that can wait for the next
+> checkpoint. The 2026-07-29 gate is the reason: extraction slipped two
+> days, and for those two days the demo's entire record lived in a
+> running container — one `docker compose down -v` from gone. Worse,
+> nobody could check the claims against the rows in the meantime, so two
+> acts were signed off on attestation and had to be reclassified **NOT
+> DEMONSTRATED** when the rows were finally read (D-96.2,
+> `EVIDENCE-2026-07-29.md`). Extract, read the rows against the acts,
+> and commit — in that order, that day.
+
 *macOS · machine 1:*
 
 ```bash
