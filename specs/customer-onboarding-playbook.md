@@ -68,7 +68,9 @@ Wire OIDC (customer IdP → MCP OAuth + dashboard session), register the vault (
 
 Create the KB repo on the **customer's git server**; the generator bootstraps: root `index.md` and `conventions.md` (written once, human-owned thereafter — conventions content is *rendered from the step-0 topology record*: system classes, the P2 execution ruling, quota notes, trust behaviors); `.contextlayer/` (`sources.yaml`, `sync-policy.yaml` from the P1 rulings, `roles.yaml` skeleton, `profiles/` templates, `dashboard.yaml`); and the **KB CI workflow** (checks KB-1…KB-9) installed on the repo — from this commit forward, every change to the KB is schema-validated, link-checked, and (later) benchmark-guarded.
 
-**Exit:** repo exists, CI green on the bootstrap commit, `conventions.md` reviewed by R2 (their first ownership act).
+**Customer KBs are private from bootstrap.** (Ruling D-96.3b.) The repo is created private and stays private; visibility is a customer decision made deliberately, never a default nobody re-decided. A KB accumulates a readable map of the estate — schema semantics, entity key mappings, certified metrics, report lineage — and that map is exactly what a public repo publishes. The pilot KB (`AlperCamli/DataAnalyticsTool`) is **public by explicit owner choice, as a reference estate on the owner's own data**, and says so in its `index.md`; it is the stated exception, not the pattern to copy.
+
+**Exit:** repo exists **and is private**, CI green on the bootstrap commit, `conventions.md` reviewed by R2 (their first ownership act).
 
 ## 6. Step 3 — Connect sources → first snapshots
 

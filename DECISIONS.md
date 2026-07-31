@@ -3519,3 +3519,322 @@ RULING D-94 — prep-report flag dispositions + demo readiness
    the FULL 36-char trailer CL-Resolves:
    6473a5f1-f4f7-4dfd-b702-a15ba760ce14; operator merges as R2; session
    verifies propagation and resolved_by: pr via the 5-minute sweep.
+
+RULING D-95 — M3 SIGN-OFF (amended target, D-91.1)
+(owner ruling, 2026-07-30; recorded verbatim)
+
+1. M3 SIGNED OFF on the operator's attestation: all four acts passed on
+   machine 2 under the amended gate (plain-language → finished
+   AI-designed trust-annotated Power BI report, operator labor absent;
+   cross-source on certified entity keys; both refusals held; audit
+   chain extracted). EVIDENCE NOT INSPECTED BY THE RULING PARTY —
+   recorded as an explicit owner acceptance, same class as D-80.2. The
+   committed results/cp7-gate/ evidence stands as the record; if part C
+   bookkeeping is not yet written, it rides the CP-8 session.
+2. Checkpoint-landing convention (D-74.2): CP-7 closes with all work on
+   main and registers current. CP-7/M3 marked CLOSED in the plan.
+3. The build phase of the pilot is complete: every spec-set component is
+   live — snapshots, generator, sync, MCP+SSO, gateway, skills,
+   publisher (two targets), ledger, audit.
+
+## D-95 part C — CP-7/M3 closure bookkeeping (written at CP-8, 2026-07-30)
+
+Written under the CP-8 session's Part-0 authorization. D-95.1 records the
+sign-off as an **owner acceptance on attestation**, so nothing below
+revisits the ruling. What follows is the bookkeeping the ruling says
+rides this session: what the record holds, what it does not, and the FM-2
+note D-83 left open. Claims are tagged with where they can be checked.
+
+**Correction to D-95.1's own premise, stated plainly.** The committed
+`results/cp7-gate/` evidence does **not** contain the gate demo. Its
+files are preparation artifacts: `READINESS-2026-07-29.md` (a **NO-GO**
+verdict written at 10:46 UTC — the runner did not yet host the `powerbi`
+connector), the runbook, the extraction script, the interrupted-run
+transcript evidence from 09:13–09:21 UTC, the L-5 closure note, and the
+page-certification pack. `extract-audit.sh` was never run for the gate
+window, so no audit chain, publish trail, or ledger dump from the demo is
+committed. The demo's record exists **only in the live ops database on
+machine 1**, read read-only for this entry.
+
+**The gate run, as the server recorded it** (`cl_ops`, read-only queries,
+2026-07-30). Window `2026-07-29T11:11:49Z` → `12:05:16Z`, subject
+`reporter`, profile `reporter`; `max(ts)` over `audit_records` is
+`12:05:16Z`, so nothing followed it.
+
+- Four `publish` jobs, `connector_name = powerbi`, all `succeeded`
+  (11:41:50, 11:54:13, 12:03:44, 12:05:16) — the uncommitted
+  `deploy/runner-config.yaml` line the readiness report recommended was
+  applied and worked.
+- `publish_report` audit rows: `deliver_model` ×3 (11:39:53, 11:41:02,
+  11:41:55), `attest` (11:54:13), `attest` (12:02:49), `deliver_model`
+  (12:03:50), `attest` (12:05:16) — all `allowed`, all against artifact
+  `ra-85561dbe-8572-4391-95c9-4e1b897d8325`.
+- `report_attestations`: two rows, revisions 1 and 2, **same**
+  `report_id bae55769-0cb3-41ba-877a-e9cd77a964d8`, **different**
+  `definition_hash` (`sha256:fe42d64d…` → `sha256:25f870e9…`). That is
+  **AT-6's layout-change path, live at the gate** on a configured workspace.
+- `model_deliveries`: one row, revision 2, workspace `5d8eeeff…`, dataset
+  `0e208ebc…`. No dangling delivery (every delivery's revision carries an
+  attestation).
+- `lineage_attestations`: three rows written at attest time (11:54:13)
+  binding `powerbi.report.bae55769…` to `reporting.v_ai_runs_by_flow`,
+  `v_ai_tokens_by_month`, `v_daily_activity` — F-4 provenance captured.
+- `report_artifacts`: two revisions, `kb_ref d946511e…`, twelve
+  `trust_notes` including an explicit *SMALL CELLS — NOT FOR EXTERNAL
+  DISTRIBUTION* line naming the two-and-three-run flows. The report
+  discloses that it models a daily series it cannot measure, and says so
+  in its own title.
+
+**What that record supports.** Act 1, in a harder form than the runbook
+scripted: the operator asked about AI token usage rather than the
+rehearsed signups case, and the journey ran ground → validate → execute →
+deliver → author → deploy → verify → attest → revise, with the design
+rules holding on unrehearsed ground.
+
+**What the record does not support** — flagged, not asserted away:
+
+1. **Act 2 (cross-source on certified entity keys) has no server-side
+   trace.** The gate artifact carries `"blend": null` and three queries,
+   all `system: supabase`. No `execute_sql` against `ga4` or `gsc` under
+   the reporter identity appears anywhere in the window (the only GA4/GSC
+   executions that day are the 10:35 prep checks under the `benchmark`
+   profile). One artifact, one dataset, one report. The prerequisites for
+   Act 2 were in place — KB PR #29 merged at 10:48 and `entities/page.md`
+   is `status: verified` on `origin/main` — so this reads as an act that
+   was not run or not completed, not one that was blocked.
+2. **Act 3b (undocumented-blend refusal) has no ledger entry.** Per
+   D-83.5/RA-9 the refusal's ledger half arrives as
+   `flag_gap(kind: missing_join_path)`. No such event exists; the
+   window's three `flag_gap` calls are all `capability_gap`.
+3. **Act 3a's server-side denial is not in the gate window.** The only
+   `publish_report` denial on record is `2026-07-29T10:13:48Z`
+   (`granted only for looker_studio, not google_sheets`) — the
+   operator-run probe from the prep session, an hour before the demo
+   started. D-94.4 permits Act 3a to pass in its agent-side shape, which
+   only the transcript can show.
+4. **Act 4 was not extracted.** No `audit-chain.txt`,
+   `publish-trail.txt`, `publish-results.json` or ledger dump from the
+   window is committed. The rows still exist; the extraction is one
+   command (`results/cp7-gate/extract-audit.sh '2026-07-29T11:00:00Z'`)
+   and is **operator-runnable now**. Until it runs, the gate's record
+   depends on a running container.
+5. **No machine-2 transcript is committed**, for this run or for the
+   interrupted one (that directory's own README already asks for it).
+   Acts 2 and 3 are exactly the claims only a transcript can settle.
+6. **CP-7 exit gate item 2 is pending, not failed.** The F-4 attestations
+   exist in ops (above), but no graph-only drift run has carried them
+   into the KB: `origin/main`'s `lineage/graph.json` holds 28 nodes / 25
+   edges, no `powerbi.report.*` or `looker_studio.report.*` node, and no
+   `{kind: "gateway"}` input. `get_lineage` therefore cannot yet walk
+   from the report node. One sync run + one additive KB PR closes it.
+7. **The configuration the gate ran on is not on `main`.**
+   `deploy/runner-config.yaml`'s `connectors.powerbi.connector` line is
+   still an uncommitted working-tree change. Under D-74.2/D-82 a
+   checkpoint does not close while its work is unlanded; a clean checkout
+   of `main` today rebuilds a runner that cannot serve a Power BI publish
+   — the exact blocker the readiness report found.
+
+**FM-2 note — the real evidence** (D-83's note said "to be filled with
+the template's actual id + kinds at operator template creation"; under
+the D-91 target there is no template, so the honest fill is the kinds the
+AI actually authored):
+
+| Revision | Registry kinds authored | Source |
+|---|---|---|
+| 1 | `line`, `bar`, `table` | `report_artifacts.body.layout.pages[].visuals[]` |
+| 2 | `bar`, `table` | same, after the layout revision |
+
+`scorecard` and `pivot` were **not** exercised by the gate report.
+Revision 2's `line` → `bar` substitution is recorded in the artifact's
+own trust notes: the delivered date column on a push dataset cannot back
+a continuous axis, and bars do not interpolate. That is the registry
+behaving as **advisory** for an api-class target exactly as the authoring
+spec's §12.2 amendment intended — one substitution, recorded with its
+reason, no inexpressible report. **No register change is proposed here**
+(the amendment fence); FM-2's row stays Open with this as its CP-7
+evidence, and the CP-8 report carries the disposition motion.
+
+**Suites/state at this entry:** unchanged since `5128036` — no code, spec,
+or KB change was made by the CP-8 session. The last committed suite
+figures stand (python 724 passed / 14 skipped; core 185 passed across two
+consecutive full runs, `READINESS-2026-07-29.md`).
+
+RULING D-96 — CP-8 dispositions and Phase-2 authorization
+(owner ruling, 2026-07-31; recorded verbatim)
+
+1. VERDICT ACCEPTED as written: GO-with-conditions for vendor-assisted
+   onboarding; NO-GO unassisted. CP-8 closes on this report. The
+   two-track Phase-2 shape is ADOPTED as the planning basis.
+2. D-95 CORRECTION (appended note): Act 1 confirmed over-evidenced;
+   Act 3a passes under D-94.4's either-shape; Act 2 and Act 3b
+   reclassified NOT DEMONSTRATED and re-run under Track A-0 with
+   server evidence extracted same-day. Extraction-same-day becomes a
+   standing runbook rule.
+3. REGISTER-DISPOSITION BLOCK: every row RULED AS RECOMMENDED, with
+   these modifications and confirmations:
+   a. R-2 CLOSES NOW by bookkeeping, not confirmation-pending: the SA
+      key recycle WAS completed and live-verified (GSC pull canonical
+      body a40d0fab, byte-identical to prior pulls — session record,
+      D-85 era). The gap was a missing DECISIONS line; write it.
+   b. R-1: the pilot KB REMAINS PUBLIC by explicit owner choice, as a
+      reference estate, with the one-line index.md note; the playbook
+      gains the line "customer KBs are private from bootstrap." Next
+      customer inherits the rule, not the exception.
+   c. REVIEW-SYNC: BUILD (Track A-1), not despecify. It is named in
+      two shipped profiles; amending the spec to match the gap would
+      close the finding by lowering the bar.
+   d. SS-5: capture authorized exactly as scoped (hash-included
+      stats.checks, verbatim pg_get_constraintdef, Postgres-only,
+      sorted; SS-6 explicitly untouched). Registry amendment under
+      the fence, spec diff leads, wheel rebuilt per D-46.
+   e. RA-F decision re-dated: 2027-01-31, or first
+      push_limit_exceeded, or second Power BI customer — whichever
+      first; the 80%-of-limit telemetry warning is a Track-A chore.
+   f. JC-4: test-only diff accepted; verification = three consecutive
+      full-suite runs UNDER DELIBERATE LOAD. Docker flake:
+      quarantine-with-trigger — next occurrence captured with full
+      output before any re-run green.
+   g. OB-4: BUILD the instrumentation (Track A-6). "Cannot close" is
+      not an acceptable state for a gate item the playbook cites.
+4. IMMEDIATE CHORES, before Phase-2 build starts: C-1 (commit
+   runner-config — CP-7 is closed over unlanded work until this
+   lands); C-6 (run extract-audit for the demo window, commit;
+   graph-only sync run carries F-4 nodes into the KB; verify
+   get_lineage walks from the report node — CP-7 exit item 2);
+   bookkeeping batch (OB-3/JP-4 master reconcile, SO-* section added
+   to master, D-95 correction note, R-2 line, R-3 close-clean note).
+5. STANDING CONSTRAINT carried into Phase 2, verbatim in its plan: no
+   quantitative KB-value claim in any customer or demo material until
+   BASELINE-1 lands.
+6. PHASE-2 DOCUMENTS: authored next in the planning session — the
+   Phase-2 development plan (Tracks A/B as checkpoints with gates)
+   and the dashboard/UI spec (spec-first; Part 5's inventory,
+   role→view matrix, and the no-UI boundary list are its requirements
+   inventory; the API-client-only rule is its first design ruling).
+
+## D-96 application record — the bookkeeping batch (2026-07-31)
+
+Written by the session D-96 authorizes. Every claim below is checkable
+against a commit, a row, or a file; nothing here is a summary standing in
+for evidence that was not produced.
+
+### D-95 CORRECTION (D-96.2) — appended to D-95, not replacing it
+
+D-95.1's sign-off stands as an owner acceptance on attestation. What
+changes is the **evidentiary classification of two of its four acts**,
+now that the rows exist (`results/cp7-gate/EVIDENCE-2026-07-29.md`,
+extracted 2026-07-31 from the window `2026-07-29T11:11:49Z`–`12:05:16Z`):
+
+| Act | Classification | On what |
+|---|---|---|
+| 1 — plain-language → finished report | **CONFIRMED, over-evidenced** | 39 audit rows, all `allowed`, all `subject=reporter`; ground → validate → execute → publish, on an *unrehearsed* question (AI token usage, not the runbook's signups case). The journey held on ground it had not been walked over |
+| 2 — cross-source on certified entity keys | **NOT DEMONSTRATED** | All 12 `validate_sql`/`execute_sql` rows carry `system: supabase`. No `ga4`/`gsc` execution exists under the reporter identity anywhere in the window. Its prerequisites were in place (KB PR #29 merged 10:48; `entities/page.md` `status: verified`), so this is an act not run, not an act blocked |
+| 3a — publish-target denial | **PASSES**, under D-94.4's either-shape | Zero `denied` rows in the window. The only `publish_report` denial on record is the operator's 10:13:48Z prep probe, an hour earlier. D-94.4 permits the agent-side refusal, which only a transcript can show; accepted on that basis and not re-classified |
+| 3b — undocumented-blend refusal | **NOT DEMONSTRATED** | Both ledger events in the window are `capability_gap`. No `missing_join_path` event exists, which is the ledger half RA-9/D-83.5 requires of this refusal |
+
+Acts 2 and 3b **re-run under Track A-0**, with server evidence extracted
+the same day. A re-reading cannot fix them: the rows that would evidence
+them were never written.
+
+**Standing runbook rule created here** (D-96.2, applied to
+`results/cp7-gate/RUNBOOK.md` §9): **extraction runs the same day as the
+demo**, before the session that ran it ends. The 2026-07-29 gate is the
+reason — extraction slipped two days, the demo's entire record lived in a
+running container meanwhile, and by the time anyone read the rows two
+acts had already been signed off on attestation.
+
+**A correction to D-95 part C's own arithmetic, while here:** part C says
+"the window's three `flag_gap` calls are all `capability_gap`". The
+extracted window holds **two** (11:34:29 and 11:43:26), both
+`capability_gap`. The conclusion is unchanged and slightly strengthened —
+the third call was outside 11:00Z, so an even smaller set of ledger
+activity carries the demo.
+
+### R-2 CLOSED (D-96.3a) — the missing line, written
+
+`D-80.2(b)` accepted deferred rotation of a leaked exec DSN **and** a
+leaked GA4/GSC service-account key. D-84.1 recorded the exec-DSN half
+rotated and live-verified. The **service-account half was also completed
+and live-verified** in the D-85-era session; no `DECISIONS` entry ever
+said so, which is the only reason the CP-8 review found it "pending". The
+gap was bookkeeping, not work. **R-2 closes.**
+
+Evidence, and it is stronger now than when the ruling was written — the
+GSC canonical body hash across three live pulls spanning the recycle:
+
+| Pull | `canonical_body_sha256` | Objects |
+|---|---|---|
+| 2026-07-20 14:12 (`01KXZXXTW0…`) | `a40d0fab958dd8bb…` | 10 |
+| 2026-07-27 12:29 (`01KYHRSKJ8…`) | `a40d0fab958dd8bb…` | 10 |
+| **2026-07-31 11:06 (`01KYVXMRVX…`)** | `a40d0fab958dd8bb…` | 10 |
+
+The third row is today's, pulled by the C-6 sync run under the recycled
+key. The recycled credential authenticates and returns a **byte-identical
+canonical body** — which is two facts at once: the recycle is real and
+working, and S-3 determinism survives a credential rotation.
+
+### R-3 CLOSED clean (D-96.3) — the check, recorded so it is not re-litigated
+
+Git-history exposure of the leaked credentials: **re-checked this
+session, clean.** `.secrets/` is git-ignored (`.gitignore:3`) and
+`git log --all -- .secrets/` returns nothing — no secret file was ever
+tracked, in any branch, at any point. Every tracked occurrence of
+`postgresql://` carries a synthetic or credential-free DSN: a literal
+`postgresql://…` placeholder in the `onboard` skill, a localhost
+ephemeral DSN with no password (`connectors/postgres/ephemeral.py:99`),
+and three test fixtures (`u@h/db`, `postgres@127.0.0.1:9`, `x/y`). The
+exposure was chat/session-side, never repository-side.
+
+Recorded here so that **no history rewrite is ever contemplated on a
+rumour**: the question was asked, answered from the object database, and
+closed. A future reader who wonders should re-run the two commands rather
+than assume.
+
+### R-1 — the pilot KB stays public, by explicit choice (D-96.3b)
+
+Not carried silently, and not closed by inaction. Two separable things:
+
+1. **The pilot KB (`github.com/AlperCamli/DataAnalyticsTool`) REMAINS
+   PUBLIC**, by the owner's explicit choice, as a **reference estate** —
+   it is the owner's own data and confidentiality was waived at D-47/
+   D-80.2(a). It now carries reporting-view semantics, entity key
+   mappings, a certified `entities/page.md`, and (via PR #30) report
+   lineage — a readable map of the estate, published deliberately. A
+   one-line note in its `index.md` says so, so a reader never has to
+   infer that public was a decision rather than an oversight.
+2. **The rule the next customer inherits is the opposite one.** The
+   playbook gains, at KB bootstrap: *customer KBs are private from
+   bootstrap.* The pilot is the exception, stated as one. This is the
+   half that matters — R-1's original risk was never "this repo is
+   public", it was "public becomes the default nobody re-decided".
+
+R-1 therefore **closes**: the trigger ("revisit before any real second
+customer") has been honoured ahead of the trigger, with both halves
+written down.
+
+### The chores (D-96.4)
+
+| Chore | State | Evidence |
+|---|---|---|
+| **C-1** — land the runner-config Power BI line | **DONE** | commit `37f2b22`. CP-7 is no longer closed over unlanded work |
+| **C-6a** — extract + commit the gate evidence | **DONE** | commit `c491ae9`; five dump files + `EVIDENCE-2026-07-29.md` |
+| **C-6b** — graph-only run carries F-4 nodes to the KB | **DONE, awaiting merge** | commit `90f8936`; run `01KYVXMQ8Q0BAHTKC8WM5WBK5S` → KB PR #30, `lineage/graph.json` +115/−0, 28→32 nodes, 25→32 edges, label `sync:additive-only` |
+| **C-6c** — `get_lineage` walks from the report node (CP-7 exit item 2) | **EVIDENCED, NOT CLOSED** | The walk is verified against PR #30's graph (15 nodes / 17 edges at depth 3, three reporting views at hop 1). It closes on the **post-merge** call against the live server; the merge is R2's (SO-B) |
+| bookkeeping batch | **DONE** | this entry + the master-register reconcile below |
+
+**Two product flags found by running C-6, recorded not fixed** (outside
+the D-96 fence):
+
+1. **The graph-only PR misdescribes itself.** `detail.wheel_only` is set
+   on any run with `changed.length === 0`
+   (`core/src/pipeline.ts:665`), and `changelog.ts` has no graph-only
+   case — so PR #30's title is `sync: 0 breaking, 0 additive across `
+   (empty system list) and its body reads *"Wheel-only run: no drift
+   pending; carry forced by a manual sync."* There is no wheel in it. The
+   single PR that records report lineage entering the KB tells the
+   steward reviewing it something false about why it exists. One `else
+   if` fixes it; recommended as a Track A-0 chore.
+2. **A malformed node predates this run.** `supabase.` (`node_kind:
+   external`, `resolved: false`) already sits in HEAD's graph with an
+   `aggregate` edge into `v_daily_activity` — an unresolved reference
+   that parsed to an empty object name.

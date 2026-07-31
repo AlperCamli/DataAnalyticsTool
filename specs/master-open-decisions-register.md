@@ -2,7 +2,7 @@
 
 Status: authoritative tracking view over all spec-local registers, consolidated at spec-set v1.0. **Maintenance rule:** this register is the authority for *status*; spec-local registers remain as in-context snapshots and are reconciled here at each consolidation pass. New items are added in their home spec first, then registered here. Status values: **Open** (provisional default in force) · **Partial** (scope reduced, remainder open) · **Closed** (decided; pointer to the ruling).
 
-Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 standing rule (OD-5, exercised once). Post-v1.0 additions: SS-5–SS-7 (Open, entered via the snapshot spec's §10 register during task 1.2).
+Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 standing rule (OD-5, exercised once). Post-v1.0 additions: SS-5–SS-7 (entered via the snapshot spec's §10 register during task 1.2); FM-6 (formats spec §7, task 1.9); PA-1/PA-2 (architecture spec, no spec-local register); SUPPRESS-1 and BASELINE-1 (plan-level); **SO-A–SO-G** (sync-orchestrator spec §13, written after consolidation and never carried over — added by ruling D-96.4).
 
 ## High-level requirements (OD-*)
 
@@ -33,7 +33,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | JP-1 | Core-native `execute` short-circuit vs runner routing | Open | Route through runners — one path, one audit shape | JC-10 latency misses budget in pilot |
 | JP-2 | Interactive latency budget | Open | ≤ 500 ms p95 claim-to-start, warm runner | M2 measurement |
 | JP-3 | Result size cap & snapshot storage | Open | 64 MB inline; Postgres storage; retain last 10 snapshots/system | First estate approaching the cap |
-| JP-4 | Webhook ingestion endpoint | Open | `/v1/hooks/{system}` + per-hook shared secret; normatively owned by the sync-orchestrator spec (not yet written — see index doc) | Sync-orchestrator spec authoring |
+| JP-4 | Webhook ingestion endpoint | **Closed** | Sync-orchestrator spec §12.1: adopted as that spec's §4.2 — `/v1/hooks/{system}`, path identity, per-hook shared secret, body ignored. Built and exercised at CP-3 (D-64: `sync hook set` → 202; rotate → old secret 401). The spec declared this Closed and said "master register updated"; the master row was never actually changed — reconciled here (D-96.4 bookkeeping batch) | — |
 | JP-5 | Runner autoscaling under K8s | Open | Manual replica count in v1 | Enterprise deployment sizing |
 | JP-6 | Runner-token scope vs producer/ops surface (review #1 P-A) | **Closed** | D-66.1: runner tokens authorize claim/start/heartbeat/complete/fail/defer only; producer/ops/read surface behind platform identity (job spec §6 amendment, built at CP-4) | — |
 
@@ -106,12 +106,26 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 |---|---|---|---|---|
 | OB-1 | Compiled read-only KB bundles | Open | Not built until a real offline consumer exists | First air-gapped-site / no-MCP-team requirement |
 | OB-2 | Entity draft authorship (skill vs R5) | Open | Skill-drafted, R5-paired, customer-certified | After 2–3 onboardings |
-| OB-3 | Staged drift drill as shipped fixture | Open | Ship a standard drill fixture with the product | Build during phase 4 |
+| OB-3 | Staged drift drill as shipped fixture | **Closed** | Sync-orchestrator spec §12.2: the drill fixture is a shipped artifact (that spec's §9), built as a CP-3 task — `fixtures/drill/` + `core/test/sync-drill.test.ts` (SO-4/SO-8). The spec declared this Closed and said "master register updated"; the master row was never actually changed — reconciled here (D-96.4 bookkeeping batch). **Note the scope:** what closes is the *fixture*, not the playbook's gate item 7, whose human half (R2 runs `review-sync` → repair PR → docs re-verified) has never been rehearsed and is blocked on `review-sync` being built (D-96.3c, Track A-1) | — |
 | OB-4 | Onboarding duration targets | Open | Measure first three; no promises before data | Third onboarding |
+
+## Sync orchestration (SO-*)
+
+Home: `sync-orchestrator-spec.md` §13. That spec was written after the v1.0 consolidation, so its register was **never carried over** — noted unfixed in D-84.2, added here by ruling D-96.4's bookkeeping batch. Until now the authoritative status view had no row for any of these, including SO-F, which had already cost the pilot two days of silently unpublished drift.
+
+| ID | Item | Status | Default | Revisit trigger |
+|---|---|---|---|---|
+| SO-A | Webhook debounce window beyond job dedupe + run coalescing | Open | None — dedupe and single-flight already bound work to ≤2 runs per storm | CI storms measurably churning snapshot jobs at a source with quota cost |
+| SO-B | Auto-merge for additive-only sync PRs | Open | Off; the PR carries a `sync:additive-only` label so customers can wire their own automation; **the product never merges** | First customer drowning in trivially-mergeable PRs |
+| SO-C | Webhook↔repo topology (monorepo emitting for several systems) | Open | One hook per system; a monorepo's CI calls each relevant hook | First customer whose CI cannot target hooks per system |
+| SO-D | Run acquisition budget | Open | 2 h default, config in `sync-policy.yaml` | First estate whose snapshots legitimately exceed it |
+| SO-E | Estate-wide re-render as a run mode (`regen-all`, pairs with KB-C) | Open | Manual dashboard action producing a dedicated sync PR; never automatic | First template change requiring it in production. **Phase-2 inventory item U-14/U-17** (CP-8 report §5) |
+| SO-F | Configured-but-disabled sync is silent in single-instance ops | Open | None — `/healthz` already reports `sync_enabled`; the gap is that nothing consumes it where there is no dashboard or alerting surface | **Fired once already** (D-84.2): the pilot ran two days with `SYNC_ENABLED=0` after a compose env-precedence slip, drift accruing unpublished, health green throughout. CP-8 disposition: **build the consumer** in the dashboard's KB-Health view (report §Part 2, Track B-1), not merely re-state the default. Second silent-off incident, or the first deployment where the operator cannot eyeball the process env, whichever first |
+| SO-G | Refresh cadence for GA4/GSC data delivered into an api-class publish target | Open | None in v1: models are refreshed only by an explicit re-publish (a skill/agent-triggered revision, per RA-E). `scheduled_refresh: no` is declared on the Power BI connection's `publish.flags`, so the limitation is visible in the registration rather than implied | First standing report whose viewers depend on it being current, or the first "why is this report showing last week's numbers". Decide together with RA-G (lifecycle/teardown) and RA-D — the CP-8 review found the three are one design conversation |
 
 ## Platform architecture (PA-*)
 
-The architecture spec carries no spec-local register of its own, so items whose home is that document are tracked here directly (the same situation as the sync spec's SO-* items, which were never carried over at consolidation).
+The architecture spec carries no spec-local register of its own, so items whose home is that document are tracked here directly (the sync spec's SO-* items were in the same situation until D-96.4 added the section above).
 
 | ID | Item | Status | Default | Revisit trigger |
 |---|---|---|---|---|
