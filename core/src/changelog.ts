@@ -50,6 +50,17 @@ export interface ChangelogInput {
   scan: ScanResult | null;
   wheel: { fromVersion: string | null; toVersion: string } | null;
   excluded: { system: string; reason: string }[];
+  /**
+   * The run took the graph-only branch (CP-7 F-4): no snapshot moved, but
+   * publish attestations since the last regeneration are carried into
+   * `lineage/graph.json` as report nodes and gateway edges.
+   *
+   * Passed rather than inferred, because a run can be graph-only *and*
+   * carry a wheel; inferring from `!scan && !wheel` would then describe
+   * that PR as wheel-only and never mention the graph — the same class
+   * of mislabel this field exists to remove (D-97.1).
+   */
+  graphOnly?: boolean;
 }
 
 /**
@@ -100,6 +111,13 @@ export function buildTitle(input: ChangelogInput): string {
     .filter((d) => !d.empty)
     .map((d) => d.system)
     .sort();
+  if (systems.length === 0 && input.graphOnly) {
+    // Graph-only leads, wheel rides along — the report nodes are what a
+    // reviewer is being asked to look at (D-97.1).
+    return input.wheel
+      ? `sync: 0 breaking, 0 additive (report lineage + wheel update to ${neutralize(input.wheel.toVersion)})`
+      : "sync: 0 breaking, 0 additive (report lineage only)";
+  }
   if (systems.length === 0 && input.wheel) {
     return `sync: 0 breaking, 0 additive (wheel-only update to ${neutralize(input.wheel.toVersion)})`;
   }
@@ -124,7 +142,15 @@ export function buildBody(input: ChangelogInput): string {
     );
   }
   if (!scan) {
-    lines.push("Wheel-only run: no drift pending; carry forced by a manual sync.");
+    lines.push(
+      input.graphOnly
+        ? "Graph-only run: no snapshot drift pending. This PR carries publish " +
+          "attestations recorded since the last regeneration into `lineage/graph.json` " +
+          "— report nodes and their gateway edges (CP-7 F-4). Additive by " +
+          "construction: BI-side nodes cannot contaminate a doc, so no " +
+          "contamination scan and no re-render ran."
+        : "Wheel-only run: no drift pending; carry forced by a manual sync.",
+    );
     return lines.join("\n") + "\n";
   }
 

@@ -64,16 +64,23 @@ The session opens PRs and never merges (SO-B).
 | [#30](https://github.com/AlperCamli/DataAnalyticsTool/pull/30) | `sync:` F-4 report nodes → `lineage/graph.json` | independent |
 | [#31](https://github.com/AlperCamli/DataAnalyticsTool/pull/31) | `docs(index):` public-by-choice note (R-1) | independent |
 
-**Read #30 with a caveat:** its title is `sync: 0 breaking, 0 additive
-across ` (empty system list) and its body says *"Wheel-only run: no drift
-pending; carry forced by a manual sync."* **There is no wheel in it.**
-`detail.wheel_only` is set on any run with `changed.length === 0`
-([pipeline.ts:665](../../core/src/pipeline.ts#L665)) and `changelog.ts`
-has no graph-only case. The content is right — `lineage/graph.json`,
-+115/−0, four `report` nodes, seven `ingest` edges — only the description
-is wrong. Flagged, not fixed: outside the D-96 fence. One `else if` in
-[changelog.ts:127](../../core/src/changelog.ts#L127) closes it; recommend
-it as a Track A-0 chore.
+**#30's mislabel is fixed** (ruling D-97.1). It originally read `sync: 0
+breaking, 0 additive across ` with the body *"Wheel-only run…"* — there
+is no wheel in it. `changelog.ts` now has a graph-only case, and the PR's
+title and body were rewritten to exactly what the fixed code emits for
+that run's inputs, rendered from the code rather than hand-written. **No
+commit, file, or byte of its content changed**; a note on the PR records
+the correction.
+
+**The ops half of that mislabel is still open.** `detail.wheel_only` is
+set on any run with `changed.length === 0`
+([pipeline.ts:666](../../core/src/pipeline.ts#L666)), so run
+`01KYVXMQ8Q0BAHTKC8WM5WBK5S` is stored in `runs` as wheel-only when no
+wheel was involved. D-97.1 authorized the `changelog.ts` case only; this
+is a different field with a different consumer (the `runs` table, read by
+ops and by the dashboard's future U-10 view), so it stays flagged.
+Recommended for the same Track A-0 chore: `{ wheel_only: !!wheelCarry,
+graph_only: gatewayPending }`.
 
 ### 2. The SS-5 drift PR — deliberately not opened
 
@@ -115,7 +122,8 @@ is that the server's workspace is still pinned pre-merge.
 
 ## Two things found while working, neither in scope
 
-1. **`compile steward` now fails.** Intended: the shipped steward profile
+1. **`compile steward` now fails — and this is correct.** Ruled so by
+   **D-97.2**, recorded so nobody "fixes" it. The shipped steward profile
    names `review-sync`, F-7 makes a missing skill fatal, and D-96.3c
    ruled BUILD rather than despecify. Server-side steward access is
    unaffected — only the compiled bundle is blocked, until Track A-1. If
@@ -166,7 +174,11 @@ the planning session's document, not this one's.
 - Python: **732 passed / 14 skipped**, including 25/25 container-backed
   postgres conformance (C-1/C-2/C-3/C-4/C-8 re-run against the changed
   connector).
-- Core: **188 passed**, three consecutive full runs under deliberate
-  load ([`jc4-verification/`](jc4-verification/)).
+- Core: **191 passed** (188 at the JC-4 verification, +3 for D-97.1's
+  graph-only cases). The JC-4 standard — three consecutive full runs
+  under deliberate load — was met at 188
+  ([`jc4-verification/`](jc4-verification/)); the three tests added since
+  are pure string assembly with no lease or container involvement, so
+  that verification is not re-opened by them.
 - Live example estate: two consecutive supabase pulls, canonical body
   `bef2fa14c60a3520…` byte-identical with `stats.checks` in it.

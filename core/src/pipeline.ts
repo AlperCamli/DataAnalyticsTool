@@ -560,6 +560,7 @@ export async function executeRun(deps: RunDeps): Promise<string> {
         ? { fromVersion: wheelCarry.fromVersion, toVersion: wheelCarry.toVersion }
         : null,
       excluded,
+      graphOnly: changed.length === 0 && gatewayPending,
     };
     const title = buildTitle(input);
 

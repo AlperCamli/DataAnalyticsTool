@@ -108,3 +108,49 @@ describe("F4: snapshot-derived strings are neutralized in the sync PR", () => {
     expect(body).not.toContain("&#"); // no entity encoding introduced for clean input
   });
 });
+
+/**
+ * D-97.1. A graph-only run (CP-7 F-4: publish attestations carried into
+ * `lineage/graph.json`, no snapshot moved) used to fall through to the
+ * wheel-only branch, so KB PR #30 — the one PR that records report
+ * lineage entering the KB — told its reviewer it was a wheel carry, and
+ * named no wheel. Content right, description wrong.
+ */
+describe("graph-only runs describe themselves (D-97.1)", () => {
+  const graphOnly = (
+    wheel: ChangelogInput["wheel"] = null,
+  ): ChangelogInput => ({ diffs: [], scan: null, wheel, excluded: [], graphOnly: true });
+
+  it("names the lineage carry in the title and body, and no wheel", () => {
+    const input = graphOnly();
+    expect(buildTitle(input)).toBe("sync: 0 breaking, 0 additive (report lineage only)");
+    const body = buildBody(input);
+    expect(body).toContain("Graph-only run");
+    expect(body).toContain("lineage/graph.json");
+    expect(body).not.toContain("Wheel-only"); // the PR #30 defect
+    expect(body).not.toContain("wheel update");
+  });
+
+  it("names BOTH when a wheel rides along — the case inference would miss", () => {
+    const input = graphOnly({ fromVersion: "0.5.0", toVersion: "0.6.0" });
+    expect(buildTitle(input)).toBe(
+      "sync: 0 breaking, 0 additive (report lineage + wheel update to 0.6.0)",
+    );
+    const body = buildBody(input);
+    expect(body).toContain("0.5.0 → 0.6.0"); // the wheel banner still leads
+    expect(body).toContain("Graph-only run"); // …and the graph carry is still stated
+  });
+
+  it("leaves a genuine wheel-only run exactly as it was", () => {
+    const input: ChangelogInput = {
+      diffs: [],
+      scan: null,
+      wheel: { fromVersion: "0.5.0", toVersion: "0.6.0" },
+      excluded: [],
+    };
+    expect(buildTitle(input)).toBe(
+      "sync: 0 breaking, 0 additive (wheel-only update to 0.6.0)",
+    );
+    expect(buildBody(input)).toContain("Wheel-only run: no drift pending");
+  });
+});

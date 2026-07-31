@@ -4010,3 +4010,77 @@ reads the filename from the manifest the carry rewrites. The operator's
 sequence (merge #32, then `sync now supabase`, then review as R2) is in
 the verification note. Also noted there: the estate has moved 34 → 38
 objects since 2026-07-27, so the pending drift is not only this capture.
+
+RULING D-97 — post-D-96 loose ends
+(owner ruling, 2026-07-31; recorded verbatim)
+
+1. PR #30 mislabel ("wheel-only" on a graph-only run): accepted as
+   flagged; a one-line changelog.ts graph-only case is AUTHORIZED as a
+   Track A-0 chore. Content correct; label wrong; fix cheap.
+2. compile steward failing until review-sync ships: CORRECT behavior
+   (F-7 hardening working as ruled). Noted so nobody "fixes" it.
+3. SS-5 drift sequence and Desktop working-tree warning: adopted as
+   operator checklist items.
+4. Remaining register rows from D-96.3 that no task applied: batched
+   into the Phase-2 planning session's bookkeeping.
+
+## D-97 application record (2026-07-31)
+
+**D-97.1 — the graph-only case, applied.** `changelog.ts` had no branch
+for the CP-7 F-4 path, so a graph-only run fell through to the wheel-only
+one: KB PR #30 — the single PR that records report lineage entering the
+KB — told its reviewer it was a wheel carry, and named no wheel.
+
+Title and body now say what the PR contains:
+
+```
+sync: 0 breaking, 0 additive (report lineage only)
+
+Graph-only run: no snapshot drift pending. This PR carries publish
+attestations recorded since the last regeneration into
+`lineage/graph.json` — report nodes and their gateway edges (CP-7 F-4).
+Additive by construction: BI-side nodes cannot contaminate a doc, so no
+contamination scan and no re-render ran.
+```
+
+**One design choice worth stating.** `graphOnly` is *passed* from the
+pipeline, not inferred from `!scan && !wheel`. A run can be graph-only
+**and** carry a wheel (manual sync + version mismatch + pending
+attestations); inference would then describe that PR as wheel-only and
+never mention the graph — the same class of mislabel this fix removes.
+That case gets its own title (`report lineage + wheel update to X`) and
+keeps the wheel banner. Cost: one field on `ChangelogInput`, one line at
+its construction site (`pipeline.ts`). Three tests, including the
+genuine-wheel-only case asserted unchanged.
+
+**PR #30 corrected in place.** Its title and body were rewritten to
+exactly what the fixed `buildTitle`/`buildBody` emit for that run's
+inputs — **rendered from the fixed code, not hand-written** — with a note
+on the PR recording that the correction happened and that no commit,
+file, or byte of its content changed. Re-running the sync instead would
+have opened a duplicate PR against an unmerged one.
+
+**Still flagged, NOT fixed — the ops half of the same mislabel.** The run
+*record* also lies: `detail.wheel_only` is set on **any** run with
+`changed.length === 0` (`core/src/pipeline.ts:666`), so run
+`01KYVXMQ8Q0BAHTKC8WM5WBK5S` is stored in `runs` as wheel-only when no
+wheel was involved. D-97.1 authorizes the `changelog.ts` case; the run
+detail is a different field with a different consumer (the `runs` table,
+read by ops and by the future dashboard's U-10 view), so it stays flagged
+under the fence rather than changed. **Recommendation:** fold it into the
+same Track A-0 chore — one line, `wheel_only` → `{ wheel_only: !!wheelCarry,
+graph_only: gatewayPending }`.
+
+**D-97.2** — recorded, no action: `compile steward` failing until
+`review-sync` ships is F-7 working as D-96.3c ruled. It is a signal, not
+a regression; loosening the compile would re-create the exact silence
+that let a steward bundle ship without half the drift loop.
+
+**D-97.3/D-97.4** — no action this session: the SS-5 drift sequence and
+the `~/Desktop/kb` working-tree warning are already written in
+`results/cp8/post-d96-status.md` as operator checklist items, and the
+unapplied D-96.3 register rows are listed there for the Phase-2 planning
+session's bookkeeping.
+
+**Suites at this entry:** python 732 passed / 14 skipped; core 191
+passed (19 files).
