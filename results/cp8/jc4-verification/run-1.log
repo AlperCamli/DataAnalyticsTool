@@ -1,0 +1,131 @@
+
+ RUN  v2.1.9 $HOME/Desktop/DataProject/core
+
+warning: You appear to have cloned an empty repository.
+ ✓ test/mcp-publish-powerbi.test.ts (16 tests) 15654ms
+   ✓ mode-vs-class gates (MCP §6.8 amendment) > api target without mode → invalid_argument, no job 2012ms
+   ✓ deliver_model — the gateway-executed data plane (RA-2) > executes artifact queries under profile guardrails, records the delivery, returns delivered schemas 342ms
+   ✓ deliver_model — the gateway-executed data plane (RA-2) > a truncated gateway result refuses the delivery (CI-7) — no publish job 313ms
+   ✓ the two-call contract end to end (core half of AT-9) + AT-6 > deliver → attest: attestation row, F-4 report node, both calls in audit; pbir_hash does not mint a revision 660ms
+   ✓ the two-call contract end to end (core half of AT-9) + AT-6 > AT-6: data-only re-delivery keeps the revision; a layout change advances it; attestation rows record both 2099ms
+   ✓ delivered-but-unattested is a loud dangling state > the ops join marks a delivery whose revision has no attestation 449ms
+ ✓ test/conformance.test.ts (21 tests) 46085ms
+   ✓ JC-2: racing claims grant exactly one lease > two concurrent claims, one job 1042ms
+   ✓ JC-5: defer honors not_before without consuming an attempt > defers, stays unclaimable until due, attempt unchanged 2257ms
+   ✓ JC-6: invalid delivery → 422 → dead-letter (J-6) > staged-invalid snapshot is rejected, nothing accepted 3795ms
+   ✓ JC-6: invalid delivery → 422 → dead-letter (J-6) > a system mismatch between job and snapshot is a validation failure 2613ms
+   ✓ JC-9: dedupe — one running + at most one queued per (system, type) > absorbs an enqueue storm into one job + one follower 2999ms
+   ✓ snapshot acceptance (J-6 pass path) > stores canonical bytes verbatim and records result_meta 3182ms
+   ✓ snapshot acceptance (J-6 pass path) > prunes to the retention limit per system (JP-3) 29049ms
+warning: You appear to have cloned an empty repository.
+ ✓ test/mcp-conformance.test.ts (29 tests) 19355ms
+   ✓ MT-1 / MCP-R4 — tools/list is the profile allow-set; hidden tools denied; qualifiers enforced (M-3) > MT-1: reporter tools/list shows exactly the profile allowlist 2164ms
+   ✓ MT-5 / MCP-R8 — server-side guardrails; client-supplied guardrails ignored > MT-5: guardrails echo the profile limits regardless of client-supplied values 320ms
+   ✓ MT-6 / MCP-R12 / MCP-R9 — trust blocks computed server-side; refs on every response > MCP-R9: facts from a snapshot ahead of the merged render signal render_lag + warn-user 3601ms
+   ✓ MCP-R2 / MCP-R3 / SP-2 — server-side profile binding; token swap re-binds > MCP-R2: a profile outside the caller's roles fails the connection 2099ms
+warning: You appear to have cloned an empty repository.
+warning: You appear to have cloned an empty repository.
+warning: You appear to have cloned an empty repository.
+warning: You appear to have cloned an empty repository.
+warning: You appear to have cloned an empty repository.
+warning: You appear to have cloned an empty repository.
+warning: You appear to have cloned an empty repository.
+warning: You appear to have cloned an empty repository.
+From /var/folders/27/8kpl4ryj4n19pzygwb6cpg1r0000gn/T/cl-so-run-YCUkZc/kb
+ * branch            sync/01KYVZ5W42ZQ4B0PB01A32KGAB -> FETCH_HEAD
+ * [new branch]      sync/01KYVZ5W42ZQ4B0PB01A32KGAB -> origin/sync/01KYVZ5W42ZQ4B0PB01A32KGAB
+To /var/folders/27/8kpl4ryj4n19pzygwb6cpg1r0000gn/T/cl-so-run-YCUkZc/kb.git
+   90fdeae..b587fd4  main -> main
+ ✓ test/sync-run.test.ts (7 tests) 142505ms
+   ✓ SO-5: unchanged snapshot → no-op run record, no branch, no PR 7265ms
+   ✓ SO-3: triggers during a running run coalesce into exactly one follow-up covering all pending systems 24775ms
+   ✓ SO-7: a second run restates the still-true picture and supersedes the open breaking PR 23842ms
+   ✓ SO-6: unparseable definition → run failed, no PR, HEAD graph byte-unchanged, health names the definition 10772ms
+   ✓ SO-11: acquisition failure excludes one system and ships the other; post-acquisition failure fails the whole run 21371ms
+   ✓ SO-12: a failed run re-run over identical pinned inputs yields byte-identical branch content 27429ms
+   ✓ SO-10: wheel version mismatch → the next sync PR leads with the wheel commit; manifest is the only pin, no workflow file touched (R-6b); wheel-only manual run supported 27046ms
+warning: You appear to have cloned an empty repository.
+ ✓ test/mcp-publish.test.ts (15 tests) 27957ms
+   ✓ authz — profile allowlist and target qualifier (M-3/MCP-R4) > reporter lists publish_report; steward does not 5539ms
+   ✓ MT-10 / formats §4 — refusals before enqueue > a ref hidden from the caller is worded exactly like a missing one; audit records filtered (M-4) 334ms
+   ✓ F-7 — publish-time re-validation (FA-2) > current pin but a query that no longer validates → revalidate_required with findings 716ms
+   ✓ the publish path — §8.2 relay, persistence, idempotency, F-4 > publishes through the queue and relays the §8.2 result verbatim 939ms
+   ✓ the publish path — §8.2 relay, persistence, idempotency, F-4 > same id + same content → short-circuits to the stored result, no second job (FA-3) 1580ms
+   ✓ the publish path — §8.2 relay, persistence, idempotency, F-4 > same id + new content → revision 2, one publish_results row updated (PB-2/F-5) 1235ms
+warning: You appear to have cloned an empty repository.
+stdout | test/execute-e2e.test.ts > JP-2 — interactive latency (job spec §11, plan §6.5) > p95 claim-to-start over 100 warm executes is within the 500 ms budget
+[JP-2] n=100 claim-to-start p50=11.2ms p95=30.8ms max=67.7ms | end-to-end p50=415.0ms p95=564.0ms (non-normative)
+
+ ✓ test/execute-e2e.test.ts (9 tests) 73070ms
+   ✓ execute_sql end to end (§6.7, capability §6) > a validated SELECT returns real rows through the queue 4028ms
+   ✓ execute_sql end to end (§6.7, capability §6) > the audit record carries the full statement and the row count 366ms
+   ✓ execute_sql end to end (§6.7, capability §6) > the audit captures parameter values, not just the statement shape 432ms
+   ✓ execute_sql end to end (§6.7, capability §6) > the executed statement carries the QE-2 identity comment tag 726ms
+   ✓ execute_sql end to end (§6.7, capability §6) > a result within the cap is not flagged truncated 578ms
+   ✓ execute_sql end to end (§6.7, capability §6) > an over-cap query truncates at the profile's row_cap (CI-7) 435ms
+   ✓ execute_sql end to end (§6.7, capability §6) > a CTE-wrapped write is refused at validate — it never reaches execute 832ms
+   ✓ execute_sql end to end (§6.7, capability §6) > a statement referencing a dropped object surfaces schema_mismatch and files a ledger event 637ms
+   ✓ JP-2 — interactive latency (job spec §11, plan §6.5) > p95 claim-to-start over 100 warm executes is within the 500 ms budget 46257ms
+warning: You appear to have cloned an empty repository.
+ ✓ test/at9-authoring-e2e.test.ts (2 tests) 12786ms
+   ✓ AT-9 — the full authoring pipeline against the fixture > request → deliver → author → deploy → verify → attest; both calls audited; steps empty 3504ms
+warning: You appear to have cloned an empty repository.
+ ✓ test/mcp-visibility.test.ts (12 tests) 21775ms
+   ✓ MT-11 — validate_sql resolves against the caller's visible surface (§6.6) > a hidden table is refused, with no token issued 3095ms
+   ✓ MT-11 — validate_sql resolves against the caller's visible surface (§6.6) > the refusal is indistinguishable from the object not existing (M-4) 580ms
+   ✓ MT-13 — the allow-set carries the decision to execute (§5) > a token minted while the object was visible is refused once the map hides it 3449ms
+   ✓ MT-13 — the allow-set carries the decision to execute (§5) > a statement over still-visible objects gets past the check (it is not a blanket refusal) 3602ms
+warning: You appear to have cloned an empty repository.
+ ✓ test/mcp-ledger.test.ts (13 tests) 20590ms
+   ✓ flag_gap — class-2 ingestion (§6, L-6, LED-R3) > LED-R3: identity/session/profile/refs are server-set; client-supplied subject is ignored 3399ms
+   ✓ FL-5 / LED-R1 — list_gaps gating > FL-5: list_gaps absent from reporter tools/list, present for steward; direct call denied 302ms
+   ✓ MT-7 — class-1 detectors fire without agent cooperation (§5, L-3) > repeated validate failures against one object open a doc_schema_mismatch issue via the window rule 923ms
+warning: You appear to have cloned an empty repository.
+ ✓ test/sync-triggers.test.ts (5 tests) 5381ms
+   ✓ SO-2: a policy edit merged to the KB schedules per the new interval on the next tick 1573ms
+   ✓ SO-9: threshold crossing warns with mode guidance; next accepted snapshot clears; a dead schedule still warns 1826ms
+warning: You appear to have cloned an empty repository.
+ ✓ test/mcp-execute.test.ts (10 tests) 20594ms
+   ✓ MT-3 — execute_sql token enforcement (M-2, §5, G4) > no token at all → revalidate_required, nothing enqueued 2554ms
+   ✓ MT-3 — execute_sql token enforcement (M-2, §5, G4) > tampered statement → revalidate_required (token binds the exact bytes) 521ms
+   ✓ MT-3 — execute_sql token enforcement (M-2, §5, G4) > tampered token signature → revalidate_required 416ms
+   ✓ MT-3 — execute_sql token enforcement (M-2, §5, G4) > re-signed payload with a widened claim → revalidate_required (no unsigned trust) 351ms
+   ✓ MT-3 — execute_sql token enforcement (M-2, §5, G4) > expired token → revalidate_required 611ms
+   ✓ MT-3 — execute_sql token enforcement (M-2, §5, G4) > foreign subject → revalidate_required (tokens are not transferable) 388ms
+   ✓ MT-4 — snapshot advanced between validate and execute (§5) > a token pinned to the superseded snapshot → revalidate_required 4463ms
+   ✓ credential scoping — an execute job carries only query credentials > a registration with only an introspection credential fails closed 341ms
+   ✓ MT-5 / G2 — guardrails are server-side (MCP-R8) > client-supplied guardrails are dropped, not merged 335ms
+ ✓ test/compile.test.ts (10 tests) 60ms
+ ✓ test/e2e.test.ts (3 tests) 33957ms
+   ✓ fixture e2e: enqueue → runner → J-6 → accepted snapshot, byte-equal to the CLI harness 7782ms
+   ✓ JC-8: canary secret appears in no protocol message, log, or stored row 2542ms
+   ✓ JC-4: runner killed mid-job → reclaim by a second runner → identical canonical body 22996ms
+warning: You appear to have cloned an empty repository.
+ ✓ test/mcp-validate.test.ts (17 tests) 22062ms
+   ✓ validate_sql — SQL dialect (M-1, §6.6) > a clean SELECT passes and issues a validation token (MCP-R5 issuance) 2688ms
+   ✓ validate_sql — SQL dialect (M-1, §6.6) > MCP-R6: a two-statement batch is refused — no token 308ms
+   ✓ validate_sql — SQL dialect (M-1, §6.6) > MCP-R7: a CTE-wrapped write is refused by the parser 306ms
+   ✓ validate_sql — SQL dialect (M-1, §6.6) > MCP-R7: FOR UPDATE and side-effecting functions are refused 564ms
+   ✓ MT-3 / MT-4 / MCP-R5 — the §5 token binding, via the verification library > MT-4: a snapshot accepted after validation → revalidate_required 327ms
+   ✓ MT-3 / MT-4 / MCP-R5 — the §5 token binding, via the verification library > MT-3: the reporter passes the profile gate on execute (CP-6 grant); token binding still holds 349ms
+   ✓ MCP-R14 — per-identity rate limits (§7) > exceeding the validate limit → rate_limited, audited as denied 6530ms
+ ✓ test/property.test.ts (3 tests) 2444ms
+   ✓ repeated lease expiry reclaims exactly max_attempts times, then dead-letters 984ms
+   ✓ defers below the cap never consume an attempt; the cap converts (J-5/§5) 579ms
+warning: You appear to have cloned an empty repository.
+ ✓ test/sync-drill.test.ts (6 tests) 27282ms
+   ✓ SO-8: the PR tree passes the validation library (KB-8 render byte-consistency) and carries purpose text (D-38) 3048ms
+warning: You appear to have cloned an empty repository.
+warning: You appear to have cloned an empty repository.
+ ✓ test/nokb-condition.test.ts (5 tests) 35972ms
+   ✓ no-kb condition: scratch KB with no roles.yaml > validates a statement against a example estate table (D-74.4b) 3082ms
+   ✓ no-kb condition: scratch KB with no roles.yaml > records no visibility filtering, because there is no map to filter by 393ms
+   ✓ no-kb condition: a roles.yaml without an entry for the role > refuses the statement, and the caller cannot tell hidden from absent (D-71.1) 4290ms
+ ✓ test/changelog.test.ts (3 tests) 5ms
+ ✓ test/migrate.test.ts (2 tests) 441ms
+
+ Test Files  19 passed (19)
+      Tests  188 passed (188)
+   Start at  14:29:31
+   Duration  548.96s (transform 1.01s, setup 0ms, collect 9.80s, tests 527.97s, environment 6ms, prepare 1.48s)
+

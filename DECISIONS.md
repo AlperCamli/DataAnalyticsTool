@@ -3854,8 +3854,19 @@ and every downstream assertion mismatches. Fix: pin the heartbeat at
 0.5 s, widen the lease to 8 s (16:1 margin), widen the waits to match.
 `expect(requeued.attempt).toBe(2)` stays strict deliberately — at that
 margin a spurious expiry is a real signal, and softening it would trade
-the flake for blindness. Verification standard, per D-96.3f: **three
-consecutive full-suite runs under deliberate load**, reported below.
+the flake for blindness.
+
+**Verified to D-96.3f's standard: 3/3 green under deliberate load**
+(`results/cp8/jc4-verification/`, logs committed). 188 tests per run;
+JC-4 itself passed at 22.99 s / 21.76 s / 21.41 s — a 1.6 s band, against
+the 35.3 s timeout it replaces. The load was a continuously looping
+`docker build --no-cache` of the core image (204k lines of build log)
+plus a 7-spinner CPU ring on an 8-core box; suite wall-clock roughly
+doubled, so the contention was real rather than nominal. **Not claimed:**
+that the docker-heavy sync flake is fixed. It is a different failure
+(container-start latency, not lease protocol) and stays under D-96.3f's
+quarantine-with-trigger — no occurrence in these three runs, which is
+evidence of nothing either way.
 
 **F-7 — a profile naming a missing skill now fails the compile.** It
 warned and proceeded, and that is precisely how a steward bundle shipped
