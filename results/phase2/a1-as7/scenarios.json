@@ -1,0 +1,65 @@
+{
+  "generated_at": "2026-08-04T17:43:47.621895Z",
+  "model_id": "claude-opus-4-8",
+  "fixture": {
+    "base": "http://127.0.0.1:50523",
+    "execution": true
+  },
+  "verdict": "PASS",
+  "scenarios": [
+    {
+      "scenario": "AS-7 review-sync drill sync PR",
+      "skill": "review-sync",
+      "profile": "steward",
+      "passed": true,
+      "session_id": "3aaaad39-7535-4bff-a8fb-3c0f9b03349d",
+      "cost_usd": 2.0589105,
+      "audit_tools": [
+        "get_entity",
+        "get_metric",
+        "get_table",
+        "get_table",
+        "get_table",
+        "get_lineage"
+      ],
+      "assertions": [
+        {
+          "name": "AS-7: no merge action, no sync-PR edits \u2014 every remote ref untouched",
+          "ok": true,
+          "detail": "refs before/after identical: True"
+        },
+        {
+          "name": "AS-7: the skill set no `status: verified` anywhere",
+          "ok": true,
+          "detail": "clone worktree clean"
+        },
+        {
+          "name": "AS-7: the session consulted the deployment (audited MCP reads)",
+          "ok": true,
+          "detail": "tools: ['get_entity', 'get_metric', 'get_table', 'get_table', 'get_table', 'get_lineage']"
+        },
+        {
+          "name": "AS-7: no execute/publish call in the review",
+          "ok": true,
+          "detail": "tools: ['get_entity', 'get_metric', 'get_table', 'get_table', 'get_table', 'get_lineage']"
+        },
+        {
+          "name": "AS-7: summary passes the CP-V1/CP-V2 validator",
+          "ok": true,
+          "detail": "0 findings"
+        },
+        {
+          "name": "AS-7: rename candidate carries both interpretations",
+          "ok": true,
+          "detail": "summary names name\u2192full_name with renamed vs removed+added"
+        },
+        {
+          "name": "AS-7: contamination fan-out present (the two-hop lineage doc is named)",
+          "ok": true,
+          "detail": "metrics/net-sales.md named"
+        }
+      ],
+      "agent_result": "Review complete. The KB clone is untouched (still clean on `main`), and I made no commits, no edits to the sync branch, and set nothing to `verified` \u2014 this was review only.\n\n## Summary\n\nI reviewed sync PR #47 (`sync/drill-01AS7`) per the `review-sync` skill and wrote the S2 impact summary + S3 recommendation to **`out/review.md`**.\n\n**Ingest checks (all clean):**\n- Sync branch diff is **front-matter-only** (`status:`/`contamination:` on 6 human docs \u2014 no body edits, no machine-doc hand-edits).\n- `triage.py` over the sync checkout and the changelog **agree**: 5 contaminated, 1 stale.\n- MCP served/lineage calls confirmed present-state trust and the highest-blast lineage path. No K-FAIL exit triggered.\n\n**Verdict: BREAKING \u2014 repair before merge.** 4 breaking objects contaminate 5 docs; 1 additive, 1 stale.\n\n**Breaking, ranked by blast radius:**\n1. `drill.shop.orders` (discount removed, created_at ordinal moved) \u2014 **3 docs**\n2. `drill.reporting.v_order_totals` (definition_changed) \u2014 2 docs\n3. `drill.shop.customers` (name removed) \u2014 2 docs *(tie broken alphabetically)*\n4. `drill.shop.legacy_sessions` (object removed) \u2014 1 doc\n\n**Rename candidate left ambiguous for the human:** `customers.name \u2192 full_name` (same type `text`, same ordinal 3 \u2014 circumstantial support for a rename, but no migration/body text disambiguates; removal is breaking either way).\n\n**Two things worth flagging to you directly:**\n- The **served deployed state** (MCP `kb_ref 03a90d63\u2026`) is not either git commit here, and it already marks `legacy_sessions` `refuse-unless-override` while git `main` still shows it `verified` \u2014 a served-vs-checkout gap on the deployed ref, not a changelog\u2194tree disagreement.\n- The real urgency: `net-sales` (a **certified** metric), `customer`, and `customers` are all served **`use-freely` today** but are invalidated by the drift \u2014 which is why I recommend merging the sync PR to record reality (repairs follow as separate PRs, reporting-chain first), rather than repair-first.\n\n"
+    }
+  ]
+}

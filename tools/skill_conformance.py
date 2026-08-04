@@ -206,3 +206,104 @@ def check_artifact_trust(artifact: Mapping[str, Any], doc_statuses: Mapping[str,
                 )
 
     return findings
+
+
+# --------------------------------------------------------------------------
+# CP-V1/CP-V2 / AS-7 — review-sync impact summary
+
+
+_VERDICT = re.compile(r"^Verdict:\s*(BREAKING|ADDITIVE-ONLY)\b.*$", re.MULTILINE)
+_MERGE_CLAIM = re.compile(r"\b(?:i|we)\s+(?:have\s+|will\s+)?merged?\b|\bmerging\s+now\b", re.IGNORECASE)
+
+
+def check_review_summary(text: str) -> list[Finding]:
+    """The review-sync S2 summary contract (skill spec §7 CP-V1/CP-V2).
+
+    Pins: a verdict consistent with the body; breaking ranked first;
+    rename candidates carrying *both* interpretations; undeclared
+    references marked non-authoritative; no merge-performing language
+    (the behavioral no-merge assertion is AS-7's, on git effects — this
+    only catches a summary that *claims* the skill merged).
+    """
+    findings: list[Finding] = []
+    # H2 sections only: the H1 is the summary's title, not a ranked section.
+    h2 = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+    matches = list(h2.finditer(text))
+    sections: dict[str, str] = {}
+    for i, m in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        sections[m.group(1).strip().lower()] = text[m.end() : end].strip()
+    section_order = [h for h in sections]
+
+    verdict_m = _VERDICT.search(text)
+    if not verdict_m:
+        findings.append(Finding("CP-V1", "no `Verdict:` line (BREAKING or ADDITIVE-ONLY)"))
+    verdict = verdict_m.group(1) if verdict_m else None
+
+    breaking_heading = next((h for h in section_order if h.startswith("breaking")), None)
+    if verdict == "ADDITIVE-ONLY" and breaking_heading:
+        findings.append(
+            Finding("CP-V1", "verdict says ADDITIVE-ONLY but the summary has a Breaking section")
+        )
+    if verdict == "BREAKING" and not breaking_heading:
+        findings.append(
+            Finding("CP-V1", "verdict says BREAKING but the summary has no Breaking section")
+        )
+
+    # Breaking first: when present it is the first section — a reader who
+    # stops after one section got the most important one.
+    if breaking_heading and section_order[0] != breaking_heading:
+        findings.append(
+            Finding(
+                "CP-V1",
+                f"Breaking section ranked below {section_order[0]!r} — breaking changes come first",
+            )
+        )
+    if breaking_heading and "contaminates" not in sections[breaking_heading].lower():
+        findings.append(
+            Finding(
+                "CP-V1",
+                "Breaking section names no contaminated docs — each breaking change "
+                "carries its contamination fan-out and the route that carried it",
+            )
+        )
+
+    rename_heading = next((h for h in section_order if "rename" in h), None)
+    if rename_heading:
+        # Bullet items span continuation lines; judge the whole item.
+        items: list[list[str]] = []
+        for line in sections[rename_heading].splitlines():
+            # A bullet is "- " or "* " — a bare marker plus space, so a
+            # bold "**…" continuation line is not mistaken for a new item.
+            if re.match(r"[-*]\s", line.strip()):
+                items.append([line])
+            elif items and line.strip():
+                items[-1].append(line)
+        for item_lines in items:
+            item = " ".join(l.strip() for l in item_lines).lower()
+            if not ("renamed" in item and "removed" in item and "added" in item):
+                findings.append(
+                    Finding(
+                        "CP-V1",
+                        f"rename candidate lacks both interpretations (renamed vs removed+added): {item[:100]!r}",
+                    )
+                )
+
+    undeclared_heading = next((h for h in section_order if "undeclared" in h), None)
+    if undeclared_heading:
+        blob = (undeclared_heading + " " + sections[undeclared_heading]).lower()
+        if "non-authoritative" not in blob and "not authoritative" not in blob:
+            findings.append(
+                Finding(
+                    "CP-V1",
+                    "undeclared references are not marked non-authoritative — the scan "
+                    "does not flag them and neither may the summary",
+                )
+            )
+
+    if _MERGE_CLAIM.search(text):
+        findings.append(
+            Finding("CP-V2", "summary claims a merge was or will be performed — the skill never merges")
+        )
+
+    return findings

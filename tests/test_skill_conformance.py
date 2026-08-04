@@ -192,3 +192,159 @@ class TestArtifactTrust:
             },
         }
         assert check_artifact_trust(artifact, {}) == []
+
+
+# --------------------------------------------------------------------------
+# CP-V1/CP-V2 — review-sync summary rules (layer (a); AS-7 evidence is the
+# behavioral scenario)
+
+
+from tools.skill_conformance import check_review_summary  # noqa: E402
+
+
+GOOD_SUMMARY = """\
+# Sync review: sync: 4 breaking, 1 additive across drill
+
+Verdict: BREAKING — repair before merge
+Four breaking changes contaminate five docs, one through a two-hop lineage path.
+
+## Breaking (ranked by blast radius)
+1. `drill.reporting.v_order_totals` — definition_changed — blast radius: 2 docs
+   - contaminates `metrics/net-sales.md` (lineage path: `sha256:b6b4…`)
+   - contaminates `systems/drill/reporting/v_net_sales.md` (declared dependency)
+2. `drill.shop.customers` — column_removed: name — blast radius: 2 docs
+   - contaminates `entities/customer.md` (declared dependency)
+
+## Rename candidates (human decision required)
+- `drill.shop.customers`: `name` → `full_name` (type text, ordinal 3) — either
+  **column renamed** or **column removed + column added**; evidence: same type
+  and ordinal; the removal is breaking under both readings
+
+## Additive
+- `drill.shop.order_items` — column_added: discount_pct
+
+## Docs marked stale
+- `systems/drill/shop/order_items.md`
+
+## Undeclared references (non-authoritative)
+- `systems/drill/reporting/v_net_sales.md` mentions `drill.shop.legacy_sessions`
+  — body-text mention only; reviewer attention item, not a finding
+"""
+
+
+class TestReviewSummary:
+    """CP-V1/CP-V2 pinned over staged summaries — good and bad both, because
+    a validator that has only seen good input is not known to reject."""
+
+    def test_good_summary_passes(self):
+        assert check_review_summary(GOOD_SUMMARY) == []
+
+    def test_missing_verdict_flagged(self):
+        text = GOOD_SUMMARY.replace("Verdict: BREAKING — repair before merge\n", "")
+        assert any("Verdict" in f.detail for f in check_review_summary(text))
+
+    def test_additive_verdict_over_breaking_body_is_contradiction(self):
+        text = GOOD_SUMMARY.replace(
+            "Verdict: BREAKING — repair before merge",
+            "Verdict: ADDITIVE-ONLY — safe to merge",
+        )
+        assert any("ADDITIVE-ONLY but" in f.detail for f in check_review_summary(text))
+
+    def test_breaking_ranked_below_additive_is_flagged(self):
+        # Move the Additive section above Breaking.
+        head, breaking = GOOD_SUMMARY.split("## Breaking", 1)
+        breaking, tail = breaking.split("## Additive", 1)
+        reordered = head + "## Additive" + tail.split("## Docs marked stale")[0] \
+            + "## Breaking" + breaking + "## Docs marked stale" \
+            + tail.split("## Docs marked stale")[1]
+        assert any("come first" in f.detail for f in check_review_summary(reordered))
+
+    def test_rename_candidate_with_one_interpretation_is_flagged(self):
+        text = GOOD_SUMMARY.replace(
+            "either\n  **column renamed** or **column removed + column added**",
+            "probably **column renamed**",
+        )
+        findings = check_review_summary(text)
+        assert any("both interpretations" in f.detail for f in findings)
+
+    def test_undeclared_refs_need_the_non_authoritative_marker(self):
+        text = GOOD_SUMMARY.replace(" (non-authoritative)", "").replace(
+            "; reviewer attention item, not a finding", ""
+        )
+        assert any("non-authoritative" in f.detail for f in check_review_summary(text))
+
+    def test_merge_claim_is_a_cp_v2_violation(self):
+        text = GOOD_SUMMARY + "\nAll clear — I have merged the PR.\n"
+        assert any(f.check == "CP-V2" for f in check_review_summary(text))
+
+    def test_breaking_section_without_contaminated_docs_is_flagged(self):
+        text = GOOD_SUMMARY.replace("contaminates", "affects")
+        assert any("contaminated docs" in f.detail for f in check_review_summary(text))
+
+
+# --------------------------------------------------------------------------
+# review-sync triage.py — the bundled deterministic tool, run over the
+# drill fixture's staged world (real front-matter writes by the real
+# generator.statuses stage, then triaged)
+
+
+import json as _json  # noqa: E402
+import shutil as _shutil  # noqa: E402
+import subprocess as _subprocess  # noqa: E402
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+
+_REPO = _Path(__file__).resolve().parent.parent
+_TRIAGE = _REPO / "core" / "skills" / "review-sync" / "triage.py"
+_DRILL = _REPO / "fixtures" / "drill"
+
+
+class TestReviewSyncTriage:
+    def _staged_kb(self, tmp_path):
+        kb = tmp_path / "kb"
+        _shutil.copytree(_DRILL / "kb-seed", kb)
+        scan = _json.loads((_DRILL / "expected" / "scan.json").read_text())
+        instructions = [
+            {"doc": c["doc"], "status": "contaminated", "contamination": c["contamination"]}
+            for c in scan["contaminated"]
+        ] + [{"doc": s["doc"], "status": "stale"} for s in scan["stale"]]
+        instr = tmp_path / "statuses.json"
+        instr.write_text(_json.dumps(instructions))
+        proc = _subprocess.run(
+            [_sys.executable, "-m", "generator.statuses", "--kb", str(kb), str(instr)],
+            capture_output=True, text=True, cwd=_REPO,
+        )
+        assert proc.returncode == 0, proc.stderr
+        return kb
+
+    def _triage(self, kb):
+        proc = _subprocess.run(
+            [_sys.executable, str(_TRIAGE), "--kb", str(kb), "--json"],
+            capture_output=True, text=True,
+        )
+        assert proc.returncode == 0, proc.stderr
+        return proc.stdout
+
+    def test_triage_over_the_drill_world(self, tmp_path):
+        kb = self._staged_kb(tmp_path)
+        result = _json.loads(self._triage(kb))
+        assert result["counts"]["contaminated"] == 5
+        assert result["counts"]["stale"] == 1
+        assert result["stale"] == ["systems/drill/shop/order_items.md"]
+        # The two-hop lineage path survives the front-matter round trip.
+        net_sales = next(
+            e for e in result["contaminated"] if e["doc"] == "metrics/net-sales.md"
+        )
+        assert net_sales["contamination"]["object"] == "drill.reporting.v_order_totals"
+        assert net_sales["contamination"]["path"], "lineage path lost in round-trip"
+        # Blast ranking: count desc, then object asc — deterministic.
+        blast = [(b["object"], b["count"]) for b in result["blast"]]
+        assert blast == [
+            ("drill.reporting.v_order_totals", 2),
+            ("drill.shop.customers", 2),
+            ("drill.shop.legacy_sessions", 1),
+        ]
+
+    def test_triage_is_deterministic(self, tmp_path):
+        kb = self._staged_kb(tmp_path)
+        assert self._triage(kb) == self._triage(kb)

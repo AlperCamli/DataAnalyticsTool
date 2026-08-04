@@ -4207,3 +4207,70 @@ lands as the asserted health row beside an intact delivery record.
 RA-F tests); core **193 passed** (19 files; +2 — the graph-only run
 record and the RA-F health emission; SO-10's new record assertions ride
 its existing test).
+
+### Task 1 — `review-sync` ships; C-2 closes (applied 2026-08-04)
+
+**The skill** (`core/skills/review-sync/`): SKILL.md per skill spec §7 —
+`ingest → impact → recommendation → [repair-plan]`, with four absolutes
+stated as boundaries the product asserts: never merge (CP-V2), never
+edit the sync PR (CP-V2), never set `status: verified` (KB-7 — the
+skill prepares the diff, the human certifies with their name), rename
+candidates stay ambiguous with both interpretations until a human
+decides. S4 stages the re-verification diff (clear `contamination`,
+refresh `written_against_schema_hash`) while leaving `status` untouched
+with a PR-body note telling the human the flip is theirs. Bundled thin
+tooling: `triage.py`, a stdlib-only deterministic tree inventory (docs
+by status, parsed contamination fields, per-object blast counts, sorted
+everywhere) — the compile bundles the whole skill directory, so it
+reaches the steward machine.
+
+**Conformance, per the D-78 layering — both layers, layered:**
+
+- *(a) CI validators:* `check_review_summary` in
+  `tools/skill_conformance.py` pins CP-V1/CP-V2 over the summary
+  structure (verdict consistent with body, breaking-first, both rename
+  interpretations per bullet, undeclared refs marked non-authoritative,
+  no merge-performing language). 8 staged tests, bads rejected, goods
+  passed; plus 2 tests running `triage.py` for real over the drill
+  world staged by the real `generator.statuses` stage (counts, the
+  two-hop path surviving the front-matter round trip, blast ordering,
+  byte-identical double run).
+- *(b) AS-7 behavioral, the gate evidence:* **PASS, first run, 7/7**
+  (`results/phase2/a1-as7/`, model claude-opus-4-8, cost $2.06). Real
+  headless steward session, fixture deployment + a staged drill sync PR
+  in a scratch git world where the agent held **unprotected push
+  capability** — and every remote ref is byte-identical after; clone
+  worktree clean (no `status: verified` anywhere); audit stream shows
+  `get_entity → get_metric → get_table ×3 → get_lineage` and zero
+  execute/publish despite the profile carrying `execute_sql:drill`; the
+  produced summary clears the layer-(a) validator with 0 findings and
+  names the rename with both interpretations and the two-hop
+  contamination doc. Falsifiability, stated since the run went green
+  first try: the validator is red-tested against staged bads, the git
+  assertions are live sha comparisons that any push would flip, and the
+  audit assertions count real rows — each could have failed if the
+  behavior were absent (D-78.2). The agent also surfaced, unprompted,
+  the triage-vs-changelog fan-out subtlety and a pre-existing
+  placeholder hash in the fixture — recorded in the committed
+  `review.md`.
+- *Harness fix while here:* `_prepare_workdir` copied only SKILL.md;
+  it now copies the whole skill directory (minus `__pycache__`),
+  matching what compile bundles — without this, bundled tooling never
+  reaches a scenario workdir and "ships inside the skill" is a sentence.
+
+**The two mechanical gate clauses, verified by running them:**
+`compile steward` exits 0 and the bundle carries
+`enrich/SKILL.md + review-sync/SKILL.md + review-sync/triage.py` — F-7
+satisfied by shipping the skill, not by loosening the compile. R-8's
+`KNOWN_UNSHIPPED` list is **empty** — the entry's removal was forced by
+the exhaustion test exactly as designed; the counterfactual test (an
+unlisted missing skill fails both the inventory and the compile) still
+runs against a scratch skills root.
+
+**Suites at this entry:** python **745 passed / 14 skipped** (+10);
+core **193 passed**.
+
+**A-1 gate status after this entry:** review-sync shipped per §7 with
+AS-7 green on behavioral evidence; `compile steward` succeeds honestly;
+R-8 green without exemptions. Open: the live drill (task 2), which
+waits on the operator's SS-5 drift flush and STOP-1.

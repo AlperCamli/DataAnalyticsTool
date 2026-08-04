@@ -166,6 +166,7 @@ describe("D-75.1 — skills come from the core image, never the KB", () => {
     const shipped = await listShippedSkills(defaultSkillsRoot());
     expect(shipped).toContain("report");
     expect(shipped).toContain("enrich");
+    expect(shipped).toContain("review-sync"); // C-2 closed, Track A-1
   });
 });
 
@@ -186,12 +187,10 @@ describe("R-8 — every skill named by a shipped profile exists in the core imag
    * convenience. The list is asserted to be exhausted below, so an entry
    * whose skill has shipped fails the suite and forces its own removal.
    */
-  const KNOWN_UNSHIPPED: Record<string, string> = {
-    // CP-8 condition C-2, ruled BUILD (not despecify) by D-96.3c;
-    // Phase-2 Track A-1. Named by the product steward profile and its
-    // fixture twin. Remove this entry when core/skills/review-sync lands.
-    "review-sync": "C-2 / D-96.3c — build under Track A-1",
-  };
+  // C-2 closed at Track A-1 (D-98): `review-sync` shipped and its entry
+  // came out, as the exhaustion test below demanded. Empty is the goal
+  // state; a new entry needs a ruling, an owner, and an exit.
+  const KNOWN_UNSHIPPED: Record<string, string> = {};
 
   const skillsOf = (yaml: string): string[] =>
     stringList((YAML.parse(yaml) as { skills?: unknown }).skills);

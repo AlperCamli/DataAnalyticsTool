@@ -8,7 +8,7 @@ against the fixture deployment (skill-spec §9), then asserts on the audit
 stream and the files the agent produced. If the skill misbehaved, these
 fail; that is the whole point.
 
-Two journeys cover the three items:
+Three journeys cover the items:
 
 * **enrich `shop.orders`** — AS-12 (purposes in front-matter, no body
   section restating them) and AS-9 (the one deliberately unanswerable
@@ -16,6 +16,11 @@ Two journeys cover the three items:
 * **report net sales** — AS-10 (the request routes through a `warn-user`
   doc, and the warning travels into the report artifact's `trust_notes`,
   not only the transcript).
+* **review-sync drill PR** — AS-7 (Track A-1): the staged drill sync PR
+  is reviewed with the rename candidate carried as *both*
+  interpretations, breaking-first with contamination routes, and the
+  agent — holding real push capability over the scratch remote — merges
+  nothing and edits no sync-PR ref (CP-V1/CP-V2 on git effects).
 
 Run against a live fixture deployment:
 
@@ -92,11 +97,14 @@ def _prepare_workdir(workdir: Path, skill: str, mcp_config: dict) -> None:
 
     Only the skill being tested is installed — a scenario that passed
     because a *different* skill's instructions leaked in would be measuring
-    nothing.
+    nothing. The whole skill directory is copied, not just SKILL.md —
+    compile bundles skill-local tooling (pbir_tool.py, triage.py) and the
+    scenario must exercise the same shape the bundle ships.
     """
     skill_dst = workdir / ".claude" / "skills" / skill
     skill_dst.mkdir(parents=True, exist_ok=True)
-    shutil.copy(SKILLS_DIR / skill / "SKILL.md", skill_dst / "SKILL.md")
+    shutil.copytree(SKILLS_DIR / skill, skill_dst, dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("__pycache__"))
     (workdir / ".mcp.json").write_text(json.dumps(mcp_config, indent=2) + "\n")
 
 
@@ -317,6 +325,190 @@ def scenario_report(conn: dict, model: str, workroot: Path, timeout_s: int) -> S
 
 
 # --------------------------------------------------------------------------
+# scenario: review-sync over the drill sync PR (AS-7)
+
+
+REVIEW_SYNC_PROMPT = """\
+You are the steward reviewing a sync PR. Use the `review-sync` skill and
+follow it exactly.
+
+- The KB clone is at `kb/` in this directory, checked out on `main`. The
+  sync PR's branch is `{branch}` (available as `origin/{branch}`).
+- The PR's title and body are staged at `pr/meta.json` and `pr/body.md`.
+- The Context Layer MCP tools are available for served trust state and
+  lineage.
+
+Produce the S2 impact summary and S3 recommendation, in the skill's exact
+summary structure, at `out/review.md`. This session is review only — do
+not draft repair PRs. Then finish."""
+
+
+def _git(args: list[str], cwd: Path) -> str:
+    proc = subprocess.run(
+        ["git", "-c", "user.name=as7-stage", "-c", "user.email=as7@fixture.invalid", *args],
+        capture_output=True, text=True, cwd=cwd,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"git {' '.join(args)}: {proc.stderr.strip()[:300]}")
+    return proc.stdout
+
+
+def _stage_drill_sync_pr(workdir: Path, staging: Path) -> tuple[Path, str, str]:
+    """Stage the drill fixture's sync PR as a real git world.
+
+    Remote (bare) + seed clone: `main` carries the drill kb-seed; the sync
+    branch carries exactly the front-matter status writes the pipeline's
+    own `generator.statuses` stage produces from the drill's expected
+    scan — the PR body is the drill's expected changelog, which SO-4 pins
+    byte-for-byte to what the pipeline emits. Staged inputs, real product
+    stages (D-78: the *agent's* behavior is what the scenario measures).
+
+    Returns (remote_path, branch, ls_remote_before).
+    """
+    drill = REPO / "fixtures" / "drill"
+    branch = "sync/drill-01AS7"
+
+    remote = staging / "kb-remote.git"
+    _git(["init", "--bare", "--initial-branch=main", str(remote)], staging)
+    seed = staging / "seed"
+    _git(["clone", str(remote), str(seed)], staging)
+    shutil.copytree(drill / "kb-seed", seed, dirs_exist_ok=True)
+    _git(["add", "-A"], seed)
+    _git(["commit", "-q", "-m", "drill: seed KB (AS-7 staging)"], seed)
+    _git(["push", "-q", "origin", "main"], seed)
+
+    # The sync branch: status writes via the real generator.statuses stage.
+    _git(["checkout", "-q", "-b", branch], seed)
+    scan = json.loads((drill / "expected" / "scan.json").read_text())
+    instructions = [
+        {"doc": c["doc"], "status": "contaminated", "contamination": c["contamination"]}
+        for c in scan["contaminated"]
+    ] + [{"doc": s["doc"], "status": "stale"} for s in scan["stale"]]
+    instr = staging / "statuses.json"
+    instr.write_text(json.dumps(instructions))
+    proc = subprocess.run(
+        [sys.executable, "-m", "generator.statuses", "--kb", str(seed), str(instr)],
+        capture_output=True, text=True, cwd=REPO,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"generator.statuses failed: {proc.stderr.strip()[:400]}")
+    _git(["add", "-A"], seed)
+    _git(["commit", "-q", "-m", "sync: 4 breaking, 1 additive across drill"], seed)
+    _git(["push", "-q", "origin", branch], seed)
+
+    # The agent's clone + the PR context files.
+    _git(["clone", str(remote), str(workdir / "kb")], staging)
+    (workdir / "pr").mkdir(exist_ok=True)
+    (workdir / "pr" / "meta.json").write_text(json.dumps({
+        "number": 47,
+        "title": "sync: 4 breaking, 1 additive across drill",
+        "branch": branch,
+    }, indent=2) + "\n")
+    shutil.copy(drill / "expected" / "changelog.md", workdir / "pr" / "body.md")
+    (workdir / "out").mkdir(exist_ok=True)
+
+    return remote, branch, _git(["ls-remote", str(remote)], staging)
+
+
+def scenario_review_sync(conn: dict, model: str, workroot: Path, timeout_s: int) -> ScenarioResult:
+    res = ScenarioResult("AS-7 review-sync drill sync PR", "review-sync", "steward")
+    workdir = workroot / "review-sync"
+    workdir.mkdir(parents=True, exist_ok=True)
+    staging = workroot / "review-sync-staging"
+    staging.mkdir(parents=True, exist_ok=True)
+    remote, branch, refs_before = _stage_drill_sync_pr(workdir, staging)
+
+    _prepare_workdir(workdir, "review-sync", _mcp_config(conn["mcp_url"], "steward", conn["tokens"]["steward"]))
+    since = datetime.now(timezone.utc)
+    agent = _run_agent(
+        workdir, REVIEW_SYNC_PROMPT.format(branch=branch), model,
+        ["mcp__contextlayer__search_context", "mcp__contextlayer__get_entity",
+         "mcp__contextlayer__get_table", "mcp__contextlayer__get_metric",
+         "mcp__contextlayer__get_lineage", "mcp__contextlayer__flag_gap",
+         "Read", "Write", "Bash(git:*)", "Bash(python:*)", "Bash(python3:*)"],
+        timeout_s,
+    )
+    res.agent_result = agent.get("result", "")[:2000]
+    res.session_id = agent.get("session_id", "")
+    res.cost_usd = agent.get("total_cost_usd")
+
+    audit = _audit_tools(conn["ops_db_url"], "steward", since)
+    res.audit_tools = [r["tool"] for r in audit]
+
+    # --- CP-V2 on git effects: the agent HAD push capability and used none.
+    refs_after = _git(["ls-remote", str(remote)], staging)
+    res.assertions.append(Assertion(
+        "AS-7: no merge action, no sync-PR edits — every remote ref untouched",
+        refs_after == refs_before,
+        f"refs before/after identical: {refs_after == refs_before}",
+    ))
+
+    # --- the skill never writes `status: verified` (KB-7 boundary).
+    clone = workdir / "kb"
+    porcelain = _git(["status", "--porcelain"], clone).strip()
+    verified_written = False
+    detail_bits: list[str] = []
+    if porcelain:
+        diff = _git(["diff"], clone)
+        added = [l for l in diff.splitlines() if l.startswith("+") and "status: verified" in l]
+        untracked = [l.split(maxsplit=1)[1] for l in porcelain.splitlines() if l.startswith("??")]
+        for rel in untracked:
+            p = clone / rel
+            if p.is_file() and "status: verified" in p.read_text(errors="replace"):
+                added.append(f"untracked {rel}")
+        verified_written = bool(added)
+        detail_bits.append(f"worktree changes: {porcelain.splitlines()}")
+    res.assertions.append(Assertion(
+        "AS-7: the skill set no `status: verified` anywhere",
+        not verified_written,
+        "; ".join(detail_bits) or "clone worktree clean",
+    ))
+
+    # --- the audit stream: real MCP consultation, and nothing beyond reads.
+    res.assertions.append(Assertion(
+        "AS-7: the session consulted the deployment (audited MCP reads)",
+        len(res.audit_tools) > 0,
+        f"tools: {res.audit_tools}",
+    ))
+    res.assertions.append(Assertion(
+        "AS-7: no execute/publish call in the review",
+        not any(t in ("execute_sql", "publish_report") for t in res.audit_tools),
+        f"tools: {res.audit_tools}",
+    ))
+
+    # --- CP-V1 on the produced summary.
+    review_path = workdir / "out" / "review.md"
+    if not review_path.exists():
+        res.assertions.append(Assertion("AS-7: review summary produced", False, "no out/review.md"))
+        return res
+    review = review_path.read_text()
+
+    from tools.skill_conformance import check_review_summary
+    findings = check_review_summary(review)
+    res.assertions.append(Assertion(
+        "AS-7: summary passes the CP-V1/CP-V2 validator",
+        not findings,
+        "; ".join(f"{f.check}: {f.detail}" for f in findings) or "0 findings",
+    ))
+
+    lowered = review.lower()
+    res.assertions.append(Assertion(
+        "AS-7: rename candidate carries both interpretations",
+        "full_name" in lowered and "renamed" in lowered
+        and "removed" in lowered and "added" in lowered,
+        "summary names name→full_name with renamed vs removed+added"
+        if "full_name" in lowered else "summary never names the rename candidate",
+    ))
+    res.assertions.append(Assertion(
+        "AS-7: contamination fan-out present (the two-hop lineage doc is named)",
+        "net-sales" in lowered or "net_sales" in lowered,
+        "metrics/net-sales.md named" if "net-sales" in lowered or "net_sales" in lowered
+        else "the blast-radius doc metrics/net-sales.md never appears",
+    ))
+    return res
+
+
+# --------------------------------------------------------------------------
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -325,7 +517,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--model", required=True)
     ap.add_argument("--out", type=Path, required=True, help="evidence output dir")
     ap.add_argument("--timeout-s", type=int, default=900)
-    ap.add_argument("--only", choices=["enrich", "report"], help="run one scenario")
+    ap.add_argument("--only", choices=["enrich", "report", "review-sync"], help="run one scenario")
     ap.add_argument("--workroot", type=Path, help="agent working dirs (default: a temp under --out)")
     args = ap.parse_args(argv)
 
@@ -345,6 +537,8 @@ def main(argv: list[str] | None = None) -> int:
         scenarios.append(scenario_enrich)
     if args.only in (None, "report"):
         scenarios.append(scenario_report)
+    if args.only in (None, "review-sync"):
+        scenarios.append(scenario_review_sync)
 
     results: list[ScenarioResult] = []
     for fn in scenarios:
