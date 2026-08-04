@@ -4274,3 +4274,66 @@ core **193 passed**.
 AS-7 green on behavioral evidence; `compile steward` succeeds honestly;
 R-8 green without exemptions. Open: the live drill (task 2), which
 waits on the operator's SS-5 drift flush and STOP-1.
+
+RULING D-99 — render-scope defect (authorizes the fix)
+(owner ruling, 2026-08-04; recorded verbatim)
+
+1. DEFECT ACCEPTED AS DIAGNOSED: stage-8 render scope must be
+   (changed systems) ∪ (systems owning any stage-9 status-written doc).
+   Fix authorized at renderInputs, plus the test as proposed
+   (cross-system contamination → foreign system's index re-rendered,
+   in-run KB-8 covering the widened scope). No other pipeline change.
+2. REPAIR IS PRODUCT-NATIVE: after the fix lands and suites are green,
+   re-trigger sync now supabase; SY-3 supersedes PR #33 with a
+   consistent PR. No hand-commit ever touches a sync branch — affirmed.
+3. DECISIONS record: first-ever cross-system contamination; the in-run
+   self-check shared the render-scope blind spot and KB CI caught it —
+   logged as defense-in-depth evidence.
+4. The "15 breaking" wave is the expected SS-5 first-capture semantics
+   (checks appearing on ~15 tables), not a second defect. Docs
+   declaring depends_on on those tables — including entity docs, and
+   possibly the certified page.md — may be legitimately contaminated;
+   re-verification where the claims still hold is the correct steward
+   response, not an error.
+5. BONUS, RECOMMENDED: review the superseding PR using the just-shipped
+   review-sync skill — a rehearsal on REAL drift before the staged
+   drill, and free field evidence for A-1.
+
+## D-99 application record (2026-08-04)
+
+**The defect, as found on KB PR #33** (`sync: 15 breaking, 4 additive
+across supabase` — the SS-5 drift flush). KB CI failed KB-8 on
+`systems/ga4/index.md`: `not the render of (latest accepted snapshot,
+HEAD enrichment)`. Diagnosis, reproduced locally in a scratch worktree
+of the branch: `systems/ga4/dimensions.md` declares
+`depends_on: supabase.public.exports` (the custom `export_status`
+dimension is grounded in that table; its CHECK migration is cited in the
+doc's own `sources`). SS-5 put `stats.checks` on `exports` → breaking
+(`stat_changed: checks`) → the scan **correctly** contaminated the ga4
+doc across systems and stage 9 wrote its front-matter — but stage 8
+rendered only the changed system (supabase), so the ga4 machine index
+still said `draft` where the branch's own doc said `contaminated`. The
+in-run KB-8 self-check double-renders the same too-narrow inputs, so it
+shared the blind spot; **the whole-tree KB CI is what caught it** —
+defense in depth doing its job (D-99.3), on the first cross-system
+contamination the product has ever produced.
+
+**The fix** (`core/src/pipeline.ts`, renderInputs — exactly the D-99.1
+scope, nothing else): render inputs are now (changed systems) ∪ (systems
+owning any status-written doc), the foreign systems resolved from the
+instruction doc paths through the KB §3 `mangle` rule against the pinned
+snapshots. The in-run self-check consequently double-renders the widened
+scope.
+
+**The test, red before green** (`sync-run.test.ts`): a second, unchanged
+system (the drill schema republished as `demo2`) carries a human doc
+with `depends_on: drill.shop.customers`; the drill's breaking handover
+contaminates it across systems. Asserted on the PR branch: the doc's
+front-matter, the `demo2` schema index row saying `contaminated` (a
+system this run never changed), run outcome `succeeded`, and the CI-form
+KB-8 — a fresh render over the branch is a byte no-op. **Executed both
+ways:** with the fix stashed the test fails; with it, passes (D-78.2
+observed, not presumed).
+
+**Suites at this entry:** python **745 passed / 14 skipped**; core
+**194 passed** (+1, the D-99 test).

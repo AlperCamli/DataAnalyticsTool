@@ -436,6 +436,68 @@ it("SO-10: wheel version mismatch → the next sync PR leads with the wheel comm
   expect(detail.graph_only).toBe(false);
 }, 300_000);
 
+it("D-99: cross-system contamination re-renders the foreign system's index; the in-run KB-8 covers the widened scope", async () => {
+  const rig = await makeRig();
+  // A second, UNCHANGED system in the KB: the drill schema republished
+  // under another name, plus a human doc that depends on a DRILL object —
+  // the ga4-shaped world where SS-5 first fired this defect live.
+  const demo2 = JSON.parse(beforeBytes.toString("utf-8")) as Record<string, unknown>;
+  demo2.system = "demo2";
+  const pin = path.join(rig.kb.seedClone, ".contextlayer", "snapshots", "demo2.json");
+  await writeFile(pin, JSON.stringify(demo2));
+  py(["-m", "generator.render", pin, "--out", rig.kb.seedClone]);
+  await writeFile(
+    path.join(rig.kb.seedClone, "systems", "demo2", "shop", "customers.md"),
+    [
+      "---",
+      "doc_class: human-object",
+      "object: shop.customers",
+      'written_against_schema_hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"',
+      "status: verified",
+      'last_verified: "2026-07-14 (drill)"',
+      'purpose: "Mirror doc grounded in the drill estate."',
+      "sources:",
+      '  - "test fixture"',
+      "depends_on:",
+      "  - drill.shop.customers",
+      "contamination: null",
+      "---",
+      "",
+      "Cross-system doc: grounded in `drill.shop.customers`.",
+      "",
+    ].join("\n"),
+  );
+  // Re-render so the seed index row shows the human doc (KB-8-consistent seed).
+  py(["-m", "generator.render", pin, "--out", rig.kb.seedClone]);
+  rig.kb.commitAll("seed demo2 (cross-system dependent)");
+
+  await trigger(rig);
+  const serve = serveSnapshotJob(rig.client, "postgres", afterBytes);
+  await drainRuns(rig.core);
+  await serve;
+
+  const records = await runsOf(rig);
+  expect(records.at(-1)!.outcome).toBe("succeeded");
+  const prs = await readPrs(rig.kb);
+  const clone = await checkoutBranch(rig.kb, prs.at(-1)!.branch);
+
+  // The scan contaminated the demo2-owned doc across systems…
+  const doc = await readFile(path.join(clone, "systems", "demo2", "shop", "customers.md"), "utf-8");
+  expect(doc).toContain("status: contaminated");
+  expect(doc).toContain("drill.shop.customers");
+  // …and the demo2 machine index was re-rendered to agree, although demo2
+  // was not a changed system in this run.
+  const index = await readFile(path.join(clone, "systems", "demo2", "shop", "index.md"), "utf-8");
+  expect(index).toMatch(/`customers`[^\n]*contaminated/);
+
+  // KB-8, the CI form: a fresh render over the branch is a byte no-op.
+  py(["-m", "generator.render",
+    path.join(clone, ".contextlayer", "snapshots", "drill.json"),
+    path.join(clone, ".contextlayer", "snapshots", "demo2.json"),
+    "--out", clone]);
+  expect(sh("git", ["status", "--porcelain"], clone).trim()).toBe("");
+}, 300_000);
+
 it("D-98 task 0 (ops half of D-97.1): a graph-only run's record says graph_only, never wheel_only", async () => {
   const rig = await makeRig();
   // A publish attestation whose edge is not in the HEAD graph makes a

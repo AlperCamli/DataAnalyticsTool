@@ -512,9 +512,29 @@ export async function executeRun(deps: RunDeps): Promise<string> {
       await writeFile(instrFile, JSON.stringify(instructions, null, 2));
       await pythonStage(deps, "statuses", ["-m", "generator.statuses", "--kb", kbDir, instrFile]);
 
-      const renderInputs = changed.map((s) =>
-        path.join(kbDir, ".contextlayer", "snapshots", `${s.system}.json`),
+      // D-99: stage-9 status writes can land on docs of systems this run
+      // did not change — cross-system contamination through depends_on or
+      // lineage (first fired live by SS-5: checks appearing on
+      // supabase.public.exports contaminated a ga4 doc). Machine indexes
+      // display each human doc's status, so every system owning a
+      // status-written doc re-renders too; the KB-8 self-check below then
+      // covers the widened scope instead of sharing its blind spot.
+      const mangle = (name: string) => name.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+      const statusTouchedDirs = new Set(
+        instructions
+          .map((i) => /^systems\/([^/]+)\//.exec(i.doc)?.[1])
+          .filter((v): v is string => !!v),
       );
+      for (const s of changed) statusTouchedDirs.delete(mangle(s.system));
+      const snapshotsDir = path.join(kbDir, ".contextlayer", "snapshots");
+      const foreignPins = (await readdir(snapshotsDir).catch(() => [] as string[]))
+        .filter((f) => f.endsWith(".json") && statusTouchedDirs.has(mangle(f.slice(0, -5))))
+        .sort()
+        .map((f) => path.join(snapshotsDir, f));
+      const renderInputs = [
+        ...changed.map((s) => path.join(kbDir, ".contextlayer", "snapshots", `${s.system}.json`)),
+        ...foreignPins,
+      ];
       await pythonStage(deps, "regenerate", ["-m", "generator.render", ...renderInputs, "--out", kbDir]);
       // KB-8 in-run self-check: a second render must be a byte no-op
       await git(cfg.sync, ["add", "-A"], kbDir);
