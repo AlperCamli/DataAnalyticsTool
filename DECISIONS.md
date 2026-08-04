@@ -4084,3 +4084,59 @@ session's bookkeeping.
 
 **Suites at this entry:** python 732 passed / 14 skipped; core 191
 passed (19 files).
+
+RULING D-98 — A-0 amendment + A-1 authorization
+(owner ruling, 2026-08-04; recorded verbatim)
+
+1. The Act 2 / Act 3b re-runs are WAIVED by explicit owner acceptance
+   (class: D-80.2/D-95). Permanent record: the cross-source publish
+   path (model relationship on documented entity keys) and the
+   missing_join_path refusal have NO server-side evidence; both remain
+   attested-not-evidenced; the first customer-facing cross-source
+   report is the de facto evidence point. This waiver does not
+   propagate: no future document may cite Act 2 or Act 3b as
+   demonstrated.
+2. A-0 reduces to chores, folded into this session as task 0.
+3. A-1 authorized per the plan's gate. Drill staging pre-ruling: the
+   staged breaking change is a column rename in ONE reporting view,
+   applied by the operator as DBA (D-81 discipline — the session
+   drafts the DDL, never applies it), and REVERTED the same way after
+   evidence extraction so the estate ends byte-identical. Same-day
+   evidence extraction is the standing rule (D-96.2).
+
+## D-98 application record (2026-08-04)
+
+### STEP 0 — premise verification, with one premise found false
+
+Verified before any work, as instructed; results recorded because one
+premise failed and the deviation is the operator's ruling, not the
+session's.
+
+1. **The Phase-2 plan on main** — false as stated. Nothing named
+   `plans/phase2-development-plan-v1.md` existed on main; the plan sat
+   uncommitted as `plans/phase2-development-plan.md` (acknowledged by
+   the operator in the session brief). Reconciled here: renamed to the
+   `-v1` name every citation uses and landed with this entry. Its
+   status line updated from "draft for the operator's ratification" to
+   ratified, citing D-98 — the ruling that authorizes A-1 *per the
+   plan's gate* is the ratification act the draft line awaited.
+2. **D-96/D-97 recorded** — true (this file, entries above).
+3. **`compile steward` fails naming review-sync** — true, re-run this
+   session: exit 1, no bundle written, message naming the profile, the
+   missing skill, and what ships. F-7 working as D-97.2 ruled;
+   untouched.
+4. **Closure-session KB PRs merged** — HALF FALSE. PR #32 (wheel pin →
+   `VENDOR-MANIFEST.yaml`) and #30/#31 are merged on
+   `Sample-Knowladge-Base`; but **the SS-5 drift PR was never opened** —
+   no sync PR exists after #30, zero open PRs, KB `origin/main` head is
+   `462421c` (#32). The post-d96-status sequence stopped at the merge.
+   The three editor-padded machine docs in the `~/Desktop/kb` working
+   tree also still stand.
+
+**Operator ruling on the deviation (in-session, 2026-08-04):** tasks 0
+and 1 proceed now (both are platform-repo-local and estate-independent);
+the SS-5 drift flush — restore the three files, `sync now supabase`,
+review and merge the drift PR as R2 — is the operator's, and happens
+before the task-2 drill's STOP-1 so the staged break is the only thing
+in the drill's sync PR and the final byte-identical check has a real
+baseline.
