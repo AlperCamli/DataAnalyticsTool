@@ -28,16 +28,27 @@ the operator as DBA (D-81: the session drafted, never ran DDL). Revert:
 | Final cycle: `sync now supabase` → run `01KZ7F1Z…` → **PR #38**: the mirror image (`signup_date → signup_day` rename candidate, same `v_mart_fact_daily` deparse ripple), doc correctly re-contaminated | `pr-38.json` |
 | **The estate is byte-identical**: pre-drill pin (main@`d7b0218`) and PR #38's pin have the same canonical body hash `sha256:4ecf4951b540c00b…` (S-3 verified across apply+revert) | `byte-identical-check.txt` |
 
-## Closing reconciliation (the remaining acts, operator's)
+## Closing reconciliation — DONE (2026-08-05)
 
-1. Merge **PR #38** (records the reverted reality).
-2. The session opens the reconciliation repair PR: doc text back to
-   `signup_day`, machine sibling regenerated (the S4 duty, this time by
-   the amended skill text), contamination cleared, hash refreshed.
-3. **The operator flips `status: verified` + `last_verified` with their
-   own name on that PR and merges — the gate's certification act,
-   performed against the true estate.** The A-1 gate item "doc
-   re-verified, recorded" closes there, not before.
+1. PR #38 merged by the operator (the reverted reality recorded).
+2. Reconciliation repair **PR #39** (`pr-39.json`): doc text back to
+   `signup_day`, machine sibling regenerated, contamination cleared,
+   `written_against_schema_hash` back to the pre-drill value the estate
+   returned to (`sha256:cba88302…`).
+3. **The certification act, performed:** the operator set
+   `status: verified` + `last_verified: "2026-08-05 (Alper Camli)"` on
+   the branch and merged (`doc-states/4-certified.md` — the final state
+   on `main`, index row in agreement). **The A-1 gate item "doc
+   re-verified, recorded" is closed.**
+
+**Third field lesson (same class, third angle):** the operator's
+hand-made certification flip tripped KB-8 once more — the *schema
+index* renders each doc's status, so the flip needed one more generator
+run. Fixed on the branch (one regenerated file); lesson recorded: any
+front-matter edit outside a skill session must be followed by
+`generator.render` + `generator.validate` before pushing. The two skill
+paths already carry this duty; hand edits are the remaining exposure,
+and CI is their backstop — which held all three times.
 
 ## What the drill proved, honestly
 

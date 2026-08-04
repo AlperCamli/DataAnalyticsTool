@@ -4368,14 +4368,26 @@ both ways).
 merged before the steward review (operator's own act; review became
 review-of-record); (2) the verification flip was not made before the
 revert, and certifying `signup_date` post-revert would have been false —
-**the flip moves to the closing reconciliation**: after #38 merges, the
-session prepares the final repair (text back to `signup_day`, sibling
-regenerated, hash refreshed) and the operator certifies with their name
-there. **The A-1 gate item "doc re-verified, recorded" is OPEN until
-that flip lands.** Everything else in the A-1 gate is green: review-sync
-shipped per §7 + AS-7 behavioral PASS; the drill executed end-to-end
-with the deviations recorded; `compile steward` exits 0 honestly; R-8
-green with an empty exception list.
+**the flip moved to the closing reconciliation**: after #38 merged, the
+session prepared the final repair (text back to `signup_day`, sibling
+regenerated, hash refreshed) and the operator certified there.
+
+**GATE CLOSED (2026-08-05).** Reconciliation **PR #39** merged with the
+operator's own certification commit: `status: verified`,
+`last_verified: "2026-08-05 (Alper Camli)"`, hash at the pre-drill value
+the estate returned to; the reporting index agrees
+(`results/phase2/a1-drill/doc-states/4-certified.md`). A third
+same-class field lesson recorded on the way: the hand-made flip tripped
+KB-8 on the schema *index* (which renders doc status) and needed one
+more generator run — hand edits outside a skill session must end with
+`render` + `validate`; CI backstopped all three occurrences. **Every
+A-1 gate clause now holds:** review-sync shipped per §7 with AS-7 green
+on behavioral evidence; the live drill ran staged break → sync PR →
+steward review-sync → repair PR → doc re-verified under the operator's
+name, recorded with same-day evidence; `compile steward` succeeds
+honestly (F-7 untouched); R-8 green with an empty exception list.
+**A-1 closes.** Next per the plan's serial order (§3): **B-0** (read
+APIs before pixels), whose entry condition is the dashboard/UI spec.
 
 **STOP-2 field notes (2026-08-04/05, recorded before the drill record).**
 (1) **Sequence deviation, operator's own:** PR #35 (the staged break) was
