@@ -152,7 +152,7 @@ async function jobCount(type: string): Promise<number> {
  */
 async function serviceJobs(
   publishJobs: number,
-  opts: { truncated?: boolean; datasetId?: string } = {},
+  opts: { truncated?: boolean; datasetId?: string; limitProximity?: unknown[] } = {},
 ): Promise<Record<string, unknown>[]> {
   const client = new WireClient(rig.base, TEST_TOKEN);
   const deadline = Date.now() + 60_000;
@@ -215,6 +215,7 @@ async function serviceJobs(
               rows_delivered: Array.isArray(r.rows) ? r.rows.length : 0,
             })),
           },
+          ...(opts.limitProximity ? { limit_proximity: opts.limitProximity } : {}),
         },
       };
     } else {
@@ -380,6 +381,33 @@ describe("deliver_model — the gateway-executed data plane (RA-2)", () => {
     expect(deliveries.length).toBe(1);
     expect(deliveries[0]!.dataset_id).toBe("ds-fixture-0001");
     expect((deliveries[0]!.results as Record<string, unknown>).net_sales).toBeDefined();
+  });
+
+  it("RA-F tripwire (D-96.3e): adapter-reported limit proximity → health warning; publish proceeds", async () => {
+    const art = artifact();
+    const entries = [{ limit: "columns", measured: 60, allowed: 75, at: "table 'net_sales'" }];
+    const [res] = await Promise.all([
+      publish({ artifact: art, target: "powerbi", mode: "deliver_model" }),
+      serviceJobs(1, { limitProximity: entries }),
+    ]);
+    // Proximity is telemetry, never a refusal: the delivery completed.
+    expect(res.isError).toBeFalsy();
+    expect(res.payload.mode).toBe("deliver_model");
+    const { rows: deliveries } = await rig.core.pool.query(
+      `SELECT revision FROM model_deliveries WHERE artifact_id = $1`,
+      [art.id],
+    );
+    expect(deliveries.length).toBe(1);
+
+    const { rows } = await rig.core.pool.query(
+      `SELECT severity, system, detail FROM health_events WHERE kind = 'push_limit_proximity'`,
+    );
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.severity).toBe("warning");
+    expect(rows[0]!.system).toBe("powerbi");
+    const detail = rows[0]!.detail as { artifact_id: string; entries: unknown };
+    expect(detail.artifact_id).toBe(art.id);
+    expect(detail.entries).toEqual(entries);
   });
 
   it("a truncated gateway result refuses the delivery (CI-7) — no publish job", async () => {

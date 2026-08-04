@@ -427,4 +427,47 @@ it("SO-10: wheel version mismatch → the next sync PR leads with the wheel comm
   const log2 = sh("git", ["log", "--format=%s", "origin/main..HEAD"], clone2).trim().split("\n");
   expect(log2.length).toBe(1);
   expect(log2[0]).toContain("vendored validation wheel 0.5.0");
+
+  // D-98 task 0: the run *record* also says what shape the run was —
+  // a genuine wheel-only run is wheel_only, and not graph_only.
+  const records = await runsOf(rig);
+  const detail = records.at(-1)!.detail as { wheel_only?: boolean; graph_only?: boolean };
+  expect(detail.wheel_only).toBe(true);
+  expect(detail.graph_only).toBe(false);
+}, 300_000);
+
+it("D-98 task 0 (ops half of D-97.1): a graph-only run's record says graph_only, never wheel_only", async () => {
+  const rig = await makeRig();
+  // A publish attestation whose edge is not in the HEAD graph makes a
+  // regeneration pending with no snapshot drift (CP-7 F-4) — the exact
+  // shape run 01KYVXMQ8Q0BAHTKC8WM5WBK5S stored as "wheel-only".
+  await rig.core.pool.query(
+    `INSERT INTO lineage_attestations
+       (source_fqn, target_fqn, operation, evidence, source_meta, target_meta)
+     VALUES ($1, $2, 'ingest', $3, NULL, $4)`,
+    [
+      "drill.public.orders",
+      "powerbi.report.d97-ops-half",
+      JSON.stringify({ tier: "pipeline-tool", ref: "gateway:d97-test" }),
+      JSON.stringify({ resolved: true, kind: "report", schema: null, name: "d97-ops-half" }),
+    ],
+  );
+
+  await trigger(rig);
+  const serve = serveSnapshotJob(rig.client, "postgres", beforeBytes);
+  await drainRuns(rig.core);
+  await serve;
+
+  const prs = await readPrs(rig.kb);
+  expect(prs.length).toBe(1);
+  expect(prs[0]!.title).toBe("sync: 0 breaking, 0 additive (report lineage only)");
+  expect(prs[0]!.body).toContain("Graph-only run");
+  expect(prs[0]!.body).not.toContain("Wheel-only");
+
+  const records = await runsOf(rig);
+  expect(records.length).toBe(1);
+  expect(records[0]!.outcome).toBe("succeeded");
+  const detail = records[0]!.detail as { wheel_only?: boolean; graph_only?: boolean };
+  expect(detail.graph_only).toBe(true);
+  expect(detail.wheel_only).toBe(false);
 }, 300_000);

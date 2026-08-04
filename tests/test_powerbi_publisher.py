@@ -374,6 +374,41 @@ def test_string_value_limit_is_checked_per_cell():
     assert excinfo.value.capability_code == "push_limit_exceeded"
 
 
+# --- RA-F tripwire (D-96.3e): 80%-of-limit proximity telemetry ---------------
+
+
+def test_ra_f_80pct_proximity_is_reported_and_publish_proceeds():
+    res = results()
+    extra = [{"name": f"c{i}", "type": "int4"} for i in range(56)]
+    res["gsc_pages"]["columns"] += extra  # 4 + 56 = 60 = exactly 80% of 75
+    res["gsc_pages"]["rows"] = [row + [1] * 56 for row in res["gsc_pages"]["rows"]]
+    stub = StubMicrosoft()
+    result = publish(stub, res=res)
+    # The warning is telemetry riding a successful delivery — never a refusal.
+    assert result.created[0]["type"] == "dataset"
+    assert result.detail["limit_proximity"] == [
+        {"limit": "columns", "measured": 60, "allowed": 75, "at": "table 'gsc_pages'"}
+    ]
+
+
+def test_ra_f_below_threshold_reports_no_proximity_key():
+    result = publish(StubMicrosoft())
+    assert "limit_proximity" not in result.detail
+
+
+def test_ra_f_threshold_is_integer_exact_on_the_rows_dimension():
+    # 5M rows cannot be staged in a test; the threshold arithmetic is the
+    # unit under test (measured*5 >= allowed*4 — no float boundary edge).
+    from connectors.powerbi.publisher import _limit_proximity
+
+    allowed = ref.PUSH_LIMITS["max_rows_per_table_none_retention"]
+    at_80 = _limit_proximity([("rows", 4_000_000, allowed, "table 'big'")])
+    assert at_80 == [
+        {"limit": "rows", "measured": 4_000_000, "allowed": 5_000_000, "at": "table 'big'"}
+    ]
+    assert _limit_proximity([("rows", 3_999_999, allowed, "table 'big'")]) == []
+
+
 def test_truncated_result_is_refused_before_any_wire():
     stub = StubMicrosoft()
     res = results()

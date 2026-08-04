@@ -4140,3 +4140,70 @@ review and merge the drift PR as R2 — is the operator's, and happens
 before the task-2 drill's STOP-1 so the staged break is the only thing
 in the drill's sync PR and the final byte-identical check has a real
 baseline.
+
+### Task 0 — the A-0 chores (applied 2026-08-04)
+
+**Changelog graph-only case (A-0 gate item, D-97.1): verified already
+applied**, not re-done — `e5d2f51` landed the `changelog.ts` branches
+with three tests (`changelog.test.ts`, "graph-only runs describe
+themselves"). What remained was the ops half D-97.1 left flagged:
+`detail.wheel_only` set on **any** `changed.length === 0` run
+(`core/src/pipeline.ts`). Applied as recommended —
+`{ wheel_only: !!wheelCarry, graph_only: gatewayPending }` — with two
+tests executed against the real pipeline: SO-10's wheel-only half now
+also asserts `wheel_only: true / graph_only: false` on the run record,
+and a new graph-only case (inserted `lineage_attestations` row → PR
+titled "report lineage only") asserts `graph_only: true / wheel_only:
+false`, the exact shape run `01KYVXMQ8Q0BAHTKC8WM5WBK5S` stored
+wrongly. Both fail without the fix: `graph_only` was previously absent
+from the record, and absent ≠ false under the assertion.
+
+**RA-F 80 %-of-limit telemetry (D-96.3e).** The Power BI publisher now
+computes ≥80 % proximity — integer-exact, `measured*5 >= allowed*4`, no
+float boundary — across exactly the four dimensions it hard-checks
+(tables, columns per table, rows per table none-retention,
+relationships) and reports survivors in result `detail.limit_proximity`;
+the core records a `push_limit_proximity` health event (severity
+`warning`, system, job id, artifact id, entries) and the publish
+proceeds untouched — proximity is telemetry, never a refusal. Tests:
+python — 60/75 columns (exactly 80 %) reported while the delivery
+succeeds, default fixture reports no key, rows dimension unit-tested at
+4,000,000 and 3,999,999 of 5,000,000; core — scripted adapter proximity
+lands as the asserted health row beside an intact delivery record.
+
+**D-96.3 register rows applied** (the post-d96-status list, verbatim):
+
+- **RA-F** re-dated in `report-authoring-spec.md` §13: due 2027-01-31,
+  or first `push_limit_exceeded`, or the second Power BI customer —
+  whichever first; the tripwire above named in the row.
+- **SUPPRESS-1** (master): home ruled — profile `limits.min_cell_count`
+  enforced at the publish path's re-validation, disclosed in the
+  artifact; trigger tightened to the first report with an audience
+  beyond its author (B-1's demos may trip it).
+- **BASELINE-1** (master): gate restated — entry condition of the first
+  customer conversation that quotes value; the ≈8–13 h estimate recorded
+  so the trigger books a two-day block; D-96.5 constraint cross-linked.
+- **PA-1 / PA-2** (master): ruled to Track A-2, with the plan's gate
+  language (authenticated download against the requester's own binding;
+  staleness demonstrated closed by repeating the 2026-07-29 shape).
+- **OB-4** (master): D-96.3g BUILD recorded (Track A-6); trigger split —
+  targets still wait on the third onboarding, instrumentation on A-6.
+- **R-5**: RA-10's design-ruling row in the authoring spec now records
+  that the `sp-scope` preflight check *asserts* membership-only (built
+  at D-96 task 2; the row had still called it a threat-model statement).
+- **Verified already applied, deliberately not re-edited:** SO-F (the
+  master row has carried the Track B-1 disposition since D-96.4's
+  batch); R-6 (sync spec §10 amendment present at "the manifest is the
+  only pin"; closure still rides the operator dropping `workflow` write
+  from the sync PAT — unchanged, still open, still the operator's); R-8
+  (mechanical since `1b69529`; its one-entry exception list closes at
+  task 1 of this session, which is the A-1 gate's business, not a
+  bookkeeping edit's).
+- **review-sync** stays a finding-with-a-ruling (D-96.3c), not a
+  register row: it closes as C-2 when Track A-1 ships it, which is this
+  session's task 1.
+
+**Suites at this entry:** python **735 passed / 14 skipped** (+3, the
+RA-F tests); core **193 passed** (19 files; +2 — the graph-only run
+record and the RA-F health emission; SO-10's new record assertions ride
+its existing test).

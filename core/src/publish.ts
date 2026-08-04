@@ -38,6 +38,7 @@ import { createHash } from "node:crypto";
 import pg from "pg";
 import { canonicalJson } from "./audit.js";
 import type { CoreConfig } from "./config.js";
+import { recordHealthEvent } from "./health.js";
 import type { KbState } from "./kbread.js";
 import type { Profile } from "./profiles.js";
 import { awaitJobResult, enqueue, EnqueueError } from "./queue.js";
@@ -804,6 +805,21 @@ export async function publishReport(
   }
 
   const result = (awaited.result ?? {}) as Record<string, unknown>;
+
+  // RA-F tripwire (D-96.3e): the adapter reports >=80%-of-push-limit
+  // proximity as telemetry in its result detail. Record it to health so
+  // the escalation decision fires on evidence of approach; the publish
+  // itself proceeds untouched — proximity is not a refusal.
+  const limitProximity = ((result.detail ?? {}) as Record<string, unknown>).limit_proximity;
+  if (Array.isArray(limitProximity) && limitProximity.length > 0) {
+    await recordHealthEvent(pool, {
+      kind: "push_limit_proximity",
+      severity: "warning",
+      system: target,
+      jobId,
+      detail: { artifact_id: artifactId, entries: limitProximity },
+    });
+  }
 
   if (mode === "deliver_model") {
     // The delivery record: what the model holds now, and the restore

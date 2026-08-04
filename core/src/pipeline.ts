@@ -663,7 +663,12 @@ export async function executeRun(deps: RunDeps): Promise<string> {
       detail: {
         superseded: priors.map((p) => p.url),
         ...(wheelCarry ? { wheel: wheelCarry.toVersion } : {}),
-        ...(changed.length === 0 ? { wheel_only: true } : {}),
+        // D-98 task 0 (flagged at D-97.1): a run with no snapshot drift is
+        // not necessarily a wheel carry — say which shape it actually was,
+        // because `runs` is read by ops and the future U-10 view.
+        ...(changed.length === 0
+          ? { wheel_only: !!wheelCarry, graph_only: gatewayPending }
+          : {}),
       },
     });
   } catch (err) {

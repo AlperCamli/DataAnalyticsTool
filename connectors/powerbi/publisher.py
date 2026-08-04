@@ -74,6 +74,20 @@ def _push_limit(name: str, measured: int | str, limit: int | str, where: str) ->
     )
 
 
+def _limit_proximity(counts: list[tuple[str, int, int, str]]) -> list[dict]:
+    """RA-F tripwire (D-96.3e): a delivery that clears a pinned push limit
+    but stands at >=80% of it is telemetry, not a failure — the escalation
+    decision should fire on evidence of approach, not on the first
+    push_limit_exceeded refusal. Reported in the result detail; the core
+    surfaces it to health. Threshold integer-exact (measured*5 >=
+    allowed*4), no float edge at the boundary."""
+    return [
+        {"limit": name, "measured": measured, "allowed": allowed, "at": where}
+        for name, measured, allowed, where in counts
+        if measured * 5 >= allowed * 4
+    ]
+
+
 class _TablePlan:
     def __init__(self, name: str, columns: list[dict], rows: list[dict], notes: list[str]):
         self.name = name
@@ -165,6 +179,17 @@ class PowerBIPublisher(Publisher):
         # ---- validation phase: everything that can fail, before any wire ----
         plans = self._plan_tables(request.artifact, results)
         relationships = self._plan_relationships(request.artifact, plans)
+        limits = ref.PUSH_LIMITS
+        proximity = _limit_proximity(
+            [("tables", len(plans), limits["max_tables"], "model"),
+             ("relationships", len(relationships), limits["max_relationships"], "model")]
+            + [entry for plan in plans for entry in (
+                ("columns", len(plan.columns), limits["max_columns_per_table"],
+                 f"table {plan.name!r}"),
+                ("rows", len(plan.rows), limits["max_rows_per_table_none_retention"],
+                 f"table {plan.name!r}"),
+            )]
+        )
         client = self._client(config)
 
         # ---- locate the model ------------------------------------------------
@@ -203,6 +228,7 @@ class PowerBIPublisher(Publisher):
                     ],
                 },
                 **({"precision_notes": notes} if notes else {}),
+                **({"limit_proximity": proximity} if proximity else {}),
             },
         )
 
