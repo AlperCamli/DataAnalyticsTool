@@ -4350,6 +4350,33 @@ including `systems/ga4/index.md` — re-rendered this run by the fix, now
 agreeing with its contaminated `dimensions.md`. No hand-commit touched
 any sync branch.
 
+### D-98 task 2 — the live drill record (2026-08-04/05)
+
+Full narrative, timeline, and pointers: `results/phase2/a1-drill/`.
+The short form: rename staged on `reporting.v_user_signups_by_day`
+(operator as DBA, both DDL files pre-drafted) → drift **PR #35** with
+the exact designed shape (1 breaking, the rename candidate with both
+interpretations, one-doc contamination) → steward review on the
+**first-ever compiled steward bundle**, audit-evidenced (5 rows, all
+reads, zero execute/publish/flag_gap) → repair **PR #36** → revert →
+mirror drift **PR #38** → **estate byte-identical**, canonical body
+`sha256:4ecf4951b540c00b…` equal on both sides of the drill (S-3 held
+across apply+revert, including the `v_mart_fact_daily` deparse ripple
+both ways).
+
+**Recorded deviations, per the exit-criteria-honesty rule:** (1) #35
+merged before the steward review (operator's own act; review became
+review-of-record); (2) the verification flip was not made before the
+revert, and certifying `signup_date` post-revert would have been false —
+**the flip moves to the closing reconciliation**: after #38 merges, the
+session prepares the final repair (text back to `signup_day`, sibling
+regenerated, hash refreshed) and the operator certifies with their name
+there. **The A-1 gate item "doc re-verified, recorded" is OPEN until
+that flip lands.** Everything else in the A-1 gate is green: review-sync
+shipped per §7 + AS-7 behavioral PASS; the drill executed end-to-end
+with the deviations recorded; `compile steward` exits 0 honestly; R-8
+green with an empty exception list.
+
 **STOP-2 field notes (2026-08-04/05, recorded before the drill record).**
 (1) **Sequence deviation, operator's own:** PR #35 (the staged break) was
 merged by the operator *before* the steward review — the

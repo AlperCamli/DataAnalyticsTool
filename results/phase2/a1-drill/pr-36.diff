@@ -1,0 +1,41 @@
+diff --git a/systems/supabase/reporting/v_user_signups_by_day.md b/systems/supabase/reporting/v_user_signups_by_day.md
+index 8228f37..10c523f 100644
+--- a/systems/supabase/reporting/v_user_signups_by_day.md
++++ b/systems/supabase/reporting/v_user_signups_by_day.md
+@@ -1,20 +1,20 @@
+ ---
+ doc_class: human-object
+ object: supabase.reporting.v_user_signups_by_day
+-written_against_schema_hash: "sha256:cba88302f11c160a969970b5b4717baa13862a2ca7098bfcdfc504066d0a1da6"
++written_against_schema_hash: "sha256:59eaa3b44cc53232cb9e83609a01990fc26dfab632282b59e33473eedd498192"
+ status: contaminated
+ last_verified: null
+ purpose: "New user accounts per UTC calendar day — the signup trend series."
+ column_purposes:
+-  signup_day: "UTC calendar date the accounts were created (`users.created_at` converted to UTC, then truncated)."
++  signup_date: "UTC calendar date the accounts were created (`users.created_at` converted to UTC, then truncated)."
+   new_users: "Accounts created on that date."
+ sources:
+   - "platform: deploy/reporting-views.sql (view definition, CP-7 task 7.0 / D-81)"
+   - "machine doc: supabase.reporting.v_user_signups_by_day"
+   - "human doc: supabase.public.users"
++  - "steward: `signup_day` → `signup_date` confirmed as a rename by the customer (sync PR #35 review, 2026-08-05); SELECT expression unchanged in the canonical view definition"
+ depends_on:
+   - supabase.public.users
+-contamination: {object: "supabase.reporting.v_user_signups_by_day", change: "column_removed+definition_changed", detail: "column_removed: signup_day; definition_changed"}
+ ---
+ 
+ # `supabase.reporting.v_user_signups_by_day`
+diff --git a/systems/supabase/reporting/v_user_signups_by_day.schema.md b/systems/supabase/reporting/v_user_signups_by_day.schema.md
+index 9b13c3f..c28ddc4 100644
+--- a/systems/supabase/reporting/v_user_signups_by_day.schema.md
++++ b/systems/supabase/reporting/v_user_signups_by_day.schema.md
+@@ -23,7 +23,7 @@ status: machine
+ 
+ | # | Column | Type | Nullable | Default | Description | Purpose |
+ |---|---|---|---|---|---|---|
+-| 1 | `signup_date` | `date` | true | — | — | — |
++| 1 | `signup_date` | `date` | true | — | — | UTC calendar date the accounts were created (`users.created_at` converted to UTC, then truncated). |
+ | 2 | `new_users` | `bigint` | true | — | — | Accounts created on that date. |
+ 
+ ## Keys & indexes

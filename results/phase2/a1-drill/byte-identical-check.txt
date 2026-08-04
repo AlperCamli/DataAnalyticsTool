@@ -1,0 +1,3 @@
+pre-drill  (main@d7b0218 pin): sha256:4ecf4951b540c00b2b9eccc7f44661dd7d7a178f8394ddff0f1081418ebba8b7
+post-revert (PR #38 pin)     : sha256:4ecf4951b540c00b2b9eccc7f44661dd7d7a178f8394ddff0f1081418ebba8b7
+BYTE-IDENTICAL: True
