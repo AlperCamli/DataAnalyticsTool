@@ -157,6 +157,20 @@ When the steward asks for repairs, draft them as **separate PRs against
   and front-matter claims to the post-drift schema (the renamed column,
   the changed view definition), following the `enrich` skill's grounding
   discipline — every claim cited, gap never guess.
+- **The regeneration duty — in the same PR, always.** Front-matter
+  purposes only reach the machine sibling when the generator merges
+  them; a repair that renames a `column_purposes` key without
+  re-rendering leaves the KB internally inconsistent and KB-8 fails the
+  PR. Before opening it, from the KB clone root:
+
+  ```bash
+  python -m generator.render .contextlayer/snapshots/<system>.json --out .
+  python -m generator.validate .
+  ```
+
+  Validation must be **0 errors, 0 warnings**, and the regenerated
+  machine files ride the repair PR. (Field lesson: the first live repair
+  PR shipped without this and KB CI caught it.)
 - **The re-verification diff, staged for the human**: in the repair PR,
   clear the `contamination:` field and refresh
   `written_against_schema_hash` to the post-merge schema hash — and

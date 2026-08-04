@@ -4350,6 +4350,29 @@ including `systems/ga4/index.md` — re-rendered this run by the fix, now
 agreeing with its contaminated `dimensions.md`. No hand-commit touched
 any sync branch.
 
+**STOP-2 field notes (2026-08-04/05, recorded before the drill record).**
+(1) **Sequence deviation, operator's own:** PR #35 (the staged break) was
+merged by the operator *before* the steward review — the
+merge-to-record-reality default exercised early. The gate's substance
+(steward runs review-sync → repair PR → human re-verifies) proceeds on
+the merged PR; the S3 merge recommendation is retrospective for this
+drill. Recorded, not papered over. (2) **First-ever compiled steward
+bundle** produced this session (F-7 had blocked every prior attempt) and
+used for the STOP-2 session. (3) **Second field lesson, same class as
+enrich's oldest one:** repair PR #36 shipped the human-doc edit without
+regenerating the machine sibling — the renamed `column_purposes` key
+never reached the machine doc's Purpose slot and KB CI failed KB-8. The
+regeneration was pushed to the branch (validate 0/0, CI green);
+`review-sync` S4 now states the regeneration duty explicitly with the
+command pair, marked as a field lesson. Noted honestly: AS-7 is a
+review-only scenario, so S4 conduct has no behavioral coverage — the KB
+CI backstop is what caught this, again. (4) **PR #37** (operator's
+enrich test) is simultaneously the first SS-5 re-verification-campaign
+item: `usage_counters` repaired + enriched with customer-stated
+free-tier limits, contamination cleared, hash refreshed, status left
+`contaminated` for the human flip — the prepared-for-certification
+shape, CI green.
+
 **D-99.5 bonus, done:** PR #34 reviewed with the shipped `review-sync`
 skill — the first review of *real* drift, same day the skill landed.
 Evidence at `results/phase2/a1-ss5-review/` (review + triage output +
