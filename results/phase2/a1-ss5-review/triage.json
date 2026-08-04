@@ -1,0 +1,412 @@
+{
+  "counts": {
+    "contaminated": 35,
+    "draft": 6,
+    "machine": 48,
+    "verified": 1
+  },
+  "contaminated": [
+    {
+      "doc": "entities/conversion.md",
+      "contamination": {
+        "object": "supabase.public.exports",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "entities/user.md",
+      "contamination": {
+        "object": "supabase.public.users",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/ga4/dimensions.md",
+      "contamination": {
+        "object": "supabase.public.exports",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/ai_prompt_configs.md",
+      "contamination": {
+        "object": "supabase.public.ai_prompt_configs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/ai_runs.md",
+      "contamination": {
+        "object": "supabase.public.ai_runs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/ai_suggestions.md",
+      "contamination": {
+        "object": "supabase.public.ai_runs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/cover_letter_exports.md",
+      "contamination": {
+        "object": "supabase.public.cover_letter_exports",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/cover_letters.md",
+      "contamination": {
+        "object": "supabase.public.cover_letter_exports",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/cv_block_revisions.md",
+      "contamination": {
+        "object": "supabase.public.ai_suggestions",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/cv_templates.md",
+      "contamination": {
+        "object": "supabase.public.exports",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/exports.md",
+      "contamination": {
+        "object": "supabase.public.exports",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/files.md",
+      "contamination": {
+        "object": "supabase.public.cover_letter_exports",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/imports.md",
+      "contamination": {
+        "object": "supabase.public.files",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/job_status_history.md",
+      "contamination": {
+        "object": "supabase.public.job_status_history",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/jobs.md",
+      "contamination": {
+        "object": "supabase.public.cover_letters",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/master_cvs.md",
+      "contamination": {
+        "object": "supabase.public.master_cvs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/subscriptions.md",
+      "contamination": {
+        "object": "supabase.public.users",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/tailored_cvs.md",
+      "contamination": {
+        "object": "supabase.public.jobs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/usage_counters.md",
+      "contamination": {
+        "object": "supabase.public.usage_counters",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/public/users.md",
+      "contamination": {
+        "object": "supabase.public.jobs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_activation_funnel_monthly.md",
+      "contamination": {
+        "object": "supabase.public.exports",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_ai_runs_by_day.md",
+      "contamination": {
+        "object": "supabase.public.ai_runs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_ai_runs_by_flow.md",
+      "contamination": {
+        "object": "supabase.public.ai_runs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_ai_tokens_by_month.md",
+      "contamination": {
+        "object": "supabase.public.ai_runs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_cv_production.md",
+      "contamination": {
+        "object": "supabase.public.tailored_cvs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_daily_activity.md",
+      "contamination": {
+        "object": "supabase.public.ai_runs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_exports_by_format.md",
+      "contamination": {
+        "object": "supabase.public.exports",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_files_by_type.md",
+      "contamination": {
+        "object": "supabase.public.files",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_imports_by_parser.md",
+      "contamination": {
+        "object": "supabase.public.imports",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_job_status_transitions.md",
+      "contamination": {
+        "object": "supabase.public.job_status_history",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_jobs_by_month.md",
+      "contamination": {
+        "object": "supabase.public.jobs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_jobs_by_status.md",
+      "contamination": {
+        "object": "supabase.public.jobs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_master_cvs_by_language.md",
+      "contamination": {
+        "object": "supabase.public.master_cvs",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_user_cohorts.md",
+      "contamination": {
+        "object": "supabase.public.users",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    },
+    {
+      "doc": "systems/supabase/reporting/v_user_signups_by_day.md",
+      "contamination": {
+        "object": "supabase.public.users",
+        "change": "stat_changed",
+        "detail": "stat_changed: checks"
+      }
+    }
+  ],
+  "stale": [],
+  "blast": [
+    {
+      "object": "supabase.public.ai_runs",
+      "docs": [
+        "systems/supabase/public/ai_runs.md",
+        "systems/supabase/public/ai_suggestions.md",
+        "systems/supabase/reporting/v_ai_runs_by_day.md",
+        "systems/supabase/reporting/v_ai_runs_by_flow.md",
+        "systems/supabase/reporting/v_ai_tokens_by_month.md",
+        "systems/supabase/reporting/v_daily_activity.md"
+      ],
+      "count": 6
+    },
+    {
+      "object": "supabase.public.exports",
+      "docs": [
+        "entities/conversion.md",
+        "systems/ga4/dimensions.md",
+        "systems/supabase/public/cv_templates.md",
+        "systems/supabase/public/exports.md",
+        "systems/supabase/reporting/v_activation_funnel_monthly.md",
+        "systems/supabase/reporting/v_exports_by_format.md"
+      ],
+      "count": 6
+    },
+    {
+      "object": "supabase.public.jobs",
+      "docs": [
+        "systems/supabase/public/tailored_cvs.md",
+        "systems/supabase/public/users.md",
+        "systems/supabase/reporting/v_jobs_by_month.md",
+        "systems/supabase/reporting/v_jobs_by_status.md"
+      ],
+      "count": 4
+    },
+    {
+      "object": "supabase.public.users",
+      "docs": [
+        "entities/user.md",
+        "systems/supabase/public/subscriptions.md",
+        "systems/supabase/reporting/v_user_cohorts.md",
+        "systems/supabase/reporting/v_user_signups_by_day.md"
+      ],
+      "count": 4
+    },
+    {
+      "object": "supabase.public.cover_letter_exports",
+      "docs": [
+        "systems/supabase/public/cover_letter_exports.md",
+        "systems/supabase/public/cover_letters.md",
+        "systems/supabase/public/files.md"
+      ],
+      "count": 3
+    },
+    {
+      "object": "supabase.public.files",
+      "docs": [
+        "systems/supabase/public/imports.md",
+        "systems/supabase/reporting/v_files_by_type.md"
+      ],
+      "count": 2
+    },
+    {
+      "object": "supabase.public.job_status_history",
+      "docs": [
+        "systems/supabase/public/job_status_history.md",
+        "systems/supabase/reporting/v_job_status_transitions.md"
+      ],
+      "count": 2
+    },
+    {
+      "object": "supabase.public.master_cvs",
+      "docs": [
+        "systems/supabase/public/master_cvs.md",
+        "systems/supabase/reporting/v_master_cvs_by_language.md"
+      ],
+      "count": 2
+    },
+    {
+      "object": "supabase.public.ai_prompt_configs",
+      "docs": [
+        "systems/supabase/public/ai_prompt_configs.md"
+      ],
+      "count": 1
+    },
+    {
+      "object": "supabase.public.ai_suggestions",
+      "docs": [
+        "systems/supabase/public/cv_block_revisions.md"
+      ],
+      "count": 1
+    },
+    {
+      "object": "supabase.public.cover_letters",
+      "docs": [
+        "systems/supabase/public/jobs.md"
+      ],
+      "count": 1
+    },
+    {
+      "object": "supabase.public.imports",
+      "docs": [
+        "systems/supabase/reporting/v_imports_by_parser.md"
+      ],
+      "count": 1
+    },
+    {
+      "object": "supabase.public.tailored_cvs",
+      "docs": [
+        "systems/supabase/reporting/v_cv_production.md"
+      ],
+      "count": 1
+    },
+    {
+      "object": "supabase.public.usage_counters",
+      "docs": [
+        "systems/supabase/public/usage_counters.md"
+      ],
+      "count": 1
+    }
+  ]
+}

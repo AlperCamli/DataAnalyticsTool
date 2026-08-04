@@ -4337,3 +4337,28 @@ observed, not presumed).
 
 **Suites at this entry:** python **745 passed / 14 skipped**; core
 **194 passed** (+1, the D-99 test).
+
+**The repair, executed product-native (D-99.2), same day.** Core image
+rebuilt from `468fe87` and recreated with the running stack's own env
+discipline (secrets sourced, `SYNC_PLATFORM_COMMIT` = HEAD,
+`CL_HOST_ADDR` updated to the machine's current 192.168.1.3 — the IP had
+moved again; the compiled reporter bundle now points at a stale address
+and needs the operator's re-point before any demo). `sync now supabase`
+→ run `01KZ71HGZREBWN6377C8HNBVNF` succeeded → **KB PR #34**, which
+SY-3-closed #33 with the successor link. **PR #34's KB CI is green**,
+including `systems/ga4/index.md` — re-rendered this run by the fix, now
+agreeing with its contaminated `dimensions.md`. No hand-commit touched
+any sync branch.
+
+**D-99.5 bonus, done:** PR #34 reviewed with the shipped `review-sync`
+skill — the first review of *real* drift, same day the skill landed.
+Evidence at `results/phase2/a1-ss5-review/` (review + triage output +
+method notes): 35 contaminated docs across the 15-object first-capture
+wave, all routes declared dependencies, **zero rename candidates**,
+`entities/page.md` (the certified doc) untouched, branch discipline
+verified (wheel commit stages `.github/vendor/**` only). Verdict:
+BREAKING — merge to record reality, then a batched re-verification
+campaign per D-99.4. The review passes the CP-V1/CP-V2 validator with 0
+findings; nothing was merged and no verified status written. Merging #34
+and the campaign are the operator's; the staged drill's STOP-2 remains
+the gate act.
