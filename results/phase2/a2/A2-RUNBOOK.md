@@ -61,6 +61,36 @@ where it once produced silence. The live run is the human half.
 | The KB clone's contamination triage | separate operator item | **34 contaminated docs on `main`.** Not a blocker for this run — but if their journey touches a contaminated doc the session will say so, which is the product working. Record what they make of the message |
 | Power BI credential, **only if** their journey ends in a published report | O-4 | you set the three variables *before* handing over, never during (see O-4) |
 
+### 3.0 Rotate the dev IdP passwords before you bind to a network
+
+**Do this first, every time, on any network you do not own.** The pilot
+identity provider's accounts live in `deploy/oidc/users.json`, and that
+file — with `steward-dev-pw`, `reporter-dev-pw`, `benchmark-dev-pw` in
+it — is **published in the public release repo**
+(`AlperCamli/DataAnalyticsTool`). The moment the stack is bound to
+anything other than `127.0.0.1`, anyone who can reach port 8180 and has
+read the public repo can sign in as the steward: full KB read, the audit
+trail, and execution against the customer database under the exec role.
+
+*macOS · machine 1:*
+
+```bash
+cd ~/Desktop/DataProject
+$EDITOR deploy/oidc/users.json      # new passwords for all three accounts
+docker compose restart devidp
+```
+
+On a campus, office, or hotspot network (a `10.x` or `172.16–31.x`
+address) treat this as mandatory. Take the binding down again when the
+run is over:
+
+```bash
+docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d   # CL_BIND unset ⇒ 127.0.0.1
+```
+
+A LAN you control (a home router) is lower risk but not zero — the
+accounts are still published.
+
 ### 3.1 What you may not do
 
 Once you hand over (O-4), you may not: type on their machine, read over
@@ -122,7 +152,11 @@ evidence in step 7 filters on).
 
 ```bash
 cd ~/Desktop/DataProject
-ipconfig getifaddr en0                       # this Mac's LAN address
+ipconfig getifaddr en0    # this Mac's LAN address — 10.22.88.149 on
+                          # 2026-08-05. It is DHCP: re-check it on the
+                          # day. The address is compiled into the bundle,
+                          # so a bundle downloaded at one address stops
+                          # connecting when the Mac gets another one.
 # Use the make target, not a bare `docker compose up`: it sources
 # .secrets/sync.env into the shell, which is the D-84.2 trap — an
 # unexported env file yields a stack that looks healthy and never syncs.
@@ -378,7 +412,62 @@ what-a-user-feels), commit the extracted evidence beside them, and hand
 the gate verdict back to the platform side for the checkpoint's
 closure bookkeeping.
 
-## 8. STOP
+## 8. If there is only one machine (a deviation, recorded as one)
+
+The gate says *their own machine*, and it says so for a reason: a
+machine that was never prepared is the only honest test of whether the
+delivery path works. A run on this Mac cannot produce that evidence.
+What it **can** still produce, if the colleague is the one at the
+keyboard under their own login, is the rest of the gate: their identity
+in every audit row, a journey they chose, and an operator who said
+nothing. That is a real result with a named hole in it, and it is the
+owner's call whether to accept it — record it as a deviation in the gate
+note, never as a pass.
+
+Three traps make the difference between "their identity in the rows" and
+a run that silently records yours. All three are avoidable:
+
+1. **The browser is already signed in as you.** The platform's own
+   session cookie lives in whatever browser you last used. Open the
+   download in a **private/incognito window**, or sign out first:
+   `curl -sS -X POST http://<address>:8100/v1/auth/logout` will not do
+   it — the cookie is the browser's, so use a private window. Confirm
+   before they download: the window should ask them to sign in.
+2. **Claude Code may reuse a cached login for that server.** If you have
+   ever authenticated a session against this core on this machine, the
+   client may hold a token for it. Have them start the session from a
+   fresh directory, and if the session never asks them to sign in,
+   **stop** — the rows would carry the cached identity, not theirs.
+3. **The repo's own `CLAUDE.md` leaks into any session started beneath
+   it.** Unpack the bundle somewhere outside the repository —
+   `~/a2-run`, not `~/Desktop/DataProject/anything`. Otherwise the
+   session reads this project's instructions as if they were the
+   customer's.
+
+The check that catches all three is the one already in §7: every subject
+in `audit-chain.txt` must be their username. Run it *early* — after
+their first question, not at the end — because a run recorded under the
+wrong identity proves nothing and cannot be repaired afterwards.
+
+**If the colleague is remote and has their own machine**, prefer that
+over one machine: put the core on a private mesh (Tailscale or
+equivalent) and give them the same address over it. Do **not** publish
+this stack on a public tunnel: the pilot's identity provider is
+dev-only, its passwords are plaintext in a repo file, and nothing here
+is behind TLS. Observation over a screen share is fine — arguably better
+for note-taking, since you cannot lean over and help.
+
+**What a one-machine run does and does not evidence:**
+
+| Gate claim | One machine, colleague at the keyboard |
+|---|---|
+| Download authorized against their own binding | **Yes** |
+| Bundle carries no credential | Yes (already machine-checked) |
+| Their identity in every audit row | **Yes, if the three traps above are avoided** |
+| Journey of their choosing, operator hands-off | **Yes** |
+| Delivery works to an unprepared machine | **No — this is the hole.** Their machine already has the repo, the toolchain, and your Claude Code install |
+
+## 9. STOP
 
 **This run is yours and your colleague's.** Nothing in it can be done by
 the platform session that wrote this page: the identity is real, the

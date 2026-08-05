@@ -4728,6 +4728,37 @@ F-7's refusal, telling the truth about the image and a lie about the
 release. Verified in the built image (`listShippedSkills()` → benchmark,
 enrich, report, review-sync), not merely in tests that run from source.
 
+## Live rehearsal, 2026-08-05 (no gate claims — the operator's identity)
+
+The build was exercised against the running pilot stack, rebound to the
+operator's current address, before any of it is put in front of a second
+human. What the deployed stack did: `401` for a script and `302` into
+the login flow for a browser; the full browser path (one URL → IdP form
+→ callback → cookie → download) served `contextlayer-setup-reporter.tar.gz`,
+4 files, 17 269 bytes, stamped `01cb2be8a19b372d`, on the cookie alone;
+`/v1/auth/session` reported the signed-in subject, and the steward
+identity got the *steward* bundle from the same URL (both live bindings
+resolve to exactly one profile). The staleness probe answered all three
+ways against the real KB (`kb_ref 5d99f41`): current stamp → no notice,
+wrong stamp → `SETUP OUT OF DATE`, absent stamp → `SETUP UNVERIFIABLE`.
+A credential scan of the delivered archive against every value-shaped
+string in `.secrets/` returned one hit, `looker_studio` — a target name
+in the profile's tool list, not a credential. **This is a rehearsal of
+the mechanism, not gate evidence:** the identity was the operator's.
+
+**Finding, security, raised by that rehearsal (not a spec matter, no
+fence question — recorded so it is not discovered during the run).** The
+pilot's dev IdP accounts live in `deploy/oidc/users.json`, and that file
+with its three default passwords is **published in the public release
+repo** (`AlperCamli/DataAnalyticsTool`). Binding the stack to anything
+but `127.0.0.1` — which the A-2 run requires — therefore exposes a
+steward login to everyone who can reach port 8180, and on a campus or
+office network that is not a small set. Mitigation is one edit and a
+`docker compose restart devidp`; it is now act **3.0** of the runbook,
+mandatory before any non-loopback binding, with the un-binding step for
+afterwards. The deeper fix is the A-4 vault work and a real IdP; this is
+the interim rule.
+
 ## What is NOT closed by this entry
 
 The A-2 gate has a human half that no session can run: **the second
