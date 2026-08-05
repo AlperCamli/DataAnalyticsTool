@@ -52,17 +52,39 @@ playbook, on the real estate, with the real five connections.
 
 ### Act 0 — rebuild and restart
 
+**The env has to be in the shell, not only in the overlay.**
+`docker-compose.yml` declares `CORE_MCP_ENABLED` and the `SYNC_*` vars
+under `environment:` as `${VAR:-default}`, and compose ranks
+`environment:` above the overlay's `env_file:` — so a plain
+`docker compose up -d core` starts a core with **the MCP surface and the
+dashboard off**, healthy, serving 404 at `/app/`. That is D-84.2's exact
+shape (the pilot ran two silent days on it), and it is why `make
+stack-live` sources the file into the shell first. Use these lines:
+
 ```bash
 cd ~/Desktop/DataProject
-docker compose -f docker-compose.yml -f deploy/compose.live.yml build core
-docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d core runner
-docker compose -f docker-compose.yml -f deploy/compose.live.yml exec core node dist/cli.js migrate
+set -a; . .secrets/sync.env; set +a
+export CORE_MCP_ENABLED=1 SYNC_PLATFORM_COMMIT=$(git rev-parse HEAD)
+docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d --build core runner
+docker compose exec core node dist/cli.js migrate
 ```
 
-The migrate step applies `0011_audit_setup_stamp.sql` (PA-3). The build
-step is what puts the browser bundle in the image — a core without it
-serves a page that says so rather than a blank one, which is itself
-worth one screenshot if you see it.
+`--build` is what puts the browser bundle in the image; the runner needs
+rebuilding too, because `test_connection` is only claimed by a runner
+whose connectors declare `health_probe: builtin`. The migrate step
+applies `0011_audit_setup_stamp.sql` (PA-3).
+
+**Then check it took, before you open a browser:**
+
+```bash
+curl -sS http://127.0.0.1:8100/healthz | python3 -m json.tool
+```
+
+`instance.mcp_enabled`, `instance.sync_enabled` and
+`instance.dashboard_enabled` must all be `true`. If `dashboard_enabled`
+is `false`, every address in this runbook 404s and nothing else is
+wrong — go back to the `set -a` line. A core with the bundle missing
+from its image is a different thing and says so on the page itself.
 
 ### Act 1 — open the window
 

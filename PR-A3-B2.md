@@ -123,14 +123,32 @@ this build surfaces; they are not caused by it.
 `/app/` serves, `/` redirects to it, `/v1/dashboard/modules` answers
 `config_source: default` (the pilot KB carries no `dashboard.yaml`).
 
+## 5b. One defect the operator found on first read
+
+`/app/` answered 404 while `/healthz` said `ok`. Nothing was broken: the
+core had been recreated by a `docker compose up` without
+`CORE_MCP_ENABLED=1`, so the dashboard was never registered. This is
+**D-84.2's shape a third time** — `environment:` in `docker-compose.yml`
+outranks the overlay's `env_file:`, so an unsourced env silently disarms
+a surface — and the runbook's own Act 0 reproduced it by giving plain
+compose lines instead of the `set -a; . .secrets/sync.env` form
+`make stack-live` uses.
+
+Both halves fixed: Act 0 now sources the env and ends with a check, and
+`/healthz` reports **`dashboard_enabled`** beside `mcp_enabled` and
+`sync_enabled`, for the reason SO-F gave for the latter. A surface that
+can be silently off has to be checkable without reading the process
+environment.
+
 ## 6. Tests
 
-- `core/test/connections.test.ts` — 15: role gate (ops/steward/reporter,
+- `core/test/connections.test.ts` — 16: role gate (ops/steward/reporter,
   each refusal the server's), CSRF, `raw_secret_rejected` three ways with
   the value never echoed, read-back equality, **the D-84 shape reproduced
   with a trigger that swallows writes** → 500 `write_not_observed`,
   deletion verified, health's four states, the probe's honest `pending`,
-  the CLI grep assertion, and B-2's DT-2 + module-map resolution.
+  the CLI grep assertion, and B-2's DT-2 + module-map resolution +
+  `/healthz`'s `dashboard_enabled`.
 - `core/test/connections-e2e.test.ts` — 2, live Postgres + live SDK
   runner: a good credential probes green with the role facts it read; a
   wrong password yields `auth_error` and the re-auth prompt naming the

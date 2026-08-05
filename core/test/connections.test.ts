@@ -451,6 +451,19 @@ describe("B-2 dashboard shell", () => {
     await rig?.stop();
   });
 
+  it("/healthz states whether the dashboard is on at all (D-84.2's lesson)", async () => {
+    // A core started without the MCP env registers no dashboard route
+    // and answers 404 everywhere, while /healthz still says `ok`. That
+    // is indistinguishable from a broken build from the outside — and it
+    // is exactly what happened on the pilot the first time this runbook
+    // was followed. The packet has to say it.
+    const probe = await fetch(`${rig.base}/healthz`);
+    const body = (await probe.json()) as { instance: { dashboard_enabled: boolean } };
+    expect(body.instance.dashboard_enabled).toBe(true);
+    expect(body.instance).toHaveProperty("mcp_enabled");
+    expect(body.instance).toHaveProperty("sync_enabled");
+  });
+
   it("serves the SPA as static assets from the core, behind no second server", async () => {
     const shell = await fetch(`${rig.base}/app/`);
     expect(shell.status).toBe(200);

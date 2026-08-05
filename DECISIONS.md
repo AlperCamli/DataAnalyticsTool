@@ -4950,6 +4950,21 @@ hand-written stylesheet, one `history.pushState` route switch. The whole
 client is five files; that is the ceiling this ruling should be held to
 until a screen genuinely needs more.
 
+**D-109.8 — `/healthz` reports `dashboard_enabled`, and the runbook's
+first act was wrong.** Found by the operator, immediately, on the first
+reading of `GATE-RUNBOOK.md`: `/app/` answered 404 while `/healthz` said
+`ok`. Nothing was broken — the core had been recreated by a
+`docker compose up` that did not carry `CORE_MCP_ENABLED=1`, so the
+dashboard was never registered. **This is D-84.2's shape a third time**
+(`environment:` in `docker-compose.yml` outranks the overlay's
+`env_file:`, so an unsourced env silently disarms a surface), and my own
+Act 0 reproduced it: it gave the plain compose lines rather than the
+`set -a; . .secrets/sync.env` form `make stack-live` uses. Both halves
+are fixed — the runbook's commands, and the instance packet, which now
+states `dashboard_enabled` beside `mcp_enabled` and `sync_enabled` for
+exactly the reason SO-F gave for the latter. A surface that can be
+silently off must be checkable without reading the process environment.
+
 ## What the live check found (2026-08-06, pilot stack)
 
 All five existing pilot rows read through the new API **unchanged** and
@@ -4977,3 +4992,5 @@ than quietly absorbed: connection CRUD writes are **not** in
 durable record of a dashboard act today is the job's trigger actor), and
 the capability spec has **no `test_connection` section** — the builtin
 probe's two preflight surfaces are shipped and undocumented there.
+
+**Suites at this entry:** core **286 passed / 4 skipped / 27 files** (the 4 skipped are `connections-live.test.ts`, which runs only against a stack named by `CL_LIVE_API` — it was run, live, and is recorded above); python **748 passed / 14 skipped / 1 failed** — the 34-doc contamination triage, estate state, unchanged by this work.

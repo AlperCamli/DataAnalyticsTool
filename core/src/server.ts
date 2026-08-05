@@ -609,6 +609,13 @@ export function buildServer(
           public_url: cfg.mcp.publicUrl,
           mcp_enabled: cfg.mcp.enabled,
           sync_enabled: cfg.sync.enabled,
+          // B-2: reported for the same reason `sync_enabled` is (SO-F /
+          // D-84.2). A core started without the MCP env has no dashboard
+          // and answers 404 at every dashboard address while /healthz
+          // still says `ok` — which is indistinguishable from a broken
+          // build unless the packet states it. It costs one field to
+          // make "the dashboard is off" checkable instead of guessable.
+          dashboard_enabled: cfg.dashboard.enabled,
           kb_remote: cfg.sync.gitRemote || null,
           kb_ref: kbRef,
         },
