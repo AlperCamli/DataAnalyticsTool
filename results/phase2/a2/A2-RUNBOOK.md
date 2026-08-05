@@ -340,7 +340,7 @@ open. From here your only line is "I am not allowed to answer that".
 Open this address in your browser:
 
 ```
-http://<LAN address>:8100/v1/setup/bundle
+http://192.168.1.8:8100/v1/setup/bundle
 ```
 
 You will be asked to sign in. Use the username and password you were
