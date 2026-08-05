@@ -82,13 +82,18 @@ all one that gets published.
 
 ```bash
 cd ~/Desktop/DataProject
-$EDITOR .secrets/idp-users.json     # same JSON shape; rotated passwords
+nano .secrets/idp-users.json
 chmod 600 .secrets/idp-users.json
 docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d devidp
-# prove the published default no longer works:
+```
+
+Same JSON shape as the published file, new passwords. Then prove the
+published default no longer works — this must print an `invalid_grant`
+error:
+
+```bash
 curl -sS -X POST http://127.0.0.1:8180/token \
   -d grant_type=password -d username=alper -d password=steward-dev-pw
-# expect {"error":"invalid_grant"}
 ```
 
 On a campus, office, or hotspot network (a `10.x` or `172.16–31.x`
@@ -120,13 +125,14 @@ You may end the run at any point they want to stop.
 
 *macOS · machine 1:*
 
+Add ONE entry to the pilot's account list — the git-ignored one from
+§3.0, never the published file. Use their real first name or handle: the
+audit rows carry that string, and *who used it* is the question those
+rows have to answer.
+
 ```bash
 cd ~/Desktop/DataProject
-# Add ONE entry to the pilot IdP's user list — the git-ignored one
-# (§3.0), never the published file. Use their real first name or
-# handle: the audit rows carry this string, and "who used it" is the
-# question those rows have to answer.
-$EDITOR .secrets/idp-users.json
+nano .secrets/idp-users.json
 ```
 
 The new entry, beside the existing ones:
@@ -144,7 +150,9 @@ Then restart just the identity provider and confirm the account exists
 and carries exactly the reporter role:
 
 ```bash
-docker compose restart devidp
+# `restart` alone would re-read nothing: the file is a bind mount from
+# the live overlay, so bring it up through both files.
+docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d devidp
 sleep 2
 curl -sS -X POST http://127.0.0.1:8180/token \
   -d grant_type=password -d username='<their-handle>' -d password='<their password>' |
