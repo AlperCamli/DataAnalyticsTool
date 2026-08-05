@@ -115,17 +115,24 @@ One codebase, customized per customer through configuration, never forks:
 # .contextlayer/dashboard.yaml
 branding: { name: "Acme Context Layer", logo: assets/acme.svg }
 modules:
+  kb_health:   { enabled: true }            # freshness/trust map, drift feed, lineage
+  gap_triage:  { enabled: true }            # triage queue + knowledge requests
   connections: { enabled: true }
-  kb_health:   { enabled: true }            # freshness/trust map, drift feed
+  setup:       { enabled: true }            # bundle download + staleness
   profiles:    { enabled: true, edit_roles: [data-team] }
+  ops:         { enabled: true }            # runs/jobs, webhook secrets, detector rules
+  publish:     { enabled: true }            # deliveries + attestation history
   audit:       { enabled: true, view_roles: [data-team, security] }
   benchmarks:  { enabled: true }
 role_views:                                  # which roles see which modules
   sales: [profiles]
-  data-team: [connections, kb_health, profiles, audit, benchmarks]
+  data-team: [kb_health, gap_triage, connections, setup, profiles, ops,
+              publish, audit, benchmarks]
 ```
 
-Module registry v1: **Connections** (add/configure/test integrations, credential references, health), **KB Health** (estate freshness, stale/contaminated docs, drift feed, sync PR queue), **Agent Profiles** (§5 editor + one-click Claude Code setup export), **Audit** (queries, publishes, identities), **Benchmarks** (golden-suite scores over time, per KB version), **Lineage Explorer** (upstream/downstream graph per object, the operations applied on each edge, and trust-propagation overlays showing what a breaking change contaminates). Customer-specific panels are future extension points within the same registry — added by config, not code branches.
+Module registry v1: **KB Health** (estate freshness, stale/contaminated docs, drift feed, sync PR queue, and the lineage explorer — upstream/downstream graph per object, the operations applied on each edge, and trust-propagation overlays showing what a breaking change contaminates), **Gap Triage & Knowledge Requests** (ledger triage queue, human gap filing, the enrichment-request queue and its steward verdicts), **Connections** (add/configure/test integrations, credential references, health), **Setup** (bundle download and staleness signal), **Profiles** (§5 editor + one-click Claude Code setup export), **Ops** (run/job health and dead-letter re-enqueue, webhook secret lifecycle, detector-rule configuration, the estate-wide re-render trigger), **Publish** (deliveries and attestation history), **Audit** (queries, publishes, identities), **Benchmarks** (golden-suite scores over time, per KB version). Customer-specific panels are future extension points within the same registry — added by config, not code branches.
+
+**Amendment (dashboard spec §9.1 / D-101, 2026-08-05) — registry names aligned to the dashboard spec's module map.** The slot this section has always held ("dashboard track, gates nothing") now has a contract: `dashboard-spec.md` §3 is authoritative for the inventory → module → checkpoint map, and this registry carries the same names. The change is **naming only** — no module is added, removed, or re-scoped here: the former *Agent Profiles* is **Profiles**, the former standalone *Lineage Explorer* is the read surface inside **KB Health** (inventory item U-15), and *Gap Triage & Knowledge Requests*, *Setup*, *Ops*, and *Publish* name surfaces the inventory already required and this section had not enumerated. Which modules a deployment turns on, and which roles see them, remains `dashboard.yaml` configuration versioned with the core (dashboard spec UI-9).
 
 ## 7. Build order impact
 
