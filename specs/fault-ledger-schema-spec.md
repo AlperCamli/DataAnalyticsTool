@@ -101,9 +101,33 @@ CREATE INDEX ON ledger_issues (object_fqn) WHERE object_fqn IS NOT NULL;
 | `result_disputed` | 3 | artifact id + object set |
 | `human_filed` | 3 | free (dashboard form) |
 | `benchmark_regression` | 3 | kb_ref + suite request id |
+| `enrichment_request` | 3 | target object FQN when given, else normalized request terms |
 | `other` | 2 | free |
 
 Registry growth is additive (mirrors S-5). `flag_gap`'s enum (MCP §6.10) maps 1:1 onto the class-2 rows; `schema_mismatch` flags land on the `doc_schema_mismatch` fingerprint so both classes corroborate one issue (L-2).
+
+**Amendment (D-101.2, 2026-08-05) — `enrichment_request`: the knowledge-request queue.** The kind above is a human submission, not a detector finding: someone tells the estate what it is missing, optionally with the content they think should fill it. Anyone may file one. Two inlets, both recorded as class 3 by kind exactly as `result_disputed` is (§6): the dashboard's request form (Gap Triage & Knowledge Requests, dashboard spec §3) and `flag_gap` from a session (MCP §6.10) — one queue whether or not the requester has a browser open.
+
+**Payload.** Optional target `object_fqn` and optional `proposal` (the requester's suggested content, stored in `detail.proposal`). Both optional by design: a request may be a hole ("nothing says how refunds are counted") or a proposal ("here is how we count them"). Every existing rule applies to it unchanged and without exception — **LED-R2** server-side scrub and length bounds on `proposal` exactly as on `description` (§3.3: a value that never lands in the ledger cannot leak from it); **LED-R3** identity, session, profile and refs are server-set and a client-supplied subject is ignored; **LED-R5** markdown/HTML-inert rendering at every surface that displays the text — the queue, `list_gaps`, and any PR body citing it; **LED-R7** counts-only for `distinct_subjects`.
+
+**Fingerprint and dedup: unchanged** (§3.3). Scope is the target FQN when given, else the normalized request terms. Two people asking for the same thing produce **one issue with two events** (`occurrences=2`, `distinct_subjects=2`); the steward's verdict applies to the issue, and every event's proposal is drafting input for the batch. The prioritization signal is the one the queue already has — eleven people asking for the same doc is the strongest argument for writing it.
+
+**Verdict states** (additive to §3.2's `status` domain, valid only for `kind = 'enrichment_request'`; every other kind's §7 lifecycle is untouched):
+
+```
+open ──approve──► approved ──deliver batch──► batched(batch_id) ──PR merge──► resolved
+  │                             ▲                     │                        (L-5)
+  │                             └── undraftable ──────┘  (returns with the skill's note)
+  └──reject(reason)──► rejected
+```
+
+Additive DDL: the `ledger_issues.status` CHECK gains `approved | rejected | batched`; the table gains `verdict_by text`, `verdict_at timestamptz`, `verdict_reason text` (the rejection reason — human-authored text that will be shown to the filer, so LED-R2's bounds and scrub apply to it too) and `batch_id text`. All four are NULL for every other kind.
+
+**What a verdict is, and is not** (dashboard spec UI-11). Approve means *worth drafting*. It changes **ledger state only**: it writes no KB content and makes no git call. The certification act remains exactly what it has always been — a human merging a reviewed diff under their own name (KB-7). Rejection sets `rejected` with its reason rather than deleting the row: the record of what was asked and declined is worth as much as the record of what was written, and a rejected request that eleven more people file is a decision worth revisiting.
+
+**Resolution rides the existing L-5 lifecycle — no new mechanism.** The enrich skill's batch PR carries one `CL-Resolves: <issue-id>` trailer per request the batch satisfies; the core resolves those issues on merge (§9) with `resolution: {kind: enrichment_pr, pr_url}`. A batch resolves exactly the requests it satisfies and no others. An approved request the skill could not draft returns to `approved` carrying the skill's note (skill spec §6) — never silently dropped, never guessed at. Recurrence is unchanged (L-4): a resolved request whose fingerprint fires again reopens with `reopen_count += 1`, which for this kind reads *the doc we wrote did not answer the question* — precisely the signal worth having.
+
+**Reply path.** Rejection reasons and batch-merge resolutions surface to the filer through the same channel as every other resolution (the F-10 reply path; mechanism per dashboard spec UI-D, asserted by DT-10).
 
 ## 5. Class-1 detector rules (shipped defaults; ops-config data per L-3)
 
@@ -140,11 +164,15 @@ Each rule row in ops config carries: `enabled`, thresholds, window, and its fing
   resolved ─────────┘  reopen_count += 1, status → open, resolution preserved in history
 ```
 
+`enrichment_request` runs the verdict lifecycle added by the D-101.2 amendment (§4) instead of the `open → triaged` path above; its terminal `resolved` state and its L-4 recurrence behavior are the same ones drawn here.
+
 Routing (`routed_to`) is a kind→role table in ops config; shipped default routes **everything to the data-team role** (R2 owns triage per HLR §4) except `benchmark_regression`, which also notifies the merging author. Dismissed issues keep their fingerprint: recurrence reopens them too — a `wont_fix` that eleven more people hit deserves a second look, and the reopen counter says exactly that.
 
 ## 8. Triage-queue contract
 
 **KB Health module (primary surface):** reads `ledger_issues` ordered by `(status='open' first, occurrences DESC, last_seen DESC)`, filterable by kind/system/routed_to; issue view shows the event stream, linked docs/PRs, and one-click actions: acknowledge (→ `triaged`), assign, dismiss-with-reason, or **"export enrichment batch"** — emitting the scoped work list the enrich skill consumes.
+
+Per the D-101.2 amendment, the same module carries the **knowledge-request queue**: `enrichment_request` issues ordered by the same `(occurrences, distinct_subjects)` signal, the steward's approve / reject-with-reason verdicts (ledger-state writes, role-gated server-side), the approved worklist, and the "deliver batch" trigger that stamps `batch_id` on up to ten approved requests and hands them to the enrich skill. Batches are cut on demand or at ~10 approved — appending is permitted only to a still-open, still-small batch, so no batch becomes an immortal rolling PR.
 
 **`list_gaps` tool (MCP; L-7):** `list_gaps(status=open|triaged, kind?, system?, limit=20)` → issues as `{issue_id, kind, title, object_fqn?, occurrences, distinct_subjects, first_seen, last_seen, links}`. Read-only; allowlisted in the Steward (and `benchmark`) profile templates only; visibility-filtered — an issue attributed to an object the caller's role cannot see is omitted (M-4 consistently applied). This is the enrich skill's S1 priority-1 input, straight from the session.
 
@@ -172,6 +200,7 @@ Events: retained 90 days (config), then deleted; issues: indefinite (they are th
 | FL-8 | Benchmark CI drop beyond tolerance → `benchmark_regression` issues keyed to kb_ref, author notified | §6c |
 | FL-9 | Rule threshold edited in ops config takes effect next sweep without deploy | L-3 |
 | FL-10 | Dismissed issue reoccurring → reopened, `reopen_count` incremented | §7 |
+| FL-11 | `enrichment_request` lifecycle: two requests on one target dedup to one issue (`occurrences=2`); a proposal carrying a canary value and a markdown payload is stored scrubbed and served inert; approve → `approved` with `verdict_by`/`verdict_at`, **no KB write and no git call**; deliver batch → `batched(batch_id)`; merge of the batch PR resolves exactly the trailered requests, an undraftable one returning to `approved` with its note; reject records the reason and the filer's reply path carries it | §4 amendment (D-101.2), LED-R2/R3/R5, L-5, UI-11 |
 
 ## 12. Amendments to other specs (additive) and register actions
 
