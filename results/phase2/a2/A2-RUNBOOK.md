@@ -63,21 +63,32 @@ where it once produced silence. The live run is the human half.
 
 ### 3.0 Rotate the dev IdP passwords before you bind to a network
 
-**Do this first, every time, on any network you do not own.** The pilot
-identity provider's accounts live in `deploy/oidc/users.json`, and that
-file — with `steward-dev-pw`, `reporter-dev-pw`, `benchmark-dev-pw` in
-it — is **published in the public release repo**
-(`AlperCamli/DataAnalyticsTool`). The moment the stack is bound to
-anything other than `127.0.0.1`, anyone who can reach port 8180 and has
-read the public repo can sign in as the steward: full KB read, the audit
-trail, and execution against the customer database under the exec role.
+**Do this first, every time, on any network you do not own.** The base
+stack's account list, `deploy/oidc/users.json`, ships with the platform
+release and is **published** (`AlperCamli/DataAnalyticsTool`) — with
+`steward-dev-pw`, `reporter-dev-pw`, `benchmark-dev-pw` in it. The
+moment the stack is bound to anything other than `127.0.0.1`, anyone who
+can reach port 8180 and has read the public repo can sign in as the
+steward: full KB read, the audit trail, and execution against the
+customer database under the exec role.
+
+**Since 2026-08-06 the live accounts live outside git** —
+`.secrets/idp-users.json`, mounted over the published file by
+`deploy/compose.live.yml`. That is also where the second human's account
+belongs: a real person's credentials must not land in a repo, least of
+all one that gets published.
 
 *macOS · machine 1:*
 
 ```bash
 cd ~/Desktop/DataProject
-$EDITOR deploy/oidc/users.json      # new passwords for all three accounts
-docker compose restart devidp
+$EDITOR .secrets/idp-users.json     # same JSON shape; rotated passwords
+chmod 600 .secrets/idp-users.json
+docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d devidp
+# prove the published default no longer works:
+curl -sS -X POST http://127.0.0.1:8180/token \
+  -d grant_type=password -d username=alper -d password=steward-dev-pw
+# expect {"error":"invalid_grant"}
 ```
 
 On a campus, office, or hotspot network (a `10.x` or `172.16–31.x`
@@ -111,10 +122,11 @@ You may end the run at any point they want to stop.
 
 ```bash
 cd ~/Desktop/DataProject
-# Add ONE entry to the pilot IdP's user list. Use their real first name
-# or handle — the audit rows will carry this string, and "who used it"
-# is the question the rows have to answer.
-$EDITOR deploy/oidc/users.json
+# Add ONE entry to the pilot IdP's user list — the git-ignored one
+# (§3.0), never the published file. Use their real first name or
+# handle: the audit rows carry this string, and "who used it" is the
+# question those rows have to answer.
+$EDITOR .secrets/idp-users.json
 ```
 
 The new entry, beside the existing ones:

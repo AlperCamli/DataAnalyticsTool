@@ -15,6 +15,15 @@ services:
       # (fine-grained PAT, D2), SYNC_PLATFORM_COMMIT — shape described
       # in SETUP.md (JC-8: never committed)
       - ./.secrets/sync.env
+  devidp:
+    volumes:
+      # The pilot's real accounts, git-ignored (JC-8). The base stack's
+      # `deploy/oidc/users.json` carries demo defaults and is published
+      # with the platform release — so it must never hold the live
+      # passwords, and never a real person's credentials (A-2's second
+      # human has an account of their own). Same mount point, so this
+      # overrides rather than adds.
+      - ./.secrets/idp-users.json:/etc/contextlayer/idp-users.json:ro
   runner:
     env_file:
       - ./.secrets/runner.env
