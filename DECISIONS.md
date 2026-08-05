@@ -4424,3 +4424,75 @@ campaign per D-99.4. The review passes the CP-V1/CP-V2 validator with 0
 findings; nothing was merged and no verified status written. Merging #34
 and the campaign are the operator's; the staged drill's STOP-2 remains
 the gate act.
+
+# DECISIONS — Phase 2 Track B entry (2026-08-05)
+
+Three owner rulings, recorded verbatim as issued.
+
+**RULING D-100 — A-1 closure affirmed + B-0 entry**
+1. A-1 CLOSED as landed (72f406c): C-2 closed, AS-7 behavioral, drill
+   rehearsed with the human half performed for the first time,
+   deviations and KB-8 field lessons recorded unsmoothed — which is the
+   point of a first rehearsal. D-99's cross-system finding stands as
+   defense-in-depth evidence.
+2. Next checkpoint per the plan's serial order: B-0 — whose entry
+   condition is the dashboard/UI spec, authored and merged first
+   (spec-first pattern). The spec below is submitted for that purpose;
+   on merge, B-0 build is authorized.
+
+**RULING D-101 — enrichment-request queue (authorizes the amendments below;
+fence otherwise unchanged; each diff leads its PR)**
+
+1. FEATURE ADOPTED: anyone may submit a knowledge request — a hole or a
+   proposal with suggested content; requests land in the steward's
+   queue; the steward's verdict (approve / reject-with-reason) changes
+   ledger state only; approved items are drafted BY THE ENRICH SKILL in
+   batches of ≤10 into ONE PR carrying per-request resolution trailers;
+   the steward's merge of that reviewed diff remains the sole
+   certification act. Requester text is drafting input, cited as
+   "customer-provided, <name>, <date>", never embedded verbatim.
+   Batches are cut on demand or at ~10 approved — no immortal rolling
+   PR; appending is permitted only to a still-open, still-small batch.
+2. FAULT-LEDGER SPEC (additive): kind `enrichment_request` — payload:
+   optional target FQN + optional proposal text (LED-R2 scrub + length
+   bounds apply; LED-R3 server-set identity; LED-R5 render
+   neutralization; LED-R7 counts-only). States: open → approved |
+   rejected(reason) ; approved → batched(batch_id) → resolved via the
+   existing L-5 CL-Resolves lifecycle on the batch PR's merge —
+   trailers resolve every request the batch satisfies; recurrence and
+   fingerprint-dedup semantics unchanged. Rejection reasons surface to
+   the filer through the same F-10 channel as resolutions.
+3. MCP SPEC (additive): flag_gap gains an optional proposal argument
+   (same scrub/bounds), so session-side users can submit content
+   proposals without the dashboard; server-set identity unchanged.
+4. SKILL SPEC (additive): the enrich skill gains queue-driven batch
+   mode — input: approved enrichment_requests; grounding rule: the
+   approved request is itself a citation of the customer-provided
+   class; per-item honesty unchanged (an approved request the skill
+   cannot ground beyond the proposal is drafted citing exactly that
+   provenance; one it cannot draft at all returns to the queue with a
+   note, never guessed); PR body lists request→doc mapping; ≤10 per
+   batch; conformance scenario added per the D-78 layering (behavioral
+   evidence: approve → batch → PR → trailers → resolution fires).
+5. PHASE-2 PLAN (amendment): B-1's gate gains the Knowledge Requests
+   queue with DT-11/DT-12, and one end-to-end demonstration: request
+   submitted (with proposal) → steward verdict in the dashboard →
+   batch delivered → enrich PR merged as R2 → requester sees
+   resolution. The dashboard-spec's UI-11 governs.
+6. BOUNDARY RESTATED for the record: this feature adds a triage gate
+   IN FRONT of the PR flow; it removes nothing from it. Approve ≠
+   certify; the diff remains the review; the merge remains the act.
+
+**RULING D-102 — pre-B-0 decisions**
+
+1. BROWSER AUTH: OIDC authorization-code flow at the core (same IdP as
+   MCP), server-side session cookie (HttpOnly, SameSite, CSRF-protected),
+   identity {subject, roles} resolved through the SAME verifier the MCP
+   path uses — no parallel identity code, no dashboard service account
+   (UI-2). Logout and session expiry per IdP token lifetimes.
+2. STEWARD AUDIT SCOPE v1 = full read. The matrix's "own + team" is
+   amended to "all" with the note: no team concept exists in the role
+   model; introducing one is a future ruling triggered by the first
+   multi-team customer, never a filter-side invention. Reporter = own
+   rows only, unchanged. Auditor = B-4, unchanged.
+3. UI-A (stack) deferred to B-1 as specced.
