@@ -339,6 +339,10 @@ export async function setupMcpRig(
             pageDefault: 50,
             pageMax: 200,
             batchMax: 10,
+            // A-3: `ops` and not `steward` — the split the gate asks
+            // for, exercised as the product ships it.
+            adminRoles: ["ops"],
+            probeTimeoutS: 5,
             ...overrides.dashboard,
           },
         }

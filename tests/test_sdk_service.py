@@ -294,9 +294,14 @@ def test_scrub_secrets_handles_nested_detail():
 
 
 def test_declared_connectors_carry_types():
+    """A-3: `test_connection` joins the declaration for any connector
+    whose manifest opts into the builtin probe (`health_probe: builtin`),
+    alongside the capability-derived types. It is not derived from a
+    capability because the probe spans all of them."""
     runner = make_runner(FakeClient(), {"static-demo": demo_connector})
+    assert demo_connector.manifest.health_probe == "builtin"
     assert runner.declared_connectors() == [
-        {"name": "static-demo", "version": "0.1.0", "types": ["snapshot"]},
+        {"name": "static-demo", "version": "0.1.0", "types": ["snapshot", "test_connection"]},
     ]
 
 

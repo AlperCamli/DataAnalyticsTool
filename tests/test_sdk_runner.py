@@ -257,3 +257,67 @@ def test_metadata_capability_undeclared_is_config_error(tmp_path):
 def test_unsupported_job_type_raises():
     with pytest.raises(ValueError, match="harvest"):
         run_job(demo_connector, Job(job_id="j", config={}, type="harvest"))
+
+
+# --- the builtin health probe (A-3, job type `test_connection`) ---
+
+
+def probe(connector, config):
+    return run_job(connector, Job(job_id="p", config=config, type="test_connection"))
+
+
+def test_probe_reports_unprobed_rather_than_a_pass_it_did_not_perform():
+    """The honesty rule: the static demo declares metadata and implements
+    no preflight, so the probe succeeds *and says it exercised nothing*.
+    A green tick beside a source nobody has ever read is the failure this
+    whole checkpoint exists to prevent."""
+    outcome = probe(demo_connector, dict(DEMO_CONFIG))
+    assert outcome.status == "succeeded"
+    assert outcome.result["ok"] is True
+    assert outcome.result["unprobed"] == ["metadata"]
+    statuses = {c["capability"]: c["status"] for c in outcome.result["checks"]}
+    assert statuses == {"config": "pass", "metadata": "unprobed"}
+
+
+def test_probe_runs_the_config_gate_first():
+    outcome = probe(demo_connector, {"system": "demo", "mode": "nonsense"})
+    assert outcome.status == "failed"
+    assert outcome.error.code == "config_error"
+    assert outcome.error.retryable is False
+
+
+def test_probe_maps_a_refused_credential_to_auth_error(tmp_path):
+    """`auth_error` is what the Connections module turns into a re-auth
+    prompt, so the mapping from the connector's own exception to the
+    outer taxonomy is load-bearing rather than cosmetic."""
+    from connectors.sdk import AuthError
+
+    class Refusing(FakeMetadata):
+        def preflight(self, config):
+            raise AuthError("the source refused these credentials")
+
+    connector = Connector(
+        write_manifest(tmp_path), {"metadata": Refusing(lambda config: sql_result([]))}
+    )
+    outcome = probe(connector, dict(DEMO_CONFIG))
+    assert outcome.status == "failed"
+    assert outcome.error.code == "auth_error"
+    assert outcome.error.retryable is False
+    assert outcome.error.detail["capability"] == "metadata"
+    assert outcome.error.detail["checks"][-1]["status"] == "fail"
+
+
+def test_probe_scrubs_credentials_out_of_its_own_report(tmp_path):
+    """A probe exists to touch credentials, so its report is the one
+    place a resolved DSN would most plausibly leak (JC-8/F3)."""
+
+    class Leaky(FakeMetadata):
+        def preflight(self, config):
+            return {"probed": True, "dsn": "postgres://u:hunter2@h/db"}
+
+    connector = Connector(
+        write_manifest(tmp_path), {"metadata": Leaky(lambda config: sql_result([]))}
+    )
+    outcome = probe(connector, dict(DEMO_CONFIG))
+    assert outcome.status == "succeeded"
+    assert "hunter2" not in json.dumps(outcome.result)

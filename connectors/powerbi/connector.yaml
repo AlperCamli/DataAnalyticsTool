@@ -32,3 +32,9 @@ config_schema: ./config.schema.json
 credentials:
   - { key: client_secret, required_for: [publish], description: "Entra app client secret for the workspace service principal" }
 rate_limit: { strategy: none }
+# A-3: the builtin probe runs the config gate. The tenant probe that
+# would refine these flags per licensing (CI-5, and CI-C's cadence
+# question) is unbuilt, so the result reports `unprobed: [publish]` —
+# the client secret is not exercised here. `powerbi preflight` remains
+# the operator's provisioning check (D-91.7).
+health_probe: builtin

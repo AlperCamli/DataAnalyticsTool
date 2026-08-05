@@ -25,7 +25,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { login, setupDashboardRig, type BrowserSession, type DashboardRig } from "./dashboard-helpers.js";
+import { apiGet, login, setupDashboardRig, type BrowserSession, type DashboardRig } from "./dashboard-helpers.js";
 import { mcpRequest, REPORTER_PROFILE } from "./mcp-helpers.js";
 import { bindingFor } from "../src/setup.js";
 import type { KbState } from "../src/kbread.js";
@@ -301,6 +301,42 @@ describe("A-2 staleness (PA-2): the 2026-07-29 shape, repeated", () => {
     expect(legacy.status).toBe(200);
     expect(legacy.instructions).toContain("SETUP UNVERIFIABLE");
     expect(legacy.instructions).toContain("/v1/setup/bundle");
+  });
+
+  it("PA-3: the audit row states which setup the session presented (D-108.4)", async () => {
+    // A-2's evidence could show that eleven calls happened and could
+    // show what the server said about staleness; it could not show
+    // which bundle made them. The stamp lived in a URL and in a notice,
+    // and neither is durable. Now the row carries it.
+    const fresh = await download(rig, reporter);
+    const stamp = fresh.headers.get("x-cl-setup-stamp")!;
+
+    const stamped = await mcpRequest(rig, rig.token("reporter"), "reporter", "tools/call", {
+      name: "search_context",
+      arguments: { query: "orders" },
+    }, { setup: stamp });
+    expect(stamped.status).toBe(200);
+
+    // The same identity on a pre-A-2 bundle: no stamp on the URL at all.
+    const legacy = await mcpRequest(rig, rig.token("reporter"), "reporter", "tools/call", {
+      name: "search_context",
+      arguments: { query: "customers" },
+    });
+    expect(legacy.status).toBe(200);
+
+    // Read it back the way the extractor does — through the governed
+    // audit API, not the database. If the column were absent from the
+    // read shape, the evidence path would still be broken.
+    const steward = await login(rig, "steward");
+    const audit = await apiGet(rig, steward, "/v1/dashboard/audit?tool=search_context&limit=50");
+    expect(audit.status).toBe(200);
+    const rows = audit.json.rows as { args_digest: string; setup_stamp: string | null }[];
+    const stamps = rows.map((r) => r.setup_stamp);
+    expect(stamps).toContain(stamp);
+    // Not silence, and not a guess: "we asked and it had none" is a
+    // different statement from "we never asked", which is NULL.
+    expect(stamps).toContain("unstamped");
+    expect(stamps).not.toContain(null);
   });
 
   it("/v1/setup/status answers the same question for the operator's runbook", async () => {

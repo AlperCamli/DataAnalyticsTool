@@ -195,6 +195,14 @@ def write(name, text):
 #    statement_text is included deliberately: for execute/validate/publish
 #    the product spec §8 stores the full text, and the demo's whole claim
 #    is that what ran is what the KB grounded.
+#
+#    setup_stamp is the last field (D-108.4 / PA-3): which compiled
+#    bundle the session presented, or `unstamped` when it presented
+#    none. It is appended rather than inserted so every earlier field
+#    keeps its position and a fresh extraction still diffs line-for-line
+#    against evidence extracted before the column existed. A `-` here
+#    means the row predates the column, which is not the same statement
+#    as `unstamped` — that one is something the server observed.
 audit = pages("/v1/dashboard/audit", {"since": SINCE, "order": "asc"}, "rows")
 
 write(
@@ -210,6 +218,7 @@ write(
             dash(row["session_id"]),
             dash(jsonb(row["result_meta"])),
             blank(row["statement_text"]).replace("\n", " ") or "-",
+            dash(row.get("setup_stamp")),
         )
         + "\n"
         for row in audit
@@ -342,4 +351,17 @@ print("Denials in the window (expect the two Act-3 cases):")
 print(f"  {denied}" if denied else "  none — Act-3 evidence is missing")
 print("publish_report mode calls in the window (expect deliver_model+attest per report):")
 print(f"  {modes}")
+
+# PA-3: which compiled setups produced this window. One line, because a
+# gate note that says "the session ran a current bundle" should be able
+# to cite a column rather than an inference from timestamps.
+stamps = {}
+for row in audit:
+    stamps[row.get("setup_stamp") or "(pre-PA-3 row: no column)"] = (
+        stamps.get(row.get("setup_stamp") or "(pre-PA-3 row: no column)", 0) + 1
+    )
+print()
+print("Setup stamps presented in the window (D-108.4):")
+for stamp, count in sorted(stamps.items(), key=lambda kv: (-kv[1], kv[0])):
+    print(f"  {stamp:<34} {count} row(s)")
 PYTHON

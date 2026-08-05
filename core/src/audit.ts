@@ -25,7 +25,20 @@ export interface AuditRecord {
   durationMs: number;
   resultMeta: Record<string, unknown>;
   statementText: string | null;
+  /**
+   * D-108.4 / PA-3: the compiled-setup stamp the session presented on
+   * its MCP URL, or the literal `unstamped` when it presented none.
+   * Not optional — a caller that forgets it would write NULL, which
+   * this column reserves for rows that predate it (see migration
+   * 0011). The value is the client's claim about itself, and pairs
+   * with the server's own comparison: PA-2's notice says whether it
+   * matched, this column says what it was.
+   */
+  setupStamp: string;
 }
+
+/** The value written when a session presents no stamp at all. */
+export const UNSTAMPED = "unstamped";
 
 /** Deterministic JSON: object keys sorted at every level. */
 export function canonicalJson(value: unknown): string {
@@ -47,8 +60,8 @@ export async function writeAudit(pool: pg.Pool, rec: AuditRecord): Promise<void>
     `INSERT INTO audit_records
        (audit_id, subject, roles, profile, session_id, tool, args_digest,
         kb_ref, snapshot_ref, decision, decision_reason, duration_ms,
-        result_meta, statement_text)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        result_meta, statement_text, setup_stamp)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
     [
       rec.auditId,
       rec.subject,
@@ -64,6 +77,7 @@ export async function writeAudit(pool: pg.Pool, rec: AuditRecord): Promise<void>
       rec.durationMs,
       JSON.stringify(rec.resultMeta),
       rec.statementText,
+      rec.setupStamp,
     ],
   );
 }

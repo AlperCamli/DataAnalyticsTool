@@ -30,3 +30,9 @@ config_schema: ./config.schema.json
 # so no secret ever rides a URL or this connector's config (JC-8).
 credentials: []
 rate_limit: { strategy: none }
+# A-3: the builtin probe runs, and for this adapter it has exactly one
+# honest thing to report — the config is valid and there is no
+# credential to test, because the template-link path holds none. The
+# probe result says `unprobed: [publish]` rather than showing a green
+# tick nobody earned (CI-5's tenant probe is the unbuilt half).
+health_probe: builtin

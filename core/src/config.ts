@@ -66,6 +66,19 @@ export interface DashboardConfig {
   /** Approved requests stamped by one "deliver batch" trigger
    * (ledger §8: batches are cut on demand or at ~10). */
   batchMax: number;
+  /**
+   * A-3 / UI-4: the OIDC roles that may write the connection registry.
+   *
+   * Registering a source is provisioning — the playbook's R3 (platform
+   * admin / ops owner), whose `roles.yaml` group is `ops`. Kept distinct
+   * from `opsRoles` (which opens the whole job/ops HTTP surface and
+   * deliberately includes `steward`) because A-3's gate is precisely
+   * that a steward reads connections and does not change them.
+   */
+  adminRoles: string[];
+  /** How long a `test_connection` probe is awaited before the caller is
+   * told there is no verdict yet (never told it failed). */
+  probeTimeoutS: number;
 }
 
 export interface McpConfig {
@@ -281,7 +294,9 @@ function loadDashboardConfig(
   }
   return {
     enabled,
-    postLoginPath: env.CORE_DASHBOARD_POST_LOGIN ?? "/",
+    // B-2: sign-in lands in the SPA. Overridable, because a deployment
+    // that fronts the core with a path prefix needs to say so.
+    postLoginPath: env.CORE_DASHBOARD_POST_LOGIN ?? "/app/",
     sessionMaxS: intVar(env, "CORE_DASHBOARD_SESSION_MAX_S", 12 * 3600),
     cookieSecure:
       env.CORE_DASHBOARD_COOKIE_SECURE !== undefined && env.CORE_DASHBOARD_COOKIE_SECURE !== ""
@@ -290,6 +305,11 @@ function loadDashboardConfig(
     pageDefault,
     pageMax,
     batchMax: intVar(env, "CORE_DASHBOARD_BATCH_MAX", 10),
+    probeTimeoutS: intVar(env, "CORE_DASHBOARD_PROBE_TIMEOUT_S", 60),
+    adminRoles: (env.CORE_DASHBOARD_ADMIN_ROLES ?? "ops")
+      .split(",")
+      .map((r) => r.trim())
+      .filter(Boolean),
   };
 }
 

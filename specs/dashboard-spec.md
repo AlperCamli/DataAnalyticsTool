@@ -48,7 +48,7 @@ The CP-8 Part 5 matrix is adopted verbatim as this spec's access statement, with
 
 Three endpoints, each: authenticated by the caller's OIDC session; role-and-subject filtered server-side per §4; paginated; stable JSON shapes versioned with the core.
 
-1. **Audit read** — query by time window, subject (self-only unless role permits), tool, decision; returns audit records as stored (args digests, decisions incl. denied/filtered); `extract-audit.sh` becomes a client of this endpoint (its direct-DB path retires).
+1. **Audit read** — query by time window, subject (self-only unless role permits), tool, decision; returns audit records as stored (args digests, decisions incl. denied/filtered, and per D-108.4 the `setup_stamp` the session presented — `unstamped` when it presented none, absent/null only on rows predating the column); `extract-audit.sh` becomes a client of this endpoint (its direct-DB path retires).
 2. **Publish deliveries read** — by artifact id or window: model deliveries, attestations, dangling (delivered-unattested) state, per-revision definition hashes.
 3. **Ledger triage read + workflow writes** — read: open issues and enrichment requests ordered by occurrences/distinct_subjects, visibility-filtered per M-4, counts-only subjects (LED-R7), server-scrubbed text (LED-R2/R5). Writes, each role-gated server-side: the `human_filed` gap inlet under the filer's server-derived identity; the enrichment-request inlet (optional proposal text, scrubbed and length-bounded); steward verdict writes (approve / reject-with-reason — ledger state only per UI-11, recorded with the steward's identity and timestamp); the "deliver batch" trigger marking approved items batched. Rejection reasons and batch-merge resolutions surface to the filer (F-10).
 

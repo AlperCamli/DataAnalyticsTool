@@ -82,6 +82,10 @@ export interface KbState {
   profiles: Map<string, Record<string, unknown>>;
   guardrails: Record<string, Record<string, unknown>>;
   syncPolicy: Record<string, unknown> | null;
+  /** `.contextlayer/dashboard.yaml` — which modules a deployment turns
+   * on and which roles see them (UI-9). Null when the KB carries none,
+   * which the module endpoint reports rather than papers over. */
+  dashboard: Record<string, unknown> | null;
   graph: { nodes: { id: string; node_kind?: string; resolved?: boolean }[]; edges: Record<string, unknown>[] } | null;
 }
 
@@ -300,6 +304,7 @@ export class KbReader {
     const profiles = new Map<string, Record<string, unknown>>();
     let roles: RoleEntry[] | null = null;
     let syncPolicy: Record<string, unknown> | null = null;
+    let dashboard: Record<string, unknown> | null = null;
     let graph: KbState["graph"] = null;
 
     for (const rel of await walkFiles(workdir)) {
@@ -326,6 +331,16 @@ export class KbReader {
             }));
           } catch {
             roles = null;
+          }
+        } else if (rel === ".contextlayer/dashboard.yaml") {
+          try {
+            const parsed = YAML.parse(await readFile(full, "utf-8")) as Record<string, unknown>;
+            dashboard = parsed && typeof parsed === "object" ? parsed : null;
+          } catch {
+            // An unparseable dashboard.yaml configures nothing; the
+            // module endpoint then reports the shipped default and says
+            // which it used, rather than serving a half-read file.
+            dashboard = null;
           }
         } else if (rel === ".contextlayer/sync-policy.yaml") {
           try {
@@ -400,6 +415,7 @@ export class KbReader {
       profiles,
       guardrails: parseGuardrails(conventions),
       syncPolicy,
+      dashboard,
       graph,
     };
   }

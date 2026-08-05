@@ -13,6 +13,11 @@ COPY core/package.json core/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY core/tsconfig.json ./
 COPY core/src ./src
+# B-2: the dashboard's browser bundle is built here, in the same stage
+# and from the same commit as the server that serves it (UI-9: one
+# release train). `npm run build` runs web/build.mjs first, so a source
+# tree and an image can never disagree about which SPA a core ships.
+COPY core/web ./web
 RUN npm run build && npm prune --omit=dev
 
 # The platform wheel (§10): built from source so the image's carry
@@ -51,6 +56,10 @@ COPY --from=wheelbuild /wheels /opt/contextlayer/wheels
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+# The built SPA (src/spa.ts serves it). Without it the core still runs
+# and its APIs still answer; the browser gets a stated "not built in this
+# image" page rather than a blank one.
+COPY --from=build /app/web/dist ./web/dist
 # The shipped skills (D-75.1: skills come from the core image, never the
 # KB clone). Until A-2 the only compile ran from a developer checkout on
 # the host, where `core/skills/` sits beside `dist/` anyway; now the core

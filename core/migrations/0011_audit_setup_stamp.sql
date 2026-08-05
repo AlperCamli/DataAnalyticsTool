@@ -1,0 +1,16 @@
+-- D-108.4 / register item PA-3: the audit record states which compiled
+-- setup the session presented.
+--
+-- A-2 built the staleness comparison (D-107.2) and A-2's evidence
+-- extraction could show *that* eleven calls happened — but not which
+-- bundle made them. The stamp lived only in the client's MCP URL and in
+-- the notice the server returned; nothing durable recorded it, so
+-- "this session ran a current setup" was an inference from timing
+-- rather than a row. One nullable text column closes that.
+--
+-- Values: the 16-hex stamp the session presented, or the literal
+-- 'unstamped' when it presented none (every pre-A-2 bundle, and any
+-- hand-written .mcp.json). NULL means the row predates this column —
+-- deliberately distinct from 'unstamped', which is a fact the server
+-- observed rather than a fact it never had.
+ALTER TABLE audit_records ADD COLUMN setup_stamp text;

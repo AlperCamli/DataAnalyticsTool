@@ -160,7 +160,9 @@ Tool errors: `{code, message, detail?}` with codes `not_found | invalid_argument
 
 ## 8. Audit contract (M-8)
 
-One record per call: `{ts, subject, roles, profile, tool, args_digest, refs, decision, duration_ms, result_meta}` where `result_meta` is tool-specific (rows returned + truncated for execute; created URLs for publish; verdict for validate; ledger_id for flag_gap) and `args_digest` is a hash — full SQL/intent text is stored only for execute/validate/publish (the product-spec §8 audit fields), not for reads. Retention and export are dashboard-Audit-module concerns; the record shape is fixed here.
+One record per call: `{ts, subject, roles, profile, tool, args_digest, refs, decision, duration_ms, result_meta, setup_stamp}` where `result_meta` is tool-specific (rows returned + truncated for execute; created URLs for publish; verdict for validate; ledger_id for flag_gap) and `args_digest` is a hash — full SQL/intent text is stored only for execute/validate/publish (the product-spec §8 audit fields), not for reads. Retention and export are dashboard-Audit-module concerns; the record shape is fixed here.
+
+**Amendment (D-108.4, register item PA-3, 2026-08-06) — `setup_stamp`, additive.** The record carries the compiled-setup stamp the session presented on its MCP URL (§5's `?setup=`), or the literal `unstamped` when it presented none. Rationale: the staleness mechanism (PA-2, D-107.2) compares the presented stamp at `initialize` and says so in the server's `instructions`, but that comparison was durable nowhere — an audit row could show *that* a session ran and not *which setup it ran*, so "the session was current" was an inference from timestamps rather than a fact in the record. The value is the client's claim about itself, recorded verbatim and never trusted for any decision: enforcement remains (roles ∩ profile) recomputed per call (M-3), and nothing reads this column to permit or deny anything. It is written on every audited call including the denied-connection rows, because a refused connection is exactly the row an investigator most wants it for.
 
 ## 9. Conformance tests
 

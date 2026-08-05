@@ -57,6 +57,32 @@ class GA4Metadata(MetadataProvider):
         self._sleep = sleep
         self._rng = rng
 
+    def preflight(self, config: dict) -> dict:
+        """The first GET a snapshot job makes, and nothing else.
+
+        `properties/{id}` is call 1 of the six in `introspect`, so this
+        exercises the whole credential path — service-account key loads,
+        token mints, property is reachable and readable by this account
+        — at the cost of one request. The client's own mapping does the
+        classification: 401/403 becomes `AuthError`, which is what the
+        Connections module turns into a re-auth prompt.
+        """
+        client = GA4Client(
+            self._transport_factory(config),
+            QuotaPolicy.from_rate_limit(MANIFEST.rate_limit),
+            sleep=self._sleep,
+            rng=self._rng,
+        )
+        pid = config["property_id"]
+        prop = client.get_json(f"{ADMIN_API}/v1beta/properties/{pid}")
+        return {
+            "probed": True,
+            "credential_tested": True,
+            "property_id": pid,
+            "display_name": prop.get("displayName"),
+            "time_zone": prop.get("timeZone"),
+        }
+
     def introspect(self, config: dict) -> IntrospectionResult:
         client = GA4Client(
             self._transport_factory(config),

@@ -74,18 +74,42 @@ Create the KB repo on the **customer's git server**; the generator bootstraps: r
 
 ## 6. Step 3 — Connect sources → first snapshots
 
-**Actors:** R3 (credentials), R5 (config). **Components:** dashboard Connections module, connector runners, job API. **Governing specs:** connector manifests (capability spec §3 — `config_schema` drives the config forms), job protocol (claim/lease/deliver), snapshot spec (validation on receipt, J-6).
+**Actors:** R3 (ops owner — registers connections, holds credentials), R5 (config), R2 (steward — reads). **Components:** dashboard **Connections** module, the Connections API behind it, connector runners, job API. **Governing specs:** connector manifests (capability spec §3 — `config_schema` is the contract each `config` block is validated against), job protocol (claim/lease/deliver), snapshot spec (validation on receipt, J-6), dashboard spec §3/§4.
 
-Per source, by P1 case:
+**Amended 2026-08-06 (A-3 + B-2).** This step used to describe a vendor CLI writing the connection registry directly — E2's stand-in since D-63.8, and the reason CP-8 graded this step ASSISTED. It is written out. There is now one governed API, a browser module in front of it, and a CLI that is a peer client of the same endpoints; nothing below requires a vendor engineer or a database shell.
+
+### 3.1 Register each source
+
+Sign in to the dashboard at `<core-url>/app/` with the customer's own IdP identity and open **Connections**. Registering, changing, deleting and testing are **ops acts** and are checked server-side against the caller's OIDC roles (`CORE_DASHBOARD_ADMIN_ROLES`, default `ops` — R3's group in `roles.yaml`); a steward sees the same screen read-only; anyone else is refused by the server. Nothing about that gate lives in the browser.
+
+Per source, by P1 case — the `config` block is the connector's own schema, so its fields are the ones that connector documents:
 
 | Case | Concrete flow | Notes |
 |---|---|---|
-| A — DDL files | Customer hands DDL/migrations → `snapshot` job in `ddl-file` mode (ephemeral container introspection) | Zero live access needed; fastest possible start |
-| B — live | Read-only role created by customer DBA → vault reference → `live` mode snapshot | Mode invariance (snapshot C-3) guarantees a later A→B upgrade produces no spurious diffs |
-| C — API | Service account (e.g. GA4 read access, GSC verified property) → `api` mode | Quota policy from the manifest; deferral semantics J-5 already handle throttling |
+| A — DDL files | Customer hands DDL/migrations → register with `mode: ddl-file` (`ddl_files`, `image`) → `snapshot` job runs an ephemeral container | Zero live access needed; fastest possible start. Test reports **no credential tested** here, because there is none — the source is a set of files |
+| B — live | Read-only role created by the customer's DBA → register with `mode: live` and a **credential reference** → `live` mode snapshot | Mode invariance (snapshot C-3) guarantees a later A→B upgrade produces no spurious diffs |
+| C — API | Service account (GA4 read access, GSC verified property) → register with `mode: api` and a credential reference | Quota policy from the manifest; deferral semantics J-5 already handle throttling |
 | D — locked | Replica DSN or scheduled offline exports | The snapshot boundary hides the difference from everything downstream |
 
-Then wire the sync policy per source: CI webhook on their migrations/pipeline repo (`/v1/hooks/{system}`, JP-4), and/or nightly schedule, and/or manual-resubmission with the freshness threshold (OD-3). **Failure handling is already specified:** bad credentials → `auth_error` → Connections re-auth prompt; unreachable source → retries → health warning; invalid snapshot → dead-letter (connector bug, our problem). **Exit:** one accepted snapshot per system in ops Postgres, health green, sync triggers armed.
+**Credential references only, enforced.** A connection stores `env://NAME` (or `vault://PATH` once A-4 lands) — never a password, DSN, or key. The form says so and has no field to type a secret into; a payload carrying credential material is refused with `raw_secret_rejected` naming the *field* and never echoing the value (J-4). The value itself lives where the runner's resolver reads it, and rotating it needs no change to the connection.
+
+**Registration is proved, not asserted.** The response is the row re-read from the store after the write; a write the store did not take answers `write_not_observed` and reports no success. This closes the D-84 class by construction — "registered" is the store's statement, not the writer's.
+
+### 3.2 Test each source
+
+Press **Test connection** (or `cli.js sync test SYSTEM`). This enqueues a `test_connection` job, which a runner claims and executes with the connector's **builtin probe** (capability §3 `health_probe: builtin`): the config gate, plus each preflight surface the connector declares — for Postgres, connecting as the introspection role and checking it holds neither SUPERUSER nor BYPASSRLS (D-71.2), and the G3 execution-role wall.
+
+Read the verdict literally. A capability the probe could not exercise is listed as **unprobed** and is *not* a pass: publisher adapters (Looker Studio, Power BI) report `unprobed: [publish]` today, because the CI-5 tenant probe is unbuilt. If no runner hosts the connector, the answer is `pending` with the job id — never a failure of the source.
+
+**When a credential is wrong**, the probe fails `auth_error` and the module renders a **re-auth prompt** naming the credential *reference* whose value needs refreshing, with what to do about it. That is the whole loop: fix the value where the resolver reads it, press test again.
+
+### 3.3 Arm the sync policy
+
+Wire the triggers per source in `.contextlayer/sync-policy.yaml`: CI webhook on their migrations/pipeline repo (`/v1/hooks/{system}`, JP-4 — the per-hook secret is `cli.js sync hook set SYSTEM`, printed once), and/or a schedule, and/or manual resubmission with a freshness threshold (OD-3). Take the first snapshot from the module's **sync now** (or `cli.js sync now SYSTEM`).
+
+**Failure handling is already specified:** bad credentials → `auth_error` → the re-auth prompt above; unreachable source → retries → health warning; invalid snapshot → dead-letter (a connector bug, our problem).
+
+**Exit:** the dashboard is reachable and the customer's own identity signs in; every source appears in **Connections** with health; **Test connection** passes on each (or names, per source, exactly which capability went unprobed and why); one accepted snapshot per system; health **green** — meaning an accepted snapshot inside that system's freshness threshold with no failed last job. Health that reads `amber` or `unknown` is a statement about the estate, not a formatting problem: `amber` means no snapshot has been accepted yet or no policy entry states how old one may get, and `unknown` means `sync-policy.yaml` could not be read at all. None of the three is a green with an asterisk.
 
 ## 7. Step 4 — Generation: the machine KB
 

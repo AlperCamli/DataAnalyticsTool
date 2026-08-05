@@ -34,7 +34,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { writeAudit } from "./audit.js";
+import { UNSTAMPED, writeAudit } from "./audit.js";
 import { neutralize } from "./changelog.js";
 import type { CoreConfig } from "./config.js";
 import { executeRequest } from "./execute.js";
@@ -936,6 +936,15 @@ export function registerMcp(app: FastifyInstance, deps: McpDeps): void {
     const isToolCall = body?.method === "tools/call";
     const sessionId = typeof req.headers["mcp-session-id"] === "string" ? req.headers["mcp-session-id"] : null;
 
+    // PA-2's stamp, read before anything can be audited (D-108.4): a
+    // denied connection is exactly the row an investigator most wants
+    // the presenting setup for, so it is resolved here rather than at
+    // the comparison below.
+    const presentedStamp = typeof (req.query as { setup?: string }).setup === "string"
+      ? (req.query as { setup: string }).setup
+      : "";
+    const setupStamp = presentedStamp || UNSTAMPED;
+
     const connectionDenied = async (reason: string) => {
       // MCP-R2: a profile the caller's roles don't permit fails the
       // connection (initialize and every subsequent request alike).
@@ -955,6 +964,7 @@ export function registerMcp(app: FastifyInstance, deps: McpDeps): void {
           durationMs: 0,
           resultMeta: {},
           statementText: null,
+          setupStamp,
         }).catch((e) => deps.log("audit write failed", e));
       }
       return reply.code(403).send({ error: "forbidden", detail: reason });
@@ -977,9 +987,6 @@ export function registerMcp(app: FastifyInstance, deps: McpDeps): void {
     // attempts*: on 2026-07-29 a reporter's session declined to build a
     // report its profile already permitted. The notice below is the
     // signal that was missing.
-    const presentedStamp = typeof (req.query as { setup?: string }).setup === "string"
-      ? (req.query as { setup: string }).setup
-      : "";
     const notice = setupNotice(
       freshnessOf(presentedStamp, await currentStamp(ws, profileName, rawProfile, cfg.mcp.publicUrl)),
       cfg.mcp.publicUrl,
@@ -1066,6 +1073,7 @@ export function registerMcp(app: FastifyInstance, deps: McpDeps): void {
         // §8: full statement/intent text is stored for validate, execute,
         // and publish — never for reads, where args_digest is the record.
         statementText: STATEMENT_TEXT_TOOLS.has(tool) ? outcome.statementText ?? null : null,
+        setupStamp,
       }).catch((e) => deps.log("audit write failed", e));
 
       return {

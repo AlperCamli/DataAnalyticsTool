@@ -35,3 +35,6 @@ core/dist/
 /results/cp7-gate/page-certification/
 /results/cp7-powerbi-live/
 /results/manual-*/results.json
+
+# stray root-level npx/vitest cache (the workspace lives in core/)
+/node_modules/

@@ -22,3 +22,10 @@ credentials:
       to serve execution if the role can write. Provisioning SQL and
       runbook: deploy/execution-role.sql.
 rate_limit: { strategy: none }
+# A-3: the SDK's builtin probe (job type `test_connection`). For this
+# connector it runs the two checks a live snapshot job runs first —
+# connect as the introspection role, verify it holds neither SUPERUSER
+# nor BYPASSRLS (D-71.2) — plus the G3 execution-role wall through the
+# executor's own preflight. In ddl-file mode it verifies the files and
+# reports, rather than implies, that no credential was tested.
+health_probe: builtin

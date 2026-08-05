@@ -84,6 +84,43 @@ class GscMetadata(MetadataProvider):
         self._sleep = sleep
         self._rng = rng
 
+    def preflight(self, config: dict) -> dict:
+        """`sites.get` — which is the whole live contribution anyway.
+
+        The snapshot job's one API call, run on its own: it proves the
+        key loads, the token mints, and the service account is a user of
+        this property. The verification check is the same refusal
+        `introspect` makes, because an unverified property is a
+        connection that cannot work, and a probe that passed on one
+        would be worse than no probe.
+        """
+        site_url = config["site_url"]
+        site = _get_json(
+            self._transport_factory(config),
+            f"{API_BASE}/sites/{quote(site_url, safe='')}",
+            QuotaPolicy.from_rate_limit(MANIFEST.rate_limit),
+            sleep=self._sleep,
+            rng=self._rng,
+        )
+        permission = site.get("permissionLevel")
+        if not isinstance(permission, str):
+            raise SourceUnavailable(
+                f"sites.get returned an unexpected shape for {site_url!r} "
+                "(missing permissionLevel)"
+            )
+        if permission == UNVERIFIED:
+            raise SourceUnavailable(
+                f"property {site.get('siteUrl', site_url)!r} is not verified for this "
+                "service account; verify it in Search Console and retry"
+            )
+        return {
+            "probed": True,
+            "credential_tested": True,
+            "site_url": site.get("siteUrl", site_url),
+            "permission_level": permission,
+            "verified": True,
+        }
+
     def introspect(self, config: dict) -> IntrospectionResult:
         site_url = config["site_url"]
         site = _get_json(

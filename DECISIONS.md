@@ -4774,3 +4774,206 @@ are the task that follows the run, not part of this build.
 250: 3 JC-11, 2 ledger amendments, 11 setup/staleness, 1 compile stamp);
 python **744 passed / 14 skipped / 1 failed** — the estate-state failure
 above, unchanged by this work.
+
+RULING D-107 — A-2 build acceptance + flags
+(owner ruling, 2026-08-05; recorded verbatim, 2026-08-06 — see the
+recording note below)
+
+1. Task 1/2 proposals AFFIRMED as built: compile-on-request (no cache
+   — a cache is a second copy that can be wrong), stamp-compare at
+   initialize, SETUP UNVERIFIABLE degradation for pre-stamp bundles.
+   The instructions-field transport note accepted: no MCP-spec surface
+   changed, none needed.
+2. D-106 judgment calls (trigger-history merge into survivor; deferral
+   cap checked first) AFFIRMED as stated in the amendment text.
+3. VERDICT HISTORY: register item filed (home: ledger spec) —
+   per-verdict log vs latest-only; current shape (latest verdict +
+   reopen_count) ACCEPTED for v1; trigger: the first dispute over a
+   prior rejection reason, or B-1's queue UI wanting history display,
+   whichever first.
+4. JOBS RETENTION: register item filed (home: job protocol) — no
+   retention rule exists for terminal rows (coalesced included);
+   trigger: first deployment where the jobs table's growth is
+   operationally visible; decide sweep semantics then, consistent with
+   the ledger's 90-day event precedent.
+5. A-2 remains OPEN pending the colleague run per the runbook (O-1
+   creates the real identity first — a shared login voids gate claim
+   4) and task 4's evidence. The contamination triage (D-106.6) stands
+   as prior operator work: 34 docs, review-sync in hand.
+
+RULING D-108 — A-2 closure
+(owner ruling, 2026-08-06; recorded verbatim)
+
+1. GATE CLOSED on the extracted evidence: all four clauses met —
+   authenticated download authorized server-side, no credential in the
+   bundle, staleness demonstrated (harness regression + SETUP
+   UNVERIFIABLE degradation), and the second-human journey with
+   subject=eda on all 11 rows, zero operator rows in the window.
+   The 8m41s sign-in-to-first-question figure is recorded as the
+   first measured onboarding number (OB-4-adjacent evidence).
+2. EXECUTION SHAPE, operator statement for the record: execution was
+   available to the session and unattempted, not blocked; capability
+   is separately proven (M2/M3). What happened in the room:
+   [ONE SENTENCE: e.g. "she was satisfied with the validated SQL" /
+   "she didn't realize she could ask for results" / "unobserved"].
+   Recorded as finding A2-F1: a first user's natural stopping point
+   was validated SQL, not results — input to B-1's surfaces and the
+   report skill's phrasing, not a defect.
+3. FRICTION NOTES: [PASTE RAW NOTES / or: "none were taken"]. If none:
+   recorded as finding A2-F2 — the observation half of the first-user
+   run was lost; the A2 runbook gains a line making notes a named
+   operator artifact for any future run.
+4. STAMP-IN-AUDIT GAP accepted as filed: audit rows cannot prove which
+   setup stamp a session presented. Register item PA-3 (home:
+   dashboard spec §5 / MCP audit fields) + the cheap fix AUTHORIZED to
+   ride the next session's task 0: the audit record gains the
+   presented stamp (or "unstamped"), extractor updated. Closes the
+   PA-2 evidence story properly.
+5. A-2 marked CLOSED in the plan; field notes and evidence committed
+   under results/phase2/a2-field-notes/ per the runbook.
+
+**Recording note (A-3/B-2 session, 2026-08-06).** Both rulings above
+are transcribed as issued. Two of D-108's clauses arrived with their
+placeholders unfilled — clause 2's one-sentence operator statement and
+clause 3's friction notes — and this session did not fill them: an
+invented sentence about what happened in a room no session was in is
+the one thing a decisions record must never contain. They stay
+bracketed until the operator writes them, and the two findings they
+govern (A2-F1, A2-F2) are conditional on that text. What this session
+*did* execute is D-108.4 (the stamp-in-audit fix, task 0 below) and
+D-108.5's plan half (A-2 marked CLOSED). D-108.5's field-notes half
+cannot be executed here for the same reason: `results/phase2/a2-field-notes/`
+is the operator's write, and it is empty. **D-107.3 and D-107.4 are
+recorded above but their register rows are NOT filed** — the register
+carries no VERDICT-HISTORY or JOBS-RETENTION item today; filing them is
+outside this session's amendment fence and is flagged, not done.
+
+# DECISIONS — A-3 + B-2 (Connections are operable; the first pixels), 2026-08-06
+
+The paired checkpoint. Task 0 recorded D-107/D-108 and built D-108.4's
+stamp-in-audit fix; tasks 1 and 2 built the Connections API and the SPA
+that faces it; task 3 rewrote playbook step 3 to the shipped surface;
+task 4 wrote the operator's gate runbook and stopped. Each decision
+below is implemented exactly as described, so the code and this record
+cannot quietly disagree.
+
+## D-109 — decisions this build had to take
+
+**D-109.1 — the read-back lives in the registry, not the handler.**
+`upsertSyncSystem` (and `deleteSyncSystem`) now write, re-read through
+the ordinary read path, compare, and throw `RegistryWriteNotObserved`
+when the store disagrees. The API handler therefore has no value to
+answer with except the one the store handed back — there is no line in
+`connections.ts` that echoes the request body. The alternative (verify
+in the handler) was rejected for one reason: a verification only the
+production path performs is a verification the next writer skips, and
+D-84's cost was paid twice by two different writers. Every writer in the
+codebase now inherits it, tests included. **Proved by making the failure
+happen**: a `BEFORE INSERT OR UPDATE` trigger returning NULL reproduces
+the exact D-84 shape — no error, no row — and the API answers 500
+`write_not_observed` rather than 200.
+
+**D-109.2 — ops writes, steward reads, and `adminRoles` is a distinct
+config from `opsRoles`.** Registering a source is provisioning, which is
+the playbook's R3 (`oidc_group: ops`), not the steward's context work.
+`CORE_DASHBOARD_ADMIN_ROLES` defaults to `ops` and is deliberately not
+`opsRoles` — that list defaults to `ops,steward` because it opens the
+whole job/ops HTTP surface, and reusing it would have collapsed exactly
+the split A-3's gate asks for. No new role was invented: `ops` is
+already in the pilot's `roles.yaml` and in the ops-surface config, which
+is UI-4's rule (the dashboard never knows a role the server doesn't).
+
+**D-109.3 — the probe is the SDK's builtin, over surfaces that already
+existed.** `test_connection` (job §4.2, `implemented` at last) dispatches
+to a new engine in `connectors/sdk/runner.py` that runs the config gate
+plus each declared capability's preflight. `QueryExecutor.preflight`
+already existed (G3's startup check); `MetadataProvider.preflight` is its
+symmetric twin, with a **no-op default**, implemented for postgres by
+reusing `_live_dsn` + `_connect` + `check_introspection_role` (the two
+things every live snapshot job does first) and for ga4/gsc by making the
+one API call their `introspect` makes first. No new credential path
+exists: the runner resolves references exactly as it does for a snapshot
+job. `health_probe: builtin` — already in the manifest schema and in the
+capability spec's reference manifest — is how a connector opts in, and
+it is now declared on all six.
+
+*The honesty rule inside it.* A capability whose handler implements no
+preflight is reported `unprobed`, never counted as a pass. Looker Studio
+and Power BI therefore answer `unprobed: [publish]` today, because CI-5's
+tenant probe is unbuilt. A green tick beside a connection nobody has ever
+successfully used is the precise failure this checkpoint exists to
+prevent, and it would have been one line of convenience to ship it.
+
+**D-109.4 — health has four states and "not a sync source" is one of the
+readings.** `sync-policy.yaml` is the declaration of which systems are
+snapshotted. A registered connection absent from it — a publish target —
+will never hold an accepted snapshot, so freshness cannot be its verdict;
+its last job is. **Found by the live check, not by reasoning**: the first
+run against the pilot reported `looker_studio` and `powerbi` permanently
+`amber / never_snapshotted`, which would have made playbook step-3's
+"health green" exit unreachable for two of five connections and taught
+the operator to ignore the colour. The four states stay four (green /
+amber / red / unknown); what changed is which question each connection is
+judged on. `unknown` remains a real answer: an unreadable
+`sync-policy.yaml` is reported as such rather than defaulted to green.
+
+**D-109.5 — references are refused by shape as well as by name.** A
+write carrying `config.dsn`, `client_secret`, `password` and the rest is
+refused with `raw_secret_rejected` naming the field and its indirection
+twin; so is any string value shaped like a URI with an embedded
+password, a PEM key, or a service-account JSON, wherever it appears. The
+refusal **never echoes the value** — an error message is a thing people
+paste into tickets. `vault://` is accepted alongside `env://` now, so
+A-4 changes the resolver and not this validation. Reads are deliberately
+not gated the same way: the existing pilot rows must remain readable and
+testable unchanged, which the live check confirms they are.
+
+**D-109.6 — the module map is a server answer; the client has no role
+model.** `GET /v1/dashboard/modules` resolves `.contextlayer/dashboard.yaml`
+against the caller's OIDC roles server-side and returns the list; the SPA
+renders it. DT-2 is asserted two ways: the **shipped bundle** contains no
+role name and no role-check shape, and the app's **own sources** contain
+no raw-HTML escape hatch, no browser storage, and no password input. A KB
+with no `dashboard.yaml` (the pilot's, today) gets the shipped default
+and the response *says* `config_source: default` — an operator who edits
+that file and sees no change can tell it was never read without opening a
+log. A KB that declares `role_views` and says nothing about a caller's
+roles shows them nothing: the narrow reading, so a half-applied config
+never looks fully applied.
+
+**D-109.7 — component and library specifics (D-103 allows ≤5 lines).**
+React 18 + TypeScript, bundled by **esbuild** (`web/build.mjs`, ~30 lines)
+to `web/dist/{app.js,app.css,index.html}`, built in the same Docker stage
+as the server that serves it. **No router, no component library, no state
+library, no CSS framework** — `fetch` plus `useState`/`useEffect`, one
+hand-written stylesheet, one `history.pushState` route switch. The whole
+client is five files; that is the ceiling this ruling should be held to
+until a screen genuinely needs more.
+
+## What the live check found (2026-08-06, pilot stack)
+
+All five existing pilot rows read through the new API **unchanged** and
+all five probe **pass**: `supabase` green (introspection role verified
+non-superuser/non-BYPASSRLS, execution role's write-wall verified),
+`ga4` and `gsc` pass on one real API call each while their *snapshots*
+read **red / stale** (16 days and 5.5 days against 3-day thresholds — a
+true statement about the estate, surfaced by this build rather than
+caused by it), and the two publisher adapters pass with `publish`
+unprobed. `/app/` serves, `/` redirects to it, and the module map answers
+`config_source: default` because the pilot KB carries no `dashboard.yaml`.
+
+## What is NOT closed by this entry
+
+**The A-3/B-2 gate demo is the operator's** and no session can run it:
+signing in as a person, reading five health states, pressing test, adding
+and removing a scratch connection, and writing down every place the
+product failed to explain itself. `results/phase2/a3-b2/GATE-RUNBOOK.md`
+is the page; `extract-connections.sh` beside it pulls the evidence
+through the governed APIs, holding no database credential.
+
+**Two things this build deliberately did not do**, both flagged rather
+than quietly absorbed: connection CRUD writes are **not** in
+`audit_records` (that table is specified as one row per MCP call; the
+durable record of a dashboard act today is the job's trigger actor), and
+the capability spec has **no `test_connection` section** — the builtin
+probe's two preflight surfaces are shipped and undocumented there.

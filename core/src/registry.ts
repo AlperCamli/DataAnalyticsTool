@@ -50,7 +50,11 @@ export const JOB_TYPES: ReadonlyMap<string, JobTypeSpec> = new Map(
       { type: "harvest", class: "batch", implemented: false },
       { type: "lineage", class: "batch", implemented: false },
       { type: "usage", class: "batch", implemented: false },
-      { type: "test_connection", class: "interactive", implemented: false },
+      // A-3: the builtin health probe. Interactive because an operator
+      // is watching the Connections screen when it runs; `implemented`
+      // because the SDK now has an engine for it (capability §3
+      // `health_probe: builtin`) and the core relays its result inline.
+      { type: "test_connection", class: "interactive", implemented: true },
       // CP-6: the execution gateway is the producer; results are relayed
       // inline to the blocked caller (§6.4).
       { type: "execute", class: "interactive", implemented: true },

@@ -172,16 +172,49 @@ describe("extract-audit.sh over the §5 read APIs", () => {
     expect(script).toContain("/v1/dashboard/audit");
   });
 
-  it("reproduces audit-chain.txt byte for byte", () => {
-    expect(extracted("audit-chain.txt")).toBe(committed("audit-chain.txt"));
+  /**
+   * PA-3 (D-108.4) added one audit column *after* this evidence was
+   * written, so a fresh extraction now carries one field the committed
+   * files could not have. The evidence is not rewritten to match — it is
+   * the record of what was extracted then. Instead the relationship is
+   * stated exactly: strip the one new field and the reproduction is
+   * still byte for byte, and the stripped field is `-` on every row,
+   * which is what the column means for rows that predate it.
+   */
+  const withoutStamp = (text: string) =>
+    text
+      .split("\n")
+      .map((line) => (line ? line.slice(0, line.lastIndexOf("|")) : line))
+      .join("\n");
+
+  it("reproduces audit-chain.txt byte for byte, but for PA-3's added field", () => {
+    expect(withoutStamp(extracted("audit-chain.txt"))).toBe(committed("audit-chain.txt"));
+    for (const line of extracted("audit-chain.txt").split("\n").filter(Boolean)) {
+      // NULL, not `unstamped`: these rows predate the column, which is a
+      // different statement from "the session presented no stamp".
+      expect(line.slice(line.lastIndexOf("|") + 1)).toBe("-");
+    }
   });
 
-  it("reproduces audit-chain.json byte for byte", () => {
-    expect(extracted("audit-chain.json")).toBe(committed("audit-chain.json"));
+  /** The JSON files gain one key per row for the same reason. */
+  const stripStamp = (text: string) =>
+    (JSON.parse(text) as Record<string, unknown>[]).map((row) => {
+      expect(Object.hasOwn(row, "setup_stamp")).toBe(true);
+      expect(row.setup_stamp).toBeNull();
+      const { setup_stamp: _dropped, ...rest } = row;
+      return rest;
+    });
+
+  it("reproduces audit-chain.json, but for PA-3's added key", () => {
+    expect(stripStamp(extracted("audit-chain.json"))).toEqual(
+      JSON.parse(committed("audit-chain.json")),
+    );
   });
 
-  it("reproduces publish-results.json byte for byte", () => {
-    expect(extracted("publish-results.json")).toBe(committed("publish-results.json"));
+  it("reproduces publish-results.json, but for PA-3's added key", () => {
+    expect(stripStamp(extracted("publish-results.json"))).toEqual(
+      JSON.parse(committed("publish-results.json")),
+    );
   });
 
   it("reproduces publish-trail.txt byte for byte, dangling section included", () => {

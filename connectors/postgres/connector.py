@@ -88,6 +88,38 @@ def check_introspection_role(conn: psycopg.Connection) -> dict:
 
 
 class PostgresMetadata(MetadataProvider):
+    def preflight(self, config: dict) -> dict:
+        """Connect as the introspection role and read it back.
+
+        Exactly the first two things a live snapshot job does — resolve
+        the DSN the same way, connect through the same `_connect` (whose
+        error mapping is what turns a refused password into `auth_error`
+        and therefore into the operator's re-auth prompt), and run the
+        same D-71.2 role check. Nothing beyond that: a probe is not a
+        small snapshot.
+
+        In `ddl-file` mode there is no customer connection to test — the
+        source is a set of files and an ephemeral container — so the
+        probe checks the files exist and says plainly that it tested no
+        credential, rather than booting a container to manufacture a
+        green tick.
+        """
+        if config.get("mode") == "ddl-file":
+            files = [Path(p) for p in config.get("ddl_files") or []]
+            missing = [str(p) for p in files if not p.is_file()]
+            if missing:
+                raise ConfigError(f"DDL files not found: {', '.join(missing)}")
+            return {
+                "probed": True,
+                "mode": "ddl-file",
+                "ddl_files": len(files),
+                "credential_tested": False,
+                "note": "ddl-file mode reads local files; no source credential exists to test",
+            }
+        with _connect(self._live_dsn(config)) as conn:
+            facts = check_introspection_role(conn)
+        return {"probed": True, "mode": "live", "credential_tested": True, **facts}
+
     def introspect(self, config: dict) -> IntrospectionResult:
         schemas = config.get("schemas")
         if config["mode"] == "live":

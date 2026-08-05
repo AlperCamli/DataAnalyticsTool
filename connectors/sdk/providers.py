@@ -44,6 +44,26 @@ class MetadataProvider(ABC):
     classified failures; anything else maps to `internal`.
     """
 
+    def preflight(self, config: dict) -> dict:
+        """Optional reachability check against the configured source.
+
+        The twin of `QueryExecutor.preflight`, and the metadata half of
+        the manifest's `health_probe: builtin` (capability §3) — the
+        engine calls it for job type `test_connection`. It must use the
+        **same credential resolution `introspect` uses** and do the
+        cheapest real thing that proves the source answers: connect and
+        read the role, or make the one GET the snapshot job would make
+        first. Raise `AuthError` when the credential is refused (that is
+        what turns into the operator's re-auth prompt),
+        `SourceUnavailable` when the source is unreachable, `ConfigError`
+        when the config could never work.
+
+        Returns facts about what it found, for the operator to read. The
+        default is honest rather than green: no probe exists, and
+        `{"probed": False}` says so instead of implying a pass.
+        """
+        return {"probed": False, "reason": "this connector implements no metadata preflight"}
+
     @abstractmethod
     def introspect(self, config: dict) -> IntrospectionResult:
         """Introspect the source described by `config` (already
@@ -218,10 +238,16 @@ class QueryExecutor(ABC):
     ) -> ExecuteResult:
         """Execute one validated request and return the capped result."""
 
-    def preflight(self, config: dict) -> None:
+    def preflight(self, config: dict) -> dict:
         """Optional startup check, run before the executor serves any
         traffic. Raise `ConfigError` to refuse service — the postgres
-        executor uses this to verify its role cannot write (G3)."""
+        executor uses this to verify its role cannot write (G3).
+
+        Also the query half of the builtin health probe (job type
+        `test_connection`): the same check, run on demand instead of at
+        startup. Returns facts; the default reports that it probed
+        nothing rather than implying a pass."""
+        return {"probed": False, "reason": "this connector implements no query preflight"}
 
 
 @dataclass(frozen=True)
@@ -328,6 +354,14 @@ class Publisher(ABC):
 
     #: artifact_version values this adapter can parse (§8.2 gate).
     SUPPORTED_ARTIFACT_VERSIONS: tuple[str, ...] = ("1",)
+
+    def preflight(self, config: dict) -> dict:
+        """Optional tenant probe for the builtin health probe (job type
+        `test_connection`). CI-5's refinement lives here when it is
+        built: a probe may only ever *narrow* the manifest's declared
+        flags, never widen them. Unbuilt in v1 — the default says so
+        rather than reporting a pass nobody performed."""
+        return {"probed": False, "reason": "this adapter implements no publish preflight"}
 
     @abstractmethod
     def publish(

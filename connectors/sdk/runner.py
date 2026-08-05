@@ -114,6 +114,8 @@ def run_job(connector: Connector, job: Job, *, captured_at: str | None = None) -
         return _run_execute(connector, job)
     if job.type == "publish":
         return _run_publish(connector, job)
+    if job.type == "test_connection":
+        return _run_test_connection(connector, job)
     if job.type != "snapshot":
         raise ValueError(f"no engine for job type {job.type!r} in this SDK version")
 
@@ -182,6 +184,151 @@ def run_job(connector: Connector, job: Job, *, captured_at: str | None = None) -
         job.job_id, len(emitted.document["objects"]), emitted.document["system"],
     )
     return JobOutcome(status="succeeded", snapshot=emitted)
+
+
+#: Capability → the handler method the builtin probe calls for it. Every
+#: entry names a preflight surface that already existed for another
+#: reason; the probe introduces no credential path of its own — each
+#: handler resolves exactly what its real work resolves.
+PROBED_CAPABILITIES = ("metadata", "query", "publish")
+
+
+def _probe_config_problems(manifest, config: object) -> list[str]:
+    """The config gate, for a probe rather than a snapshot.
+
+    Same schema validation `config_problems` runs, minus its snapshot-
+    only `mode` requirement — a publish-only adapter has no metadata
+    mode and refusing it for the lack of one would be a lie about the
+    config. When the connector *does* declare metadata modes, the mode
+    is checked exactly as the snapshot engine checks it.
+    """
+    if not isinstance(config, dict):
+        return ["config must be a JSON object"]
+    if manifest.metadata_modes():
+        return config_problems(manifest, config)
+    problems = [
+        p
+        for p in config_problems(manifest, config)
+        if "'mode' must be one of the manifest's declared metadata" not in p
+    ]
+    return problems
+
+
+def _run_test_connection(connector: Connector, job: Job) -> JobOutcome:
+    """The builtin health probe (job §4.2 `test_connection`, capability
+    §3 `health_probe: builtin`).
+
+    Two rules make this probe worth trusting.
+
+    **It reuses the surfaces that already existed.** Every check below
+    is something the connector already did for another reason — the
+    snapshot engine's config gate, the introspection role check that
+    runs at the head of every live snapshot job, the G3 execution-role
+    wall the runner preflights at startup. Nothing here opens a new way
+    to reach a credential; a probe with its own credential path would be
+    a second thing to keep honest.
+
+    **It never reports a pass it did not perform.** A capability whose
+    handler implements no preflight is listed in `unprobed`, not counted
+    as green. The failure this avoids is the one the whole checkpoint
+    exists for: a Connections screen showing a healthy tick beside a
+    connection nobody has ever successfully used.
+    """
+    manifest = connector.manifest
+    checks: list[dict] = []
+    unprobed: list[str] = []
+
+    problems = _probe_config_problems(manifest, job.config)
+    if problems:
+        return JobOutcome(
+            status="failed",
+            error=_job_error(
+                "config_error",
+                "config rejected: " + "; ".join(problems),
+                retryable=False,
+                detail={
+                    "errors": problems,
+                    "checks": [{"capability": "config", "status": "fail"}],
+                    "capability_code": "config_schema",
+                },
+            ),
+        )
+    checks.append({"capability": "config", "status": "pass", "facts": {"schema": "valid"}})
+
+    for capability in PROBED_CAPABILITIES:
+        handler = connector.handlers.get(capability)
+        if handler is None:
+            continue
+        try:
+            facts = handler.preflight(job.config)
+        except QuotaExceeded as exc:
+            # A probe that hits quota has proved reachability and
+            # authentication — the very things it was asked about. It is
+            # a warning, not a verdict, and never a deferral: nobody is
+            # waiting behind this to do real work.
+            checks.append({
+                "capability": capability,
+                "status": "warn",
+                "message": redact_text(str(exc)),
+                "facts": {"probed": True, "quota": True},
+            })
+            continue
+        except ConnectorError as exc:
+            checks.append({
+                "capability": capability,
+                "status": "fail",
+                "message": redact_text(str(exc)),
+            })
+            logger.warning(
+                "job %s: probe failed for %s/%s (%s)",
+                job.job_id, manifest.name, capability, redact_text(str(exc)),
+            )
+            return JobOutcome(
+                status="failed",
+                error=_job_error(
+                    exc.code,
+                    str(exc),
+                    exc.retryable,
+                    {**dict(exc.detail), "checks": checks, "capability": capability},
+                ),
+            )
+        except Exception as exc:  # bare crash → `internal` (job §6.7)
+            checks.append({"capability": capability, "status": "fail",
+                           "message": redact_text(repr(exc))})
+            return JobOutcome(
+                status="failed",
+                error=_job_error(
+                    "internal",
+                    f"{type(exc).__name__}: {exc}",
+                    retryable=True,
+                    detail={"traceback": traceback.format_exc(), "checks": checks},
+                ),
+            )
+        facts = facts if isinstance(facts, dict) else {}
+        if facts.get("probed") is False:
+            unprobed.append(capability)
+            checks.append({"capability": capability, "status": "unprobed", **(
+                {"message": facts["reason"]} if isinstance(facts.get("reason"), str) else {})})
+        else:
+            checks.append({"capability": capability, "status": "pass",
+                           "facts": redact_deep(facts)})
+
+    logger.info(
+        "job %s: probed %s (%d check(s), %d unprobed)",
+        job.job_id, manifest.name, len(checks), len(unprobed),
+    )
+    return JobOutcome(
+        status="succeeded",
+        result={
+            "ok": True,
+            "system": job.config.get("system") if isinstance(job.config, dict) else None,
+            "connector": {"name": manifest.name, "version": manifest.version},
+            "checks": checks,
+            # The honesty half (dashboard UI-10, one layer down): which
+            # declared capabilities this probe could not exercise.
+            "unprobed": unprobed,
+        },
+    )
 
 
 def _run_execute(connector: Connector, job: Job) -> JobOutcome:

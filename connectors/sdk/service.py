@@ -84,7 +84,13 @@ CREDENTIAL_CONFIG_KEYS: dict[str, str] = {
 }
 
 # Job types this SDK can execute (run_job dispatches by type).
-EXECUTABLE_TYPES = ("snapshot", "execute", "publish")
+EXECUTABLE_TYPES = ("snapshot", "execute", "publish", "test_connection")
+
+# `test_connection` is the one job type that maps to no single
+# capability: the builtin probe (capability §3 `health_probe: builtin`)
+# runs across whichever capabilities the connector declares. A connector
+# opts in by declaring `health_probe: builtin` in its manifest.
+PROBE_TYPE = "test_connection"
 
 
 class RunnerConfigError(Exception):
@@ -267,6 +273,8 @@ class Runner:
             )
             if manifest.name in self.execution_refused:
                 types = [t for t in types if t != "execute"]
+            if manifest.health_probe == "builtin":
+                types = sorted({*types, PROBE_TYPE})
             declared.append(
                 {"name": manifest.name, "version": manifest.version, "types": types}
             )

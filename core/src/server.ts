@@ -42,7 +42,9 @@ import {
   type ClaimDeclaration,
   type ErrorEnvelope,
 } from "./queue.js";
+import { registerConnections } from "./connections.js";
 import { registerDashboard } from "./dashboard.js";
+import { APP_BASE, registerSpa } from "./spa.js";
 import { KbReader } from "./kbread.js";
 import { registerMcp } from "./mcp.js";
 import { OidcClient } from "./oidc.js";
@@ -136,7 +138,14 @@ export function buildServer(
       // A-2: the setup download authenticates as the requester and
       // serves that requester's own profile binding — an ops token here
       // would be a bundle handed out on somebody else's authority.
-      path.startsWith("/v1/setup/")
+      path.startsWith("/v1/setup/") ||
+      // B-2: the SPA's own files, plus the bare address that redirects
+      // to them. These are static assets holding no data; every byte of
+      // content they later display comes from a /v1/dashboard call that
+      // authenticates on its own.
+      path === "/" ||
+      path === APP_BASE ||
+      path.startsWith(`${APP_BASE}/`)
     );
   };
 
@@ -507,17 +516,22 @@ export function buildServer(
 
   // Held for /healthz so an instance can state which KB it is serving.
   let mcpKb: KbReader | null = null;
+  // Shared with the dashboard's test-connection await: both relay an
+  // interactive job's result to a blocked caller, and one listener
+  // connection is enough for both.
+  let doneNotifier: JobsNotifier | null = null;
 
   if (cfg.mcp.enabled) {
     // The execution gateway blocks on interactive results, which arrive
     // on their own channel (JOB_DONE) — a second listener connection,
     // started with the server and closed with it.
-    const doneNotifier = new JobsNotifier(cfg.databaseUrl, JOB_DONE_CHANNEL);
+    doneNotifier = new JobsNotifier(cfg.databaseUrl, JOB_DONE_CHANNEL);
+    const done = doneNotifier;
     app.addHook("onReady", async () => {
-      await doneNotifier.start();
+      await done.start();
     });
     app.addHook("onClose", async () => {
-      await doneNotifier.stop();
+      await done.stop();
     });
 
     mcpKb = new KbReader(cfg, pool);
@@ -527,7 +541,7 @@ export function buildServer(
       oidc: oidc ?? new OidcClient(cfg.mcp),
       kb: mcpKb,
       limiter: new RateLimiter(cfg.mcp.limits),
-      doneNotifier,
+      doneNotifier: done,
       log: (msg, err) => (err ? app.log.error({ err }, msg) : app.log.info(msg)),
     });
   }
@@ -554,6 +568,13 @@ export function buildServer(
     // A-2: the Setup module's server half — bundle download + staleness,
     // on the same session layer and the same KB read.
     registerSetup(app, deps);
+    // A-3: the Connections API — the only writer of `sync_systems`, and
+    // the surface the admin CLI and the B-2 module are both clients of.
+    registerConnections(app, { ...deps, ...(doneNotifier ? { notifier: doneNotifier } : {}) });
+    // B-2: the SPA itself — static assets, served by the core behind the
+    // same session (D-103.1: no second server, no second identity
+    // domain). Registered last so no asset route can shadow an API one.
+    registerSpa(app, deps);
   }
 
   // -- health probe (unauthenticated) -----------------------------------------

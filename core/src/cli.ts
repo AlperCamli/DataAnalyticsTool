@@ -12,13 +12,34 @@
  *       to a terminal state and exits non-zero unless all succeeded —
  *       the one-command path of the CP-3a exit criterion.
  *
- * Sync admin (CP-3b, ruling E2 — the stand-in for the Connections UI;
- * direct ops-Postgres access, same trust position as `migrate`):
+ * Sync admin. **Since A-3 these are clients of the Connections API**
+ * (`/v1/dashboard/connections`), not of the database. The direct-DB
+ * registry path that stood in for the Connections UI from D-63.8 is
+ * deleted, not deprecated: there is exactly one writer of
+ * `sync_systems`, the dashboard and this CLI are peers in front of it,
+ * and `connections.test.ts` asserts at grep level that no path in this
+ * file holds a registry write. Ruling E2 closes here.
+ *
+ * These commands authenticate as **a person**, not as the platform:
+ * `CORE_TOKEN` must be an OIDC access token carrying an ops role (the
+ * same identity a browser would sign in with), because a CLI that could
+ * do more than its operator is the shadow permission system UI-2
+ * forbids — and it is now the same code path either way.
+ *
+ *   node dist/cli.js sync systems list
+ *       Every registered connection with its health.
  *
  *   node dist/cli.js sync systems set FILE
  *       Register/update a connection: {system, connector: {name,
  *       version_constraint?}, payload}. The payload carries credential
- *       *references* only (J-4).
+ *       *references* only (J-4) — the server refuses material by name.
+ *       What is printed back is the row the store held on re-read.
+ *
+ *   node dist/cli.js sync systems rm SYSTEM
+ *       Remove a connection (the store's absence is verified).
+ *
+ *   node dist/cli.js sync test SYSTEM
+ *       Run the connector's builtin probe against the connection.
  *
  *   node dist/cli.js sync hook set SYSTEM
  *       Generate (or rotate) the per-hook shared secret (§4.2). Prints
@@ -39,18 +60,18 @@
 
 import { randomBytes, createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import os from "node:os";
 import { loadConfig } from "./config.js";
 import { createPool } from "./db.js";
 import { computeFreshness } from "./freshness.js";
 import { defaultMigrationsDir, migrate } from "./migrate.js";
 import { readPolicyFromHead } from "./scheduler.js";
-import {
-  getSyncSystem,
-  setHookSecret,
-  triggerSystem,
-  upsertSyncSystem,
-} from "./triggers.js";
+// Deliberately narrow: `getSyncSystem` is a read and `setHookSecret`
+// writes the webhook-secret table. The connection-registry writers are
+// not imported here and must not be — that absence is the A-3 gate
+// clause, and `connections.test.ts` asserts it over this file's bytes
+// (by the writers' names and by their SQL) rather than trusting a
+// comment, which is why this one does not spell them out.
+import { getSyncSystem, setHookSecret } from "./triggers.js";
 
 const TERMINAL = new Set(["succeeded", "dead_lettered", "cancelled"]);
 
@@ -159,29 +180,148 @@ async function withPool<T>(fn: (pool: ReturnType<typeof createPool>, cfg: Return
   }
 }
 
+/** The API base and the operator's own token, for the connection
+ * commands. No database credential is involved in any of them. */
+function apiContext(): { base: string; token: string } | null {
+  const base = (process.env.CORE_URL ?? "http://127.0.0.1:8100").replace(/\/$/, "");
+  const token = process.env.CORE_TOKEN ?? "";
+  if (!token) {
+    console.error(
+      "CORE_TOKEN is required: an OIDC access token for an identity holding an ops role.\n" +
+        "These commands call the same governed API the dashboard calls, as you — there is no\n" +
+        "database path left in this CLI.",
+    );
+    return null;
+  }
+  return { base, token };
+}
+
+function health(connection: Record<string, unknown>): string {
+  const h = (connection.health ?? {}) as { status?: string; reason?: string };
+  return `${h.status ?? "?"} — ${h.reason ?? ""}`;
+}
+
 async function runSync(args: string[]): Promise<number> {
   const [sub, ...rest] = args;
 
-  if (sub === "systems" && rest[0] === "set" && rest[1]) {
-    return withPool(async (pool) => {
-      const spec = JSON.parse(await readFile(rest[1]!, "utf-8")) as {
-        system?: string;
-        connector?: { name?: string; version_constraint?: string };
-        payload?: Record<string, unknown>;
-      };
-      if (!spec.system || !spec.connector?.name) {
-        console.error("FILE must carry {system, connector: {name}}");
-        return 2;
-      }
-      await upsertSyncSystem(pool, {
-        system: spec.system,
-        connector_name: spec.connector.name,
-        version_constraint: spec.connector.version_constraint ?? "*",
-        payload: spec.payload ?? {},
-      });
-      console.log(`${spec.system}: connection registered (${spec.connector.name})`);
+  if (sub === "systems" && (rest[0] === "list" || rest[0] === undefined)) {
+    const ctx = apiContext();
+    if (!ctx) return 2;
+    const { status, json } = await api(ctx.base, ctx.token, "GET", "/v1/dashboard/connections");
+    if (status !== 200) {
+      console.error(`connections list failed (${status}): ${JSON.stringify(json)}`);
+      return 1;
+    }
+    const connections = (json.connections ?? []) as Record<string, unknown>[];
+    if (connections.length === 0) {
+      console.log("no connections registered");
       return 0;
-    });
+    }
+    if (json.policy_readable === false) {
+      console.log("(sync-policy.yaml unreadable — freshness reported unknown, not green)\n");
+    }
+    for (const connection of connections) {
+      const connector = (connection.connector ?? {}) as { name?: string };
+      console.log(`${connection.system} [${connector.name}] ${health(connection)}`);
+    }
+    return 0;
+  }
+
+  if (sub === "systems" && rest[0] === "set" && rest[1]) {
+    const ctx = apiContext();
+    if (!ctx) return 2;
+    const spec = JSON.parse(await readFile(rest[1]!, "utf-8")) as {
+      system?: string;
+      connector?: { name?: string; version_constraint?: string };
+      payload?: Record<string, unknown>;
+    };
+    if (!spec.system || !spec.connector?.name) {
+      console.error("FILE must carry {system, connector: {name}}");
+      return 2;
+    }
+    const { status, json } = await api(
+      ctx.base,
+      ctx.token,
+      "PUT",
+      `/v1/dashboard/connections/${encodeURIComponent(spec.system)}`,
+      { connector: spec.connector, payload: spec.payload ?? {} },
+    );
+    if (status !== 200 && status !== 201) {
+      console.error(`${spec.system}: registration refused (${status}) — ${json.error}: ${json.detail}`);
+      for (const field of (json.fields ?? []) as string[]) console.error(`  ${field}`);
+      return 1;
+    }
+    // Printed from the response, which the server built from the row it
+    // re-read after writing. "registered" is the store's statement here,
+    // not this process's (D-84).
+    const connection = (json.connection ?? {}) as Record<string, unknown>;
+    const connector = (connection.connector ?? {}) as { name?: string };
+    console.log(
+      `${connection.system}: connection registered (${connector.name}) — read back from the store`,
+    );
+    console.log(`  health: ${health(connection)}`);
+    return 0;
+  }
+
+  if (sub === "systems" && rest[0] === "rm" && rest[1]) {
+    const ctx = apiContext();
+    if (!ctx) return 2;
+    const system = rest[1]!;
+    const { status, json } = await api(
+      ctx.base,
+      ctx.token,
+      "DELETE",
+      `/v1/dashboard/connections/${encodeURIComponent(system)}`,
+    );
+    if (status === 404) {
+      console.error(`${system}: no such connection`);
+      return 1;
+    }
+    if (status !== 200) {
+      console.error(`${system}: removal failed (${status}) — ${json.error}: ${json.detail}`);
+      return 1;
+    }
+    console.log(`${system}: connection removed (absence verified in the store)`);
+    return 0;
+  }
+
+  if (sub === "test" && rest[0]) {
+    const ctx = apiContext();
+    if (!ctx) return 2;
+    const system = rest[0]!;
+    const { status, json } = await api(
+      ctx.base,
+      ctx.token,
+      "POST",
+      `/v1/dashboard/connections/${encodeURIComponent(system)}/test`,
+      {},
+    );
+    if (status === 404) {
+      console.error(`${system}: no such connection`);
+      return 1;
+    }
+    if (status !== 200 && status !== 202) {
+      console.error(`${system}: test refused (${status}) — ${json.error}: ${json.detail}`);
+      return 1;
+    }
+    console.log(`${system}: ${json.outcome} (job ${json.job_id})`);
+    for (const check of (json.checks ?? []) as Record<string, unknown>[]) {
+      const extra = check.message ?? (check.facts ? JSON.stringify(check.facts) : "");
+      console.log(`  ${String(check.capability).padEnd(10)} ${check.status}  ${extra}`);
+    }
+    const unprobed = (json.unprobed ?? []) as string[];
+    if (unprobed.length > 0) {
+      console.log(`  not exercised: ${unprobed.join(", ")} — unprobed is not a pass`);
+    }
+    if (json.detail) console.log(`  ${json.detail}`);
+    const error = json.error as { code?: string; message?: string } | undefined;
+    if (error) console.log(`  ${error.code}: ${error.message}`);
+    const reauth = json.reauth as { credential_refs?: string[]; action?: string } | undefined;
+    if (reauth) {
+      console.log(`  RE-AUTH NEEDED: ${(reauth.credential_refs ?? []).join(", ")}`);
+      console.log(`  ${reauth.action}`);
+    }
+    return json.outcome === "pass" ? 0 : 1;
   }
 
   if (sub === "hook" && rest[0] === "set" && rest[1]) {
@@ -202,34 +342,47 @@ async function runSync(args: string[]): Promise<number> {
   }
 
   if (sub === "now") {
-    return withPool(async (pool, cfg) => {
-      let systems = rest;
-      if (systems.length === 0) {
-        const { rows } = await pool.query<{ system: string }>(
-          `SELECT system FROM sync_systems ORDER BY system`,
-        );
-        systems = rows.map((r) => r.system);
-      }
-      if (systems.length === 0) {
-        console.error("no connections registered");
+    const ctx = apiContext();
+    if (!ctx) return 2;
+    let systems = rest;
+    if (systems.length === 0) {
+      const { status, json } = await api(ctx.base, ctx.token, "GET", "/v1/dashboard/connections");
+      if (status !== 200) {
+        console.error(`connections list failed (${status}): ${JSON.stringify(json)}`);
         return 1;
       }
-      for (const system of systems) {
-        const registered = await getSyncSystem(pool, system);
-        if (!registered) {
-          console.error(`${system}: no such connection`);
-          return 1;
-        }
-        const jobId = await triggerSystem(pool, cfg, registered, {
-          kind: "manual",
-          detail: { actor: os.userInfo().username, via: "admin-cli" },
-        });
-        console.log(`${system}: manual trigger recorded (snapshot job ${jobId})`);
+      systems = ((json.connections ?? []) as { system: string }[]).map((c) => c.system);
+    }
+    if (systems.length === 0) {
+      console.error("no connections registered");
+      return 1;
+    }
+    for (const system of systems) {
+      const { status, json } = await api(
+        ctx.base,
+        ctx.token,
+        "POST",
+        `/v1/dashboard/connections/${encodeURIComponent(system)}/sync`,
+        {},
+      );
+      if (status === 404) {
+        console.error(`${system}: no such connection`);
+        return 1;
       }
-      return 0;
-    });
+      if (status !== 202) {
+        console.error(`${system}: trigger refused (${status}) — ${json.error}: ${json.detail}`);
+        return 1;
+      }
+      console.log(`${system}: manual trigger recorded (snapshot job ${json.job_id})`);
+    }
+    return 0;
   }
 
+  // Freshness stays on the ops database: it is a computation over
+  // sync-policy.yaml at KB HEAD and the accepted-snapshot table, with no
+  // endpoint of its own yet (that surface is B-1's KB Health). It writes
+  // nothing, and in particular it does not touch the connection
+  // registry — which is the line A-3 draws.
   if (sub === "freshness") {
     return withPool(async (pool, cfg) => {
       const policy = await readPolicyFromHead(cfg);
@@ -245,25 +398,31 @@ async function runSync(args: string[]): Promise<number> {
   }
 
   if (sub === "runs") {
-    return withPool(async (pool) => {
-      const { rows } = await pool.query(
-        `SELECT run_id, outcome, pr_url, kb_ref, started_at, duration_ms, detail
-           FROM runs ORDER BY started_at DESC LIMIT $1`,
-        [Number(rest[0] ?? 10) || 10],
+    const ctx = apiContext();
+    if (!ctx) return 2;
+    const { status, json } = await api(
+      ctx.base,
+      ctx.token,
+      "GET",
+      `/v1/runs?limit=${Number(rest[0] ?? 10) || 10}`,
+    );
+    if (status !== 200) {
+      console.error(`runs read failed (${status}): ${JSON.stringify(json)}`);
+      return 1;
+    }
+    for (const row of (json.runs ?? []) as Record<string, any>[]) {
+      console.log(
+        `${row.run_id} ${row.outcome}` +
+          (row.pr_url ? ` ${row.pr_url}` : "") +
+          (row.detail?.stage ? ` [stage ${row.detail.stage}]` : ""),
       );
-      for (const row of rows) {
-        console.log(
-          `${row.run_id} ${row.outcome}` +
-            (row.pr_url ? ` ${row.pr_url}` : "") +
-            (row.detail?.stage ? ` [stage ${row.detail.stage}]` : ""),
-        );
-      }
-      return 0;
-    });
+    }
+    return 0;
   }
 
   console.error(
-    "usage: cli.js sync systems set FILE | hook set SYSTEM | now [SYSTEM...] | freshness | runs [N]",
+    "usage: cli.js sync systems list | systems set FILE | systems rm SYSTEM | test SYSTEM | " +
+      "hook set SYSTEM | now [SYSTEM...] | freshness | runs [N]",
   );
   return 2;
 }

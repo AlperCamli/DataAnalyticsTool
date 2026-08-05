@@ -157,6 +157,14 @@ export async function startCore(overrides: Partial<CoreConfig> = {}): Promise<Te
       pageDefault: 50,
       pageMax: 200,
       batchMax: 10,
+      // A-3: the production default. `ops` is the playbook's R3 and is
+      // deliberately not `steward`, so the suites exercise the split
+      // the gate asks for rather than a permissive test-only variant.
+      adminRoles: ["ops"],
+      // Short, because these suites host no runner: the probe's honest
+      // "no verdict yet" is what they assert, and waiting a real minute
+      // for it proves nothing extra.
+      probeTimeoutS: 5,
     },
     ...overrides,
   };
