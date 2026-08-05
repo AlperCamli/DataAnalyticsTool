@@ -97,8 +97,8 @@ Exceptions to this section are rulings, never patches.
 
 | # | Item | Provisional default | Revisit when |
 |---|---|---|---|
-| UI-A | Frontend stack | Build session proposes; constraints fixed by rulings (served with core, no client permission logic, no client persistence) | B-0/B-1 build |
+| UI-A | Frontend stack | **Closed** (D-103.1, 2026-08-05): a light **SPA (React)** built to **static assets served by the core** — no separate frontend server, no client-side permission logic, no client persistence. UI-1, UI-2 and UI-9 are restated as build constraints rather than aspirations: an asset bundle served by the core has no second identity domain to acquire and no server of its own to grow allow/deny logic in. Component and library specifics are the B-1 session's proposal, ≤5 lines. (Platform-architecture §4 already recorded "React + TypeScript, served by core"; it now has a ruling behind it.) | — |
 | UI-B | Pagination/retention windows for read APIs | Server defaults, config-overridable; audit export honors MCP §8 retention | First large window query |
 | UI-C | Theming/branding | Product default only | First customer branding ask (pairs with RA-C) |
-| UI-D | F-10 resolution-surfacing mechanism | Dashboard badge on next session (cheapest honest option); in-session surfacing via report_freshness-style line stays a skill-side candidate | B-1 build |
+| UI-D | F-10 resolution-surfacing mechanism | **Closed** (D-103.2, 2026-08-05): the provisional default is confirmed as v1 — a **dashboard badge on the filer's next session**, carrying batch-merge resolutions and rejection reasons alike (ledger §4 amendment, D-101.2). In-session surfacing via a `report_freshness`-style line remains a skill-side candidate and is **unbuilt** — named so it is not mistaken for shipped. DT-10's "mechanism per UI-D decision" now reads: the badge | — |
 | UI-E | Notifications beyond the dashboard (email/webhook for SO-F, freshness) | None in v1; health surfaces are pull | First customer whose ops team demands push |
