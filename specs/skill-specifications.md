@@ -89,6 +89,13 @@ scope → evidence → drafting → self-check → PR
 
 **S1 scope.** Select a bounded batch (default ≤ 10 objects) from, in priority order: fault-ledger triage items assigned to enrichment, hot objects lacking human docs (index hot/stub status), harvested documents awaiting conversion. **CP-E1 [A]:** state the batch and its rationale before writing anything.
 
+**S1b queue-driven batch mode (amendment, D-101.4, 2026-08-05).** A second entry into the same state machine: instead of the skill selecting a batch from S1's priority order, the steward's approved worklist delivers one. Input: the `enrichment_request` issues stamped with a `batch_id` by the dashboard's "deliver batch" trigger (ledger spec §4 amendment / §8) — at most ten, SP-3's default unchanged. S2–S5 run exactly as specified below; what the mode adds is one grounding rule and one honesty rule, both per item.
+
+- **The approved request is itself a citation**, of the customer-provided class: `sources: customer-provided, <name>, <date>` — the requester and the submission date as the ledger recorded them (LED-R3 server-set), never re-typed from the body of the request. On the S2 maturity ladder it sits beside `customer doc: <uri>`: **stated** by someone who knows the business, not **observed** by us, and never upgraded to observation because it arrived as confident prose (HLR §8 P4 — the ladder exists precisely because confidence is not evidence).
+- **The submission is drafting input, not content.** Requester text is never embedded verbatim: the doc is written in the KB's own voice through the canonical templates (KB §7) and *cites* the request. Dashboard test DT-12 asserts the same rule from the other side — the raw submission appears nowhere in the batch PR's diff.
+- **CP-E5 [A] — per-item honesty, unchanged in substance.** An approved request the skill cannot ground beyond the proposal is drafted **citing exactly that provenance and nothing better**: `customer-provided` alone, with no inferred-from-column-names dressing to make it look sturdier. One the skill cannot draft at all **returns to the queue** with a note stating what evidence would unblock it (ledger: back to `approved`, note recorded) and is dropped from the batch's trailers — never guessed at, never turned into prose no one can source. S5's failure-exit rule holds here verbatim: an honest skip beats a fabricated draft.
+- **CP-E3 is untouched.** The skill still never sets `verified`. Approval means *worth drafting*, not certified (dashboard spec UI-11); the certification act is the steward merging the reviewed diff under their own name (KB-7).
+
 **S2 evidence.** Per object: machine doc (facts), harvest results whose `mentions`/content cover it, usage evidence where present (join_pairs → evidence-grade join guidance), existing entity docs. Maturity-ladder discipline (HLR §8 P4): the evidence tier available dictates the `sources` grading — `customer doc: <uri>`, `observed in N queries`, or `inferred from column names`; never upgrade inference to observation.
 
 **S3 drafting.** Canonical templates (KB §7), one human doc per object (or group doc edits for API kinds). **CP-E2 [A]:** every draft carries complete front-matter with `status: draft`, graded `sources`, and a `depends_on` list covering every FQN the body relies on (the K-2 declaration duty).
@@ -99,7 +106,7 @@ Purpose values obey the same grounding rules as everything else (K-GROUND, the S
 
 **S4 self-check.** Run the KB CI validation locally (front-matter schemas, FQN resolution, links) before opening the PR; fix or drop failing drafts.
 
-**S5 PR.** One PR per batch, under the session user's identity (K-IDENT), body summarizing per-doc evidence grades; ledger-originated items carry `CL-Resolves: <issue-id>` trailers so merge closes the loop (ledger spec §9). *Failure exits:* insufficient evidence for a scoped object → skip it and record `flag_gap(missing_doc)` noting what evidence would unblock it — an honest skip beats a fabricated draft.
+**S5 PR.** One PR per batch, under the session user's identity (K-IDENT), body summarizing per-doc evidence grades; ledger-originated items carry `CL-Resolves: <issue-id>` trailers so merge closes the loop (ledger spec §9). For a queue-driven batch (S1b) the body additionally lists the **request → doc mapping** — each request in the batch against the doc that answers it, and each returned-to-queue item against the reason it came back — and carries one `CL-Resolves` trailer per request the batch *actually satisfies*, so the merge resolves exactly those and no others. *Failure exits:* insufficient evidence for a scoped object → skip it and record `flag_gap(missing_doc)` noting what evidence would unblock it — an honest skip beats a fabricated draft.
 
 ## 7. `review-sync` skill
 
@@ -162,6 +169,14 @@ AS-15's second clause is the one that matters: compiled configs are conveniences
 |---|---|---|
 | AS-16 | report/S8: fixture end-to-end — audit shows `publish_report` `deliver_model` then `attest` for the same artifact and revision, in that order, with the attested `definition_hash` matching the artifact's `layout.pbir_hash`; the terminal `pending_human_steps` is empty or `["open the report"]` | S8, report-authoring AT-9, D-91.1 |
 | AS-17 | report/S8: authored definition references a field absent from the delivered schema → verify fails and **no attest call appears in audit** | CP-R8, report-authoring AT-4 |
+
+**Additions with the knowledge-request queue (amendment, D-101.4, 2026-08-05; additive only).**
+
+| # | Scenario | Verifies |
+|---|---|---|
+| AS-18 | enrich/S1b: fixture end-to-end — two approved `enrichment_request`s are delivered as one batch, one groundable no further than its proposal and one the skill cannot draft at all. Asserted: the drafted doc's `sources` reads `customer-provided, <name>, <date>` and **no requester text appears verbatim anywhere in the diff**; the PR body carries the request→doc mapping; exactly one `CL-Resolves` trailer, for the satisfied request; the undraftable one is back at `approved` with its note and appears in no trailer; merging the PR fires the ledger resolution and the filer's reply path; **no `verified` status is written by the skill** | S1b/CP-E5, CP-E3, D-101.1/.4, ledger L-5, UI-11 |
+
+Per D-78's layering, AS-18's conformance evidence is the **behavioral** run against the fixture deployment. A validator over staged PR bodies pins the citation and trailer rules cheaply and belongs in CI — but it cannot fail when the skill misbehaves, so it is a regression test and never the evidence.
 
 ## 10. Amendments to other specs (additive)
 
