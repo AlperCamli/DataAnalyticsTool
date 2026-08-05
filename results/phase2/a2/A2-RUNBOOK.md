@@ -86,12 +86,13 @@ open -e .secrets/idp-users.json
 ```
 
 Give every account a new password, save with **Cmd-S**, close the
-window, then lock the file down and reload the login service:
+window, then lock the file down and restart the login service so it
+re-reads it:
 
 ```bash
 cd ~/Desktop/DataProject
 chmod 600 .secrets/idp-users.json
-docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d devidp
+docker compose restart devidp
 ```
 
 Same JSON shape as the published file, new passwords. Then prove the
@@ -175,13 +176,16 @@ like this — keeping the commas between entries:
 
 Use their real first name. Save with **Cmd-S** and close the window.
 
-**Then load it** — the login service only reads that file when it
-starts:
+**Then load it** — the login service reads that file only when it
+starts, so it has to be restarted:
 
 ```bash
 cd ~/Desktop/DataProject
-docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d devidp
+docker compose restart devidp
 ```
+
+(`up -d` will not do it: nothing in the container's configuration
+changed, so Docker leaves it running with the old list in memory.)
 
 **Check it worked.** Put their name and password into this, replacing
 the two words in capitals:
