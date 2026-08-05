@@ -32,7 +32,7 @@ BEGIN;
 
 -- 1. The role. LOGIN only: no CREATEDB, no CREATEROLE, no SUPERUSER, no
 --    BYPASSRLS. The executor's startup check refuses any of these.
-CREATE ROLE contextlayer_exec LOGIN PASSWORD '<PASSWORD>'
+CREATE ROLE example_exec LOGIN PASSWORD '<PASSWORD>'
     NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;
 
 -- 2. Connect, but nothing implied by it. GRANT needs a literal database
@@ -43,7 +43,7 @@ CREATE ROLE contextlayer_exec LOGIN PASSWORD '<PASSWORD>'
 DO $$
 BEGIN
     EXECUTE format(
-        'GRANT CONNECT ON DATABASE %I TO contextlayer_exec', current_database());
+        'GRANT CONNECT ON DATABASE %I TO example_exec', current_database());
 END
 $$;
 
@@ -53,8 +53,8 @@ $$;
 --    that reviewing this file tells you exactly what is reachable.)
 
 -- --- schema: public ---------------------------------------------------
-GRANT USAGE ON SCHEMA public TO contextlayer_exec;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO contextlayer_exec;
+GRANT USAGE ON SCHEMA public TO example_exec;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO example_exec;
 -- Tables created *later* by the role running this script are readable
 -- too, so a migration does not silently make the agent blind. Still
 -- SELECT-only.
@@ -65,13 +65,13 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO contextlayer_exec;
 -- most migrations use). If some other role creates tables here, add a
 -- matching line for it:
 --   ALTER DEFAULT PRIVILEGES FOR ROLE <creator> IN SCHEMA public
---       GRANT SELECT ON TABLES TO contextlayer_exec;
+--       GRANT SELECT ON TABLES TO example_exec;
 -- Otherwise new tables from that creator simply will not be readable —
 -- which fails closed (the agent sees less), not open.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-    GRANT SELECT ON TABLES TO contextlayer_exec;
+    GRANT SELECT ON TABLES TO example_exec;
 -- CREATE on a schema would let the role make objects it could then write.
-REVOKE CREATE ON SCHEMA public FROM contextlayer_exec;
+REVOKE CREATE ON SCHEMA public FROM example_exec;
 
 -- --- add further schemas here, same four statements ------------------
 --
@@ -96,12 +96,12 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 --    write GRANTs in step 3 — with this flag switched off, writes still
 --    fail with InsufficientPrivilege. If you are ever tempted to rely on
 --    this line instead of the grants, don't.
-ALTER ROLE contextlayer_exec SET default_transaction_read_only = on;
+ALTER ROLE example_exec SET default_transaction_read_only = on;
 -- A per-query timeout is set by the executor from the profile guardrail;
 -- this is the backstop for any connection it does not set.
-ALTER ROLE contextlayer_exec SET statement_timeout = '60s';
+ALTER ROLE example_exec SET statement_timeout = '60s';
 -- Long-idle transactions on an OLTP primary hold locks and bloat; cap them.
-ALTER ROLE contextlayer_exec SET idle_in_transaction_session_timeout = '60s';
+ALTER ROLE example_exec SET idle_in_transaction_session_timeout = '60s';
 
 COMMIT;
 
@@ -112,18 +112,18 @@ COMMIT;
 --   SELECT table_schema, table_name, privilege_type
 --     FROM information_schema.role_table_grants
 --    WHERE grantee IN (SELECT rolname FROM pg_roles
---                       WHERE pg_has_role('contextlayer_exec', oid, 'USAGE'))
+--                       WHERE pg_has_role('example_exec', oid, 'USAGE'))
 --      AND privilege_type IN
 --          ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER');
 --
 -- Any schema the role could create objects in:
 --   SELECT nspname FROM pg_namespace
---    WHERE has_schema_privilege('contextlayer_exec', nspname, 'CREATE')
+--    WHERE has_schema_privilege('example_exec', nspname, 'CREATE')
 --      AND nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema';
 --
 -- Role attributes (all four booleans must be false):
 --   SELECT rolsuper, rolcreatedb, rolcreaterole, rolbypassrls
---     FROM pg_roles WHERE rolname = 'contextlayer_exec';
+--     FROM pg_roles WHERE rolname = 'example_exec';
 --
 -- The executor runs these same checks itself and refuses to serve
 -- execution if any of them comes back non-empty, so a mistake here fails
@@ -131,6 +131,6 @@ COMMIT;
 -- ─────────────────────────────────────────────────────────────────────
 --
 -- ROLLBACK / decommission:
---   REASSIGN OWNED BY contextlayer_exec TO postgres;  -- should own nothing
---   DROP OWNED BY contextlayer_exec;
---   DROP ROLE contextlayer_exec;
+--   REASSIGN OWNED BY example_exec TO postgres;  -- should own nothing
+--   DROP OWNED BY example_exec;
+--   DROP ROLE example_exec;

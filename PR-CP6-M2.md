@@ -69,7 +69,7 @@ Everything below uses it. `localhost` will **not** work from machine 2.
   > the execution role reaches only `public`. But the general question
   > should be ruled on before CP-7 generalizes this profile.
 
-- **Execution role applied** (done — `contextlayer_exec` verified live).
+- **Execution role applied** (done — `example_exec` verified live).
 
 ### 3. Start the stack, bound to the LAN
 
@@ -105,7 +105,7 @@ docker compose logs runner | grep -i "execution preflight"
 Expected:
 
 ```
-INFO execution preflight passed for postgres: {'role': 'contextlayer_exec', ...}
+INFO execution preflight passed for postgres: {'role': 'example_exec', ...}
 ```
 
 If it says **FAILED**, the runner is refusing to serve execution and
@@ -144,7 +144,7 @@ In the Claude Code session, in plain language:
 
 **What to point at:** the caller never supplied a row cap or a timeout.
 The server attached the Reporter profile's own limits, and the query ran
-under `contextlayer_exec`, not under any credential machine 2 holds.
+under `example_exec`, not under any credential machine 2 holds.
 
 ### 8. The refusals — the actual point of the demo
 

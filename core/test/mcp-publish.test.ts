@@ -36,7 +36,7 @@ beforeAll(async () => {
         sources: {
           drill: {
             kind: "postgres", alias: "sb", host: "db.local", port: 5432,
-            database: "drill", username: "contextlayer_exec",
+            database: "drill", username: "example_exec",
           },
           ga4: { kind: "ga4", alias: "ga", property_id: "313459823" },
         },

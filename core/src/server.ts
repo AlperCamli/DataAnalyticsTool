@@ -42,9 +42,11 @@ import {
   type ClaimDeclaration,
   type ErrorEnvelope,
 } from "./queue.js";
+import { registerDashboard } from "./dashboard.js";
 import { KbReader } from "./kbread.js";
 import { registerMcp } from "./mcp.js";
 import { OidcClient } from "./oidc.js";
+import { registerAuth } from "./session.js";
 import { RateLimiter } from "./ratelimit.js";
 import { getSnapshotBody, listSnapshots } from "./snapshots.js";
 import { getHookSecretHash, getSyncSystem, triggerSystem } from "./triggers.js";
@@ -121,7 +123,16 @@ export function buildServer(
     method === "POST" && RUNNER_PATH.test(url.split("?")[0]!);
   const isSelfAuthPath = (url: string) => {
     const path = url.split("?")[0]!;
-    return path === "/mcp" || path.startsWith("/.well-known/");
+    return (
+      path === "/mcp" ||
+      path.startsWith("/.well-known/") ||
+      // The dashboard surface authenticates per request in its own
+      // layer (session cookie or the caller's own bearer token,
+      // resolved by the same verifier) — the ops-token path below would
+      // be exactly the privileged backend-for-frontend UI-2 forbids.
+      path.startsWith("/v1/auth/") ||
+      path.startsWith("/v1/dashboard/")
+    );
   };
 
   app.addHook("onRequest", async (req, reply) => {
@@ -514,6 +525,27 @@ export function buildServer(
       doneNotifier,
       log: (msg, err) => (err ? app.log.error({ err }, msg) : app.log.info(msg)),
     });
+  }
+
+  // -- dashboard surface (B-0: read APIs before pixels) -----------------------
+  //
+  // Ships with the core and shares its identity domain (UI-9). The KB
+  // reader is the MCP instance when there is one — one workspace, read
+  // once — so the two surfaces can never answer from different KB state.
+
+  if (cfg.dashboard.enabled) {
+    const dashboardOidc = oidc ?? new OidcClient(cfg.mcp);
+    const dashboardKb = mcpKb ?? new KbReader(cfg, pool);
+    const deps = {
+      cfg,
+      pool,
+      oidc: dashboardOidc,
+      kb: dashboardKb,
+      log: (msg: string, err?: unknown) =>
+        err ? app.log.error({ err }, msg) : app.log.info(msg),
+    };
+    registerAuth(app, deps);
+    registerDashboard(app, deps);
   }
 
   // -- health probe (unauthenticated) -----------------------------------------

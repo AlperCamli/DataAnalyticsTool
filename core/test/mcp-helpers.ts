@@ -239,6 +239,8 @@ export async function setupMcpRig(
      * the full surface visible (D-74.4b/4c).
      */
     rolesYaml?: string | null;
+    /** B-0 dashboard surface; off unless a suite asks for it. */
+    dashboard?: Partial<TestCore["cfg"]["dashboard"]>;
   } = {},
 ): Promise<McpRig> {
   const base = await mkdtemp(path.join(tmpdir(), "cl-mcp-"));
@@ -327,6 +329,20 @@ export async function setupMcpRig(
       ledgerRetentionDays: 90,
       ledgerSweepMs: 60 * 60 * 1000,
     },
+    ...(overrides.dashboard
+      ? {
+          dashboard: {
+            enabled: true,
+            postLoginPath: "/",
+            sessionMaxS: 12 * 3600,
+            cookieSecure: false,
+            pageDefault: 50,
+            pageMax: 200,
+            batchMax: 10,
+            ...overrides.dashboard,
+          },
+        }
+      : {}),
   });
   await insertAcceptedSnapshot(core, drill);
   await insertAcceptedSnapshot(core, ga4);

@@ -147,6 +147,17 @@ export async function startCore(overrides: Partial<CoreConfig> = {}): Promise<Te
       ledgerRetentionDays: 90,
       ledgerSweepMs: 60 * 60 * 1000, // tests sweep explicitly
     },
+    dashboard: {
+      // Off by default like the MCP surface; the dashboard rig turns it
+      // on so the suites that never touch it keep their current shape.
+      enabled: false,
+      postLoginPath: "/",
+      sessionMaxS: 12 * 3600,
+      cookieSecure: false, // plain-http test server
+      pageDefault: 50,
+      pageMax: 200,
+      batchMax: 10,
+    },
     ...overrides,
   };
   const notifier = new JobsNotifier(url);

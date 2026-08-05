@@ -73,7 +73,7 @@ def provisioned():
         apply_role_sql(container)
 
         parsed = psycopg.conninfo.conninfo_to_dict(admin_dsn)
-        parsed["user"] = "contextlayer_exec"
+        parsed["user"] = "example_exec"
         parsed["password"] = TEST_PASSWORD
         yield {
             "container": container,
@@ -86,7 +86,7 @@ def test_the_shipped_file_runs_without_error(provisioned):
     """Covered by the fixture, asserted explicitly: the role exists."""
     with psycopg.connect(provisioned["admin_dsn"], autocommit=True) as conn:
         row = conn.execute(
-            "SELECT rolcanlogin FROM pg_roles WHERE rolname = 'contextlayer_exec'"
+            "SELECT rolcanlogin FROM pg_roles WHERE rolname = 'example_exec'"
         ).fetchone()
     assert row is not None and row[0] is True
 
@@ -95,7 +95,7 @@ def test_the_provisioned_role_passes_the_g3_check(provisioned):
     """The file and the executor's check agree — the point of both."""
     with psycopg.connect(provisioned["exec_dsn"]) as conn:
         facts = check_role_is_readonly(conn)
-    assert facts["role"] == "contextlayer_exec"
+    assert facts["role"] == "example_exec"
 
 
 def test_the_provisioned_role_can_read_business_data(provisioned):

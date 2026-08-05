@@ -12,7 +12,7 @@
     "sources: keys are estate system names as artifact queries name them;",
     "each alias MUST equal the data-source alias inside the template —",
     "the Linking API swaps sources by alias. The supabase source points",
-    "at the reporting views through contextlayer_exec (SELECT on",
+    "at the reporting views through example_exec (SELECT on",
     "reporting.* only, deploy/reporting-views.sql); its password is",
     "entered by the human in the Looker Studio UI when prompted —",
     "credentials are empty here BY DESIGN (no secret ever rides a URL",
@@ -36,7 +36,7 @@
           "host": "YOUR_POOLER_HOST",
           "port": 5432,
           "database": "postgres",
-          "username": "contextlayer_exec.YOUR_PROJECT_REF"
+          "username": "example_exec.YOUR_PROJECT_REF"
         },
         "ga4": {
           "kind": "ga4",

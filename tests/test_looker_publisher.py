@@ -28,7 +28,7 @@ CONFIG = {
         "supabase": {
             "kind": "postgres", "alias": "sb",
             "host": "db.pilot.supabase.co", "port": 5432,
-            "database": "postgres", "username": "contextlayer_exec",
+            "database": "postgres", "username": "example_exec",
         },
         "ga4": {"kind": "ga4", "alias": "ga", "property_id": "000000000"},
         "gsc": {

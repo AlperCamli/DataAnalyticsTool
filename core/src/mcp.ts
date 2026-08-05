@@ -41,6 +41,7 @@ import { executeRequest } from "./execute.js";
 import { createProvider } from "./gitkb.js";
 import type { KbReader, KbState } from "./kbread.js";
 import {
+  ENRICHMENT_REQUEST,
   FLAG_GAP_KINDS,
   listIssues,
   normalizeQueryTerms,
@@ -205,13 +206,18 @@ const TOOL_DEFS: { name: string; description: string; inputSchema: Record<string
   {
     name: "flag_gap",
     description:
-      "File a context gap into the fault ledger. Returns the deduplicated issue id, its occurrence count, and who it is routed to.",
+      "File a context gap into the fault ledger. Returns the deduplicated issue id, its occurrence count, and who it is routed to. " +
+      "Use kind 'enrichment_request' with an optional 'proposal' to ask for knowledge the estate is missing — the same queue the dashboard's request form files into.",
     inputSchema: {
       type: "object",
       properties: {
         kind: { type: "string", enum: [...FLAG_GAP_KINDS] },
         description: { type: "string" },
         object: { type: "string" },
+        // §6.10 amendment (D-101.3): the caller's suggested content.
+        // Accepted on any kind as drafting evidence; only
+        // `enrichment_request` opens a request with verdict states.
+        proposal: { type: "string" },
       },
       required: ["kind", "description"],
     },
@@ -774,6 +780,9 @@ async function toolFlagGap(ctx: CallContext, args: Record<string, unknown>): Pro
   const kind = typeof args.kind === "string" ? args.kind : "";
   const description = typeof args.description === "string" ? args.description : "";
   const object = typeof args.object === "string" && args.object ? args.object : null;
+  // §6.10 amendment: a proposal never substitutes for naming the gap —
+  // `description` stays required, and the response is unchanged.
+  const proposal = typeof args.proposal === "string" && args.proposal.trim() ? args.proposal : null;
   if (!FLAG_GAP_KINDS.includes(kind as (typeof FLAG_GAP_KINDS)[number])) {
     return err("invalid_argument", `kind must be one of ${FLAG_GAP_KINDS.join(", ")}`);
   }
@@ -783,7 +792,9 @@ async function toolFlagGap(ctx: CallContext, args: Record<string, unknown>): Pro
   // client passes can forge them (the schema has no such fields; extras
   // are ignored by construction).
   const result = await recordEvent(ctx.deps.pool, {
-    detectorClass: kind === "result_disputed" ? 3 : 2,
+    // §4: `enrichment_request` is a human submission, recorded class 3
+    // by kind exactly as `result_disputed` is.
+    detectorClass: kind === "result_disputed" || kind === ENRICHMENT_REQUEST ? 3 : 2,
     kind: registryKind(kind),
     scope,
     scopeLabel: object ?? scope,
@@ -796,6 +807,9 @@ async function toolFlagGap(ctx: CallContext, args: Record<string, unknown>): Pro
     kbRef: ctx.ws.headSha,
     snapshotRef: refsEnvelope(ctx.ws).snapshot_ref,
     description,
+    // Stored as `detail.proposal`; `recordEvent` runs the LED-R2 scrub
+    // and the same length bound `description` gets, at storage.
+    ...(proposal !== null ? { detail: { proposal } } : {}),
   });
   return {
     payload: {

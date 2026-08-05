@@ -2291,7 +2291,7 @@ undocumented dimension is refused on both
 `deploy/execution-role.sql` was applied to the pilot Supabase by the
 operator (with a syntax fix — see D-70). Verified live:
 
-- **G3 startup check passes**: role `contextlayer_exec`, engine 17.6.
+- **G3 startup check passes**: role `example_exec`, engine 17.6.
 - **Role posture confirmed through the introspection connection**: zero
   write grants reachable through role membership; `public` is the only
   schema with USAGE — `auth`, `vault`, `storage`, `realtime`, and
@@ -2556,7 +2556,7 @@ privileges, canonical bodies byte-identical).
 
 **4. Playbook amendment authorized (additive) — applied here.**
 `customer-onboarding-playbook.md` §13 gains gate item 9: three
-role/credential assertions — `contextlayer_exec` read-only at the
+role/credential assertions — `example_exec` read-only at the
 database level, `contextlayer_introspect` neither SUPERUSER nor
 BYPASSRLS, and the `contextlayer-sync` PAT fine-grained/single-repo/
 contents+PR-write-only (P-H, D-66.7) — as three distinct identities with
@@ -2805,7 +2805,7 @@ revisit before any real second customer. (b) Leaked exec DSN +
 service-account key: rotation deferred; trigger: before CP-8 sign-off or
 any non-localhost exposure of the estate, whichever first.
 
-**3. EMPTY-TABLE CAUSE CONFIRMED:** RLS on base tables; contextlayer_exec
+**3. EMPTY-TABLE CAUSE CONFIRMED:** RLS on base tables; example_exec
 correctly lacks BYPASSRLS. The CP-6 "reporting views over RLS" decision
 is activated as CP-7 task 7.0 (views drafted by the session, applied by
 the owner as customer DBA).
@@ -2845,7 +2845,7 @@ D-71/F3 fact (`rolsuper = false`, `rolbypassrls = true`), and owns the
 base tables, so the exemption holds twice over), which is the entire
 point of the file — the reviewed view text is the access policy,
 aggregates-only columns are the containment. Invoker was rejected on
-two grounds: RLS would evaluate as `contextlayer_exec` (`auth.uid()`
+two grounds: RLS would evaluate as `example_exec` (`auth.uid()`
 NULL → zero rows from every view, reproducing exactly the emptiness
 D-80.3 diagnosed), and making invoker work would require base-table
 SELECT grants plus permissive policies for the exec role — the grant
@@ -2890,7 +2890,7 @@ empty search_path, D-19.2) and asserts each task 7.0 view attests
 exactly its base tables, all resolved — guarding the D-41 all-or-nothing
 graph build the product-path sync depends on. Suite 8/8.
 **Boundary unchanged:** the owner applies the DDL as customer DBA (we
-never run DDL against the customer estate); `contextlayer_exec` gains
+never run DDL against the customer estate); `example_exec` gains
 SELECT on views only; no default privileges exist in `reporting`, so a
 future view is exposed only by deliberately re-running the grant.
 
@@ -2989,7 +2989,7 @@ after a step-0 check found two of four claimed-done items untrue: the
 additive views drift PR had never been opened, and the `looker_studio`
 connection had never been registered. Both are now real. What was
 already true: the five views applied with `security_invoker = false,
-security_barrier = true` and `contextlayer_exec` holding SELECT on all
+security_barrier = true` and `example_exec` holding SELECT on all
 five (D-81 as ruled), and KB PR #23 merged (`reporter` carries
 `publish_report:looker_studio` — confirmed live in the running server's
 reporter toolset).
@@ -3000,13 +3000,13 @@ which is the stated trigger; deferral conditions that fire get honored,
 which is what makes a recorded risk acceptance mean anything. Chain:
 trigger fired → `reset-exec-password.sh` generated a fresh
 URL-safe password and wrote both sides from the one value → owner
-applied `ALTER ROLE contextlayer_exec PASSWORD …` in the Supabase SQL
+applied `ALTER ROLE example_exec PASSWORD …` in the Supabase SQL
 editor as customer DBA (we never run DDL/DCL against the estate) →
 agent re-wired `.secrets/runner.env` from `env.sh` and recreated the
-runner → **verified**: startup preflight `role=contextlayer_exec
+runner → **verified**: startup preflight `role=example_exec
 engine_version=17.6`, then one governed execute through
 `reporting.v_subscriptions_by_plan` returning 3 real rows
-(`source.role = contextlayer_exec`, `executed_on = primary`,
+(`source.role = example_exec`, `executed_on = primary`,
 `truncated = false`), audited under the reporter identity. The
 service-account key half (GSC/GA4) is the owner's console recycle and
 is **pending** at this entry; it does not gate the exec path.
@@ -3136,7 +3136,7 @@ QE-5 at the boundary for any executor that forgets.
 **Live re-verification (the point of all of it):**
 `reporting.v_user_signups_by_day` through the full governed path —
 `signup_day` as `"2026-07-23"` with `columns[].type = "date"`,
-`role = contextlayer_exec`, real rows; and the row-joining
+`role = example_exec`, real rows; and the row-joining
 `v_activation_funnel_monthly` likewise (`cohort_month` `"2026-07-01"`,
 9 signed up / 6 master CVs / 0 subscribed). Runner alive after both.
 
@@ -4516,3 +4516,39 @@ real reporter account, not a shared login — the audit rows must show
 THEM), operator hands-off during the journey, and their friction notes
 recorded as first-user field notes in the CP-8 style. What they find
 is gate evidence, not anecdote.
+# DECISIONS — B-0 build (2026-08-05)
+
+Four decisions the B-0 build had to take to implement dashboard spec §5
+as written. Each is a recommendation for ratification; none contradicts a
+spec or the amendment fence; each is implemented exactly as described, so
+the code and this record cannot quietly disagree.
+
+**D-105.1 — UI-B pagination defaults (closes the spec-local item).**
+Keyset cursors over each endpoint's stable sort key (audit `(ts, audit_id)`;
+deliveries `(delivered_at, artifact_id, target)`; queue `(occurrences,
+distinct_subjects, last_seen, issue_id)`). Server default 50 rows, hard cap
+200, both config-overridable (`CORE_DASHBOARD_PAGE_DEFAULT`/`_MAX`); an
+over-cap request is clamped and reports the size it used, a nonsensical one
+is a 400. Audit **retention** is deliberately untouched at B-0: MCP §8 makes
+retention and export the Audit module's concern, which is B-4.
+
+**D-105.2 — the ledger read's subject dimension is "who filed".**
+DT-1 requires a subject scope on all three endpoints; for the ledger the
+only honest one is the filer. A reporter reads the issues they filed —
+which is also exactly what UI-D's resolution badge needs — and a crafted
+`filed_by` for anyone else is a 403. A steward reads the whole queue.
+Recommendation: adopt this as the ledger endpoint's DT-1 shape.
+
+**D-105.3 — per-event `subject` in the §8 issue view is steward-only.**
+LED-R7's counts-only rule governs the *queue*, which carries no identity
+for anybody, and it stays that way. The issue view's event stream is a
+different surface: a steward already reads every audit row's subject under
+D-102.2, so withholding it there would be theatre rather than privacy.
+Everyone else gets the same stream with the field absent.
+
+**D-105.4 — the read APIs accept a bearer token as well as the session
+cookie.** Both are resolved by the same verifier, so identity and filtering
+are identical either way; this is what let `extract-audit.sh` become an API
+client holding no database credential — only the operator's own identity.
+CSRF is required on every cookie-authenticated write, and the cookie always
+takes precedence, so presenting a bearer header cannot shed that check.

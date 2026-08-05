@@ -13,7 +13,7 @@ assertions, each verified by attribute:
 
 | Identity | Assertion | Evidence |
 |---|---|---|
-| `contextlayer_exec` | Read-only at the database level: none of SUPERUSER/CREATEDB/CREATEROLE/BYPASSRLS, no write grant reachable through role membership, no schema CREATE | Executor startup check passes against the configured `execute_dsn` (G3); the file's VERIFY queries return empty |
+| `example_exec` | Read-only at the database level: none of SUPERUSER/CREATEDB/CREATEROLE/BYPASSRLS, no write grant reachable through role membership, no schema CREATE | Executor startup check passes against the configured `execute_dsn` (G3); the file's VERIFY queries return empty |
 | `contextlayer_introspect` | Neither SUPERUSER nor BYPASSRLS; no SELECT grant on customer tables | One accepted live snapshot under the role, byte-identical to the previous role's on unchanged source state (D-71.2) |
 | `contextlayer-sync` PAT | Fine-grained, single KB repository, contents + pull-request write and nothing else | P-H / D-66.7 |
 

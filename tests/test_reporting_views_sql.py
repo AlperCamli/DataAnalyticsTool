@@ -155,7 +155,7 @@ def estate():
         # The shipped views file, verbatim — this is the artifact under test.
         psql(container, VIEWS_SQL.read_text())
         parsed = psycopg.conninfo.conninfo_to_dict(admin_dsn)
-        parsed["user"], parsed["password"] = "contextlayer_exec", TEST_PASSWORD
+        parsed["user"], parsed["password"] = "example_exec", TEST_PASSWORD
         yield {"admin": admin_dsn, "exec": psycopg.conninfo.make_conninfo(**parsed)}
 
 

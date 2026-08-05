@@ -23,6 +23,9 @@ export const FLAG_GAP_KINDS = [
   "schema_mismatch",
   "capability_gap",
   "result_disputed",
+  // MCP §6.10 amendment (D-101.3): reachable from a session, because a
+  // queue only browser users can file into is not the queue D-101 adopted.
+  "enrichment_request",
   "other",
 ] as const;
 
@@ -47,6 +50,21 @@ const NUMBER_RE = /\b\d+(?:[.,]\d+)*\b/g;
 
 export const TITLE_MAX = 160;
 export const DESCRIPTION_MAX = 500;
+/**
+ * The §4 amendment (D-101.2) and MCP §6.10's amendment both say the
+ * proposal's treatment is *identical* to `description`'s — "the same
+ * server-enforced length bound", no exception carved for it. Aliases
+ * rather than new numbers, so the two can never drift apart.
+ */
+export const PROPOSAL_MAX = DESCRIPTION_MAX;
+/** Rejection reasons are shown to the filer, so LED-R2 binds them too. */
+export const VERDICT_REASON_MAX = DESCRIPTION_MAX;
+
+/** The kind that carries the verdict lifecycle (ledger §4 amendment). */
+export const ENRICHMENT_REQUEST = "enrichment_request";
+
+/** Inlet for the dashboard's human gap form (§4 registry, class 3). */
+export const HUMAN_FILED = "human_filed";
 
 /** LED-R2 storage scrub: value-shaped content never lands in the ledger. */
 export function scrubText(text: string, max: number): string {
@@ -115,6 +133,14 @@ export async function recordEvent(pool: pg.Pool, input: LedgerEventInput): Promi
   const ts = input.ts ?? new Date();
   const title = scrubText(`${input.kind}: ${input.scopeLabel ?? input.scope}`, TITLE_MAX);
   const description = input.description ? scrubText(input.description, DESCRIPTION_MAX) : null;
+  // LED-R2 for the §4 amendment's proposal payload, enforced *here* —
+  // at storage, on the one path both inlets share (the dashboard's
+  // request form and flag_gap) — so no inlet can carry an unscrubbed or
+  // unbounded value into a row, whatever it passes.
+  const detail = { ...(input.detail ?? {}) };
+  if (typeof detail.proposal === "string") {
+    detail.proposal = scrubText(detail.proposal, PROPOSAL_MAX);
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -166,7 +192,7 @@ export async function recordEvent(pool: pg.Pool, input: LedgerEventInput): Promi
         input.kbRef ?? null,
         input.snapshotRef ? JSON.stringify(input.snapshotRef) : null,
         description,
-        JSON.stringify(input.detail ?? {}),
+        JSON.stringify(detail),
         issue.issue_id,
       ],
     );
@@ -235,6 +261,284 @@ export async function listIssues(
     params,
   );
   return rows;
+}
+
+// ---------------------------------------------------------------------------
+// Triage-queue contract (§8) and the enrichment_request verdict
+// lifecycle (§4 amendment, D-101.2) — the dashboard's ledger surface.
+//
+// Kept beside `listIssues` rather than in the dashboard module so the
+// ledger's own rules (ordering, scrub bounds, state machine) stay in the
+// ledger, and the dashboard remains a caller of them.
+
+export interface TriageIssue extends GapIssue {
+  detector_class: number | null;
+  verdict_by: string | null;
+  verdict_at: string | null;
+  verdict_reason: string | null;
+  batch_id: string | null;
+  resolution: Record<string, unknown> | null;
+}
+
+export interface TriageFilter {
+  /** Empty = every status (the queue's default is the open-ish set). */
+  statuses?: string[];
+  kind?: string;
+  system?: string;
+  /**
+   * Restrict to issues this subject has filed an event on. This is the
+   * server-side subject filter behind DT-1 for the ledger endpoint: a
+   * reporter's queue is the requests they filed, never anyone else's.
+   */
+  filedBy?: string;
+  limit: number;
+  /** Keyset cursor: continue strictly after this issue in queue order. */
+  after?: { occurrences: number; distinctSubjects: number; lastSeen: string; issueId: string };
+}
+
+/**
+ * §8 queue order: the prioritization signal the queue already has —
+ * `(occurrences, distinct_subjects)`, then recency, then a stable id
+ * tiebreak so keyset pagination cannot skip or repeat a row.
+ */
+export async function listTriageIssues(pool: pg.Pool, filter: TriageFilter): Promise<TriageIssue[]> {
+  const params: unknown[] = [];
+  const where: string[] = [];
+  if (filter.statuses && filter.statuses.length > 0) {
+    params.push(filter.statuses);
+    where.push(`i.status = ANY($${params.length})`);
+  }
+  if (filter.kind) {
+    params.push(filter.kind);
+    where.push(`i.kind = $${params.length}`);
+  }
+  if (filter.system) {
+    params.push(filter.system);
+    where.push(`i.system = $${params.length}`);
+  }
+  if (filter.filedBy !== undefined) {
+    params.push(filter.filedBy);
+    where.push(
+      `EXISTS (SELECT 1 FROM ledger_events e
+                WHERE e.issue_id = i.issue_id AND e.subject = $${params.length})`,
+    );
+  }
+  if (filter.after) {
+    params.push(filter.after.occurrences, filter.after.distinctSubjects, filter.after.lastSeen, filter.after.issueId);
+    const n = params.length;
+    where.push(
+      `(i.occurrences, i.distinct_subjects, i.last_seen, i.issue_id) <
+       ($${n - 3}::integer, $${n - 2}::integer, $${n - 1}::timestamptz, $${n}::uuid)`,
+    );
+  }
+  params.push(filter.limit);
+  const { rows } = await pool.query<TriageIssue>(
+    `SELECT i.issue_id, i.kind, i.title, i.object_fqn, i.system, i.status,
+            i.occurrences, i.distinct_subjects,
+            to_jsonb(i.first_seen) #>> '{}' AS first_seen,
+            to_jsonb(i.last_seen)  #>> '{}' AS last_seen,
+            i.links, i.verdict_by,
+            to_jsonb(i.verdict_at) #>> '{}' AS verdict_at,
+            i.verdict_reason, i.batch_id, i.resolution,
+            (SELECT max(e.detector_class) FROM ledger_events e
+              WHERE e.issue_id = i.issue_id) AS detector_class
+       FROM ledger_issues i
+      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+      ORDER BY i.occurrences DESC, i.distinct_subjects DESC, i.last_seen DESC, i.issue_id DESC
+      LIMIT $${params.length}`,
+    params,
+  );
+  return rows;
+}
+
+export interface LedgerEventRow {
+  event_id: string;
+  ts: string;
+  detector_class: number;
+  kind: string;
+  system: string | null;
+  object_fqn: string | null;
+  subject: string | null;
+  session_id: string | null;
+  profile: string | null;
+  audit_ref: string | null;
+  kb_ref: string | null;
+  description: string | null;
+  detail: Record<string, unknown>;
+  issue_id: string;
+  /** Issue-level context, so an event stream can be rendered alone. */
+  issue_status: string;
+  issue_kind: string;
+  routed_to: string;
+}
+
+/** §8 issue view: the event stream behind one issue, or a whole window
+ * of events when no issue is named (the evidence-extraction read). */
+export async function listEvents(
+  pool: pg.Pool,
+  filter: { issueId?: string; since?: string; until?: string; kind?: string; subject?: string; limit: number; after?: { ts: string; eventId: string } },
+): Promise<LedgerEventRow[]> {
+  const params: unknown[] = [];
+  const where: string[] = [];
+  if (filter.issueId) {
+    params.push(filter.issueId);
+    where.push(`e.issue_id = $${params.length}::uuid`);
+  }
+  if (filter.since) {
+    params.push(filter.since);
+    where.push(`e.ts >= $${params.length}::timestamptz`);
+  }
+  if (filter.until) {
+    params.push(filter.until);
+    where.push(`e.ts <= $${params.length}::timestamptz`);
+  }
+  if (filter.kind) {
+    params.push(filter.kind);
+    where.push(`e.kind = $${params.length}`);
+  }
+  if (filter.subject !== undefined) {
+    params.push(filter.subject);
+    where.push(`e.subject = $${params.length}`);
+  }
+  if (filter.after) {
+    params.push(filter.after.ts, filter.after.eventId);
+    const n = params.length;
+    where.push(`(e.ts, e.event_id) > ($${n - 1}::timestamptz, $${n}::uuid)`);
+  }
+  params.push(filter.limit);
+  const { rows } = await pool.query<LedgerEventRow>(
+    `SELECT e.event_id, to_jsonb(e.ts) #>> '{}' AS ts,
+            e.detector_class, e.kind, e.system, e.object_fqn,
+            e.subject, e.session_id, e.profile, e.audit_ref, e.kb_ref,
+            e.description, e.detail, e.issue_id,
+            i.status AS issue_status, i.kind AS issue_kind, i.routed_to
+       FROM ledger_events e
+       JOIN ledger_issues i ON i.issue_id = e.issue_id
+      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+      ORDER BY e.ts, e.event_id
+      LIMIT $${params.length}`,
+    params,
+  );
+  return rows;
+}
+
+export async function getIssue(pool: pg.Pool, issueId: string): Promise<TriageIssue | null> {
+  const { rows } = await pool.query<TriageIssue>(
+    `SELECT i.issue_id, i.kind, i.title, i.object_fqn, i.system, i.status,
+            i.occurrences, i.distinct_subjects,
+            to_jsonb(i.first_seen) #>> '{}' AS first_seen,
+            to_jsonb(i.last_seen)  #>> '{}' AS last_seen,
+            i.links, i.verdict_by,
+            to_jsonb(i.verdict_at) #>> '{}' AS verdict_at,
+            i.verdict_reason, i.batch_id, i.resolution,
+            (SELECT max(e.detector_class) FROM ledger_events e
+              WHERE e.issue_id = i.issue_id) AS detector_class
+       FROM ledger_issues i WHERE i.issue_id = $1::uuid`,
+    [issueId],
+  );
+  return rows[0] ?? null;
+}
+
+export type VerdictOutcome =
+  | { ok: true; issue: TriageIssue }
+  | { ok: false; code: "not_found" | "wrong_kind" | "wrong_state"; detail: string };
+
+/**
+ * A steward's verdict (§4 amendment, UI-11). **Ledger state only** —
+ * this function writes one row in `ledger_issues` and nothing else. It
+ * makes no git call and it writes no KB content, and it never could:
+ * it holds a Postgres pool and knows nothing about a repository.
+ * Approve means *worth drafting*; the certification act remains a human
+ * merging a reviewed diff (KB-7).
+ *
+ * The transition set is the §4 diagram's, verbatim: verdicts are cast
+ * on `open` requests. Anything already approved, rejected, batched or
+ * resolved is a conflict the caller is told about rather than a silent
+ * overwrite of another steward's decision.
+ */
+export async function recordVerdict(
+  pool: pg.Pool,
+  input: { issueId: string; verdict: "approve" | "reject"; reason?: string | null; by: string; at?: Date },
+): Promise<VerdictOutcome> {
+  const existing = await getIssue(pool, input.issueId);
+  if (!existing) return { ok: false, code: "not_found", detail: `no issue ${input.issueId}` };
+  if (existing.kind !== ENRICHMENT_REQUEST) {
+    return {
+      ok: false,
+      code: "wrong_kind",
+      detail: `verdicts apply to ${ENRICHMENT_REQUEST} issues only; ${input.issueId} is ${existing.kind}`,
+    };
+  }
+  if (existing.status !== "open") {
+    return {
+      ok: false,
+      code: "wrong_state",
+      detail: `issue ${input.issueId} is ${existing.status}; verdicts are cast on open requests`,
+    };
+  }
+  const reason = input.reason ? scrubText(input.reason, VERDICT_REASON_MAX) : null;
+  const { rows } = await pool.query<{ issue_id: string }>(
+    `UPDATE ledger_issues
+        SET status = $2, verdict_by = $3, verdict_at = $4, verdict_reason = $5
+      WHERE issue_id = $1::uuid AND status = 'open' AND kind = $6
+      RETURNING issue_id`,
+    [
+      input.issueId,
+      input.verdict === "approve" ? "approved" : "rejected",
+      input.by,
+      input.at ?? new Date(),
+      reason,
+      ENRICHMENT_REQUEST,
+    ],
+  );
+  if (!rows[0]) {
+    return { ok: false, code: "wrong_state", detail: `issue ${input.issueId} changed state concurrently` };
+  }
+  return { ok: true, issue: (await getIssue(pool, input.issueId))! };
+}
+
+/**
+ * The "deliver batch" trigger (§8): stamp up to `max` approved requests
+ * with one batch id and move them to `batched`. This hands the enrich
+ * skill a scoped work list — it does not draft, and it does not open a
+ * PR. Resolution rides the existing L-5 CL-Resolves lifecycle when the
+ * human merges the batch PR's reviewed diff.
+ *
+ * Bounded at ~10 by config so no batch becomes an immortal rolling PR.
+ */
+export async function deliverBatch(
+  pool: pg.Pool,
+  input: { max: number; by: string },
+): Promise<{ batchId: string; issues: TriageIssue[] }> {
+  const batchId = `batch-${randomUUID()}`;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ issue_id: string }>(
+      `UPDATE ledger_issues
+          SET status = 'batched', batch_id = $1
+        WHERE issue_id IN (
+          SELECT issue_id FROM ledger_issues
+           WHERE kind = $2 AND status = 'approved' AND batch_id IS NULL
+           ORDER BY occurrences DESC, distinct_subjects DESC, last_seen DESC, issue_id DESC
+           LIMIT $3
+           FOR UPDATE SKIP LOCKED)
+        RETURNING issue_id`,
+      [batchId, ENRICHMENT_REQUEST, Math.max(1, input.max)],
+    );
+    await client.query("COMMIT");
+    const issues: TriageIssue[] = [];
+    for (const row of rows) {
+      const issue = await getIssue(pool, row.issue_id);
+      if (issue) issues.push(issue);
+    }
+    return { batchId, issues };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ---------------------------------------------------------------------------

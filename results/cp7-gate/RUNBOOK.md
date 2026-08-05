@@ -878,8 +878,18 @@ records rather than from prose.
 
 ```bash
 cd ~/Desktop/DataProject
-results/cp7-gate/extract-audit.sh '<the UTC instant from step 4.6>'
+# Since B-0 the extractor is a client of the dashboard read APIs
+# (dashboard spec §5), not of the database — so it needs the operator's
+# own identity rather than a DB shell. Use a STEWARD account: the audit
+# read is subject-filtered, and a reporter's token returns that
+# reporter's rows only (which is the endpoint working, not failing).
+CL_IDP=http://127.0.0.1:8180 CL_USER='<steward>' CL_PASSWORD='<pw>' \
+  results/cp7-gate/extract-audit.sh '<the UTC instant from step 4.6>'
 ```
+
+If the IdP has no password grant, mint the token however that IdP wants
+and pass it directly: `CL_TOKEN=… results/cp7-gate/extract-audit.sh '…'`.
+`CL_API` overrides the core's base URL (default `http://127.0.0.1:8100`).
 
 *Windows PowerShell · machine 2:* nothing to run.
 

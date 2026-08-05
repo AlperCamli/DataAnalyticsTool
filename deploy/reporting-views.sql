@@ -51,10 +51,10 @@
 BEGIN;
 
 CREATE SCHEMA IF NOT EXISTS reporting;
-GRANT USAGE ON SCHEMA reporting TO contextlayer_exec;
+GRANT USAGE ON SCHEMA reporting TO example_exec;
 -- The execution role reads views here and nothing else: no CREATE, so it
 -- cannot add a view of its own that widens the hole.
-REVOKE CREATE ON SCHEMA reporting FROM contextlayer_exec, PUBLIC;
+REVOKE CREATE ON SCHEMA reporting FROM example_exec, PUBLIC;
 
 -- --- job pipeline ----------------------------------------------------
 CREATE OR REPLACE VIEW reporting.v_jobs_by_status AS
@@ -302,7 +302,7 @@ SELECT u.cohort_month,
 -- automatically: adding a view is a deliberate act, and so is exposing it.
 -- (This grant runs after every view above, so re-running this whole file
 -- is what grants a newly added view — deliberately.)
-GRANT SELECT ON ALL TABLES IN SCHEMA reporting TO contextlayer_exec;
+GRANT SELECT ON ALL TABLES IN SCHEMA reporting TO example_exec;
 
 COMMIT;
 
@@ -328,7 +328,7 @@ COMMIT;
 -- And confirm the execution role can read the views but still not the
 -- base tables:
 --
---   SET ROLE contextlayer_exec;
+--   SET ROLE example_exec;
 --   SELECT count(*) FROM reporting.v_jobs_by_status;        -- rows expected
 --   SELECT count(*) FROM reporting.v_user_signups_by_day;   -- rows expected (7.0)
 --   SELECT count(*) FROM public.jobs;                 -- 0 (RLS still on)

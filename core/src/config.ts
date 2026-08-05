@@ -39,6 +39,33 @@ export interface CoreConfig {
   opsRoles: string[];
   /** MCP server (CP-4). Disabled unless CORE_MCP_ENABLED. */
   mcp: McpConfig;
+  /** Dashboard read APIs + browser sessions (B-0). */
+  dashboard: DashboardConfig;
+}
+
+/**
+ * Dashboard surface (dashboard spec §5, D-102.1). It shares the core's
+ * identity domain and KB by ruling (UI-9: one release train, one config
+ * source, one identity domain), so it is enabled with the MCP surface
+ * unless CORE_DASHBOARD_ENABLED says otherwise — there is no second
+ * deployment to turn on.
+ */
+export interface DashboardConfig {
+  enabled: boolean;
+  /** Post-login landing path (the SPA's entry point once B-1 ships). */
+  postLoginPath: string;
+  /** Session lifetime cap; the IdP's token lifetime still wins when
+   * shorter (D-102.1: expiry follows the IdP's token lifetimes). */
+  sessionMaxS: number;
+  /** `Secure` on the session cookie. Defaults to on for an https
+   * public URL, off for plain-http local/dev so the pilot works. */
+  cookieSecure: boolean;
+  /** UI-B: page size default and hard cap for every read endpoint. */
+  pageDefault: number;
+  pageMax: number;
+  /** Approved requests stamped by one "deliver batch" trigger
+   * (ledger §8: batches are cut on demand or at ~10). */
+  batchMax: number;
 }
 
 export interface McpConfig {
@@ -236,6 +263,36 @@ function loadMcpConfig(env: NodeJS.ProcessEnv, host: string, port: number): McpC
   };
 }
 
+function loadDashboardConfig(
+  env: NodeJS.ProcessEnv,
+  mcp: McpConfig,
+): DashboardConfig {
+  const raw = env.CORE_DASHBOARD_ENABLED;
+  const enabled = raw === undefined || raw === "" ? mcp.enabled : raw === "1" || raw === "true";
+  if (enabled && !mcp.oidcIssuer) {
+    throw new ConfigError("CORE_OIDC_ISSUER is required when the dashboard is enabled");
+  }
+  const pageDefault = intVar(env, "CORE_DASHBOARD_PAGE_DEFAULT", 50);
+  const pageMax = intVar(env, "CORE_DASHBOARD_PAGE_MAX", 200);
+  if (pageDefault > pageMax) {
+    throw new ConfigError(
+      `CORE_DASHBOARD_PAGE_DEFAULT (${pageDefault}) exceeds CORE_DASHBOARD_PAGE_MAX (${pageMax})`,
+    );
+  }
+  return {
+    enabled,
+    postLoginPath: env.CORE_DASHBOARD_POST_LOGIN ?? "/",
+    sessionMaxS: intVar(env, "CORE_DASHBOARD_SESSION_MAX_S", 12 * 3600),
+    cookieSecure:
+      env.CORE_DASHBOARD_COOKIE_SECURE !== undefined && env.CORE_DASHBOARD_COOKIE_SECURE !== ""
+        ? env.CORE_DASHBOARD_COOKIE_SECURE === "1" || env.CORE_DASHBOARD_COOKIE_SECURE === "true"
+        : mcp.publicUrl.startsWith("https://"),
+    pageDefault,
+    pageMax,
+    batchMax: intVar(env, "CORE_DASHBOARD_BATCH_MAX", 10),
+  };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
   const databaseUrl = env.CORE_DATABASE_URL;
   if (!databaseUrl) throw new ConfigError("CORE_DATABASE_URL is required");
@@ -248,6 +305,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
 
   const host = env.CORE_HOST ?? "0.0.0.0";
   const port = intVar(env, "CORE_PORT", 8100);
+  const mcp = loadMcpConfig(env, host, port);
   return {
     databaseUrl,
     host,
@@ -267,6 +325,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
     sweepIntervalMs: intVar(env, "CORE_SWEEP_INTERVAL_MS", 1000),
     claimPollMs: intVar(env, "CORE_CLAIM_POLL_MS", 300),
     sync: loadSyncConfig(env),
-    mcp: loadMcpConfig(env, host, port),
+    mcp,
+    dashboard: loadDashboardConfig(env, mcp),
   };
 }

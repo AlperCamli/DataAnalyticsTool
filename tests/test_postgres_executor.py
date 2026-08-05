@@ -386,21 +386,21 @@ def test_deploy_execution_role_sql_provisions_a_role_that_cannot_write():
             assert conn.execute(
                 """SELECT 1 FROM information_schema.role_table_grants
                     WHERE grantee IN (SELECT rolname FROM pg_roles
-                                       WHERE pg_has_role('contextlayer_exec', oid, 'USAGE'))
+                                       WHERE pg_has_role('example_exec', oid, 'USAGE'))
                       AND privilege_type = ANY(%s)""",
                 (list(WRITE_PRIVILEGES),),
             ).fetchall() == []
             assert conn.execute(
                 """SELECT 1 FROM pg_namespace
-                    WHERE has_schema_privilege('contextlayer_exec', nspname, 'CREATE')
+                    WHERE has_schema_privilege('example_exec', nspname, 'CREATE')
                       AND nspname NOT LIKE 'pg_%%' AND nspname <> 'information_schema'"""
             ).fetchall() == []
             assert conn.execute(
                 "SELECT rolsuper, rolcreatedb, rolcreaterole, rolbypassrls "
-                "FROM pg_roles WHERE rolname = 'contextlayer_exec'"
+                "FROM pg_roles WHERE rolname = 'example_exec'"
             ).fetchone() == (False, False, False, False)
 
-        exec_dsn = role_dsn(admin_dsn, "contextlayer_exec", "provision-test-pw")
+        exec_dsn = role_dsn(admin_dsn, "example_exec", "provision-test-pw")
 
         with psycopg.connect(exec_dsn, autocommit=True) as conn:
             assert conn.execute("SELECT count(*) FROM public.orders").fetchone() == (1,)
@@ -427,7 +427,7 @@ def test_deploy_execution_role_sql_provisions_a_role_that_cannot_write():
         facts = PostgresExecutor().preflight(
             {"system": "demo", "mode": "live", "execute_dsn": exec_dsn}
         )
-        assert facts["role"] == "contextlayer_exec"
+        assert facts["role"] == "example_exec"
 
 
 # --- CC-5: comment tagging --------------------------------------------------
