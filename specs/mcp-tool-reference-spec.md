@@ -140,9 +140,15 @@ MT-10's wording extends to layout: a layout naming a table no artifact query del
 
 Estate summary from ops state + KB statuses: per system {last snapshot at, trigger, next scheduled}, doc-status counts (verified/draft/stale/contaminated), open sync PRs, snapshot-age warnings per the P1 mode-3 threshold. The tool behind "how current is my context?" — and the dashboard KB Health module renders the same query.
 
-### 6.10 `flag_gap(kind, description, object?)` — F
+### 6.10 `flag_gap(kind, description, object?, proposal?)` — F
 
-`kind` ∈ `missing_doc | missing_join_path | uncertified_metric | missing_entity | schema_mismatch | capability_gap | result_disputed | other`. Server attaches identity, session, profile, and current refs; writes the fault-ledger event, deduplicating into an issue (ledger spec §6); responds with `{issue_id, occurrences, routed_to}` so the skill can tell the user who was notified and whether the gap was already known (HLR §9.5 honest-failure rule; ledger L-6). Rate-limited per session to prevent flag spam — dedup makes residual spam harmless.
+`kind` ∈ `missing_doc | missing_join_path | uncertified_metric | missing_entity | schema_mismatch | capability_gap | result_disputed | enrichment_request | other`. Server attaches identity, session, profile, and current refs; writes the fault-ledger event, deduplicating into an issue (ledger spec §6); responds with `{issue_id, occurrences, routed_to}` so the skill can tell the user who was notified and whether the gap was already known (HLR §9.5 honest-failure rule; ledger L-6). Rate-limited per session to prevent flag spam — dedup makes residual spam harmless.
+
+**Amendment (D-101.3, 2026-08-05) — the `proposal` argument.** `proposal` (optional string) carries the caller's *suggested content* for the gap being filed, so a session-side user can submit a knowledge request without the dashboard — the same queue, a different door. Server-side treatment is identical to `description`, with no exception carved for it: the **LED-R2** scrub runs over it before storage (quoted literals, numbers and identifier-like digit runs, email addresses and similar value-shaped tokens dropped) under the same server-enforced length bound, and it is stored on the event as `detail.proposal`, rendered markdown/HTML-inert wherever it is displayed (**LED-R5**). Identity handling is untouched: **LED-R3** stands — the server sets subject, session, profile and refs, and a client-supplied subject is ignored.
+
+The enum's `enrichment_request` is the kind that carries the verdict lifecycle (ledger §4 amendment: `open → approved | rejected(reason)`, `approved → batched → resolved`). It is additive to the enum on the `result_disputed` precedent (SK-5) — a class-3 kind reachable through this tool, because a queue only browser users can file into is not the queue D-101 adopted. `proposal` is accepted on any kind and stored on the event as drafting evidence, but only `enrichment_request` opens a request with verdict states.
+
+The response shape, the rate limit (§7), and the K-FAIL discipline are all unchanged: a proposal never substitutes for naming the gap, and the filer is told the same three things every filer is told — recorded, already-known-or-not, and who was notified.
 
 ### 6.11 `list_gaps(status=open|triaged, kind?, system?, limit=20)` — S
 
@@ -173,6 +179,7 @@ One record per call: `{ts, subject, roles, profile, tool, args_digest, refs, dec
 | MT-11 | `validate_sql` on a table hidden from the caller fails with the *same* finding a nonexistent table produces (code, ref, message) and issues no token; the identical statement from a caller who can see it passes | §6.6 amendment, M-4 |
 | MT-12 | A JOIN of one visible and one hidden table is refused; an API request citing a hidden custom dimension is refused; the audit records `filtered` with the true reason in both | §6.6 amendment, M-4, M-8 |
 | MT-13 | A token issued while an object was visible is refused at `execute_sql` after the map hides it — caught by the §5 allow-set recheck, with the snapshot unmoved — and a token carrying no `objects` claim is not honoured | §5 amendment |
+| MT-14 | `flag_gap(kind: enrichment_request, proposal: …)` with a canary value and a markdown payload in the proposal: the stored `detail.proposal` is scrubbed and length-bounded exactly as `description` is, a client-supplied subject is ignored in favour of the server-resolved one, and the response is the unchanged `{issue_id, occurrences, routed_to}` | §6.10 amendment, LED-R2/R3 |
 
 ## 10. Amendments to other specs (additive)
 
