@@ -82,7 +82,14 @@ all one that gets published.
 
 ```bash
 cd ~/Desktop/DataProject
-nano .secrets/idp-users.json
+open -e .secrets/idp-users.json
+```
+
+Give every account a new password, save with **Cmd-S**, close the
+window, then lock the file down and reload the login service:
+
+```bash
+cd ~/Desktop/DataProject
 chmod 600 .secrets/idp-users.json
 docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d devidp
 ```
@@ -121,134 +128,190 @@ You may end the run at any point they want to stop.
 
 ## 4. Machine 1 — prepare the host
 
-### O-1. Give the colleague their own identity
+Four steps, in order. Each one says what you are doing, the exact thing
+to run, and what you should see. Every command in this section runs on
+**your Mac**, in the Terminal, and each block can be pasted whole.
 
-*macOS · machine 1:*
+If something does not match what the step says you should see, stop
+there and fix it — do not carry on and hope. Nothing here is in front of
+your colleague yet, so a problem now costs nothing.
 
-Add ONE entry to the pilot's account list — the git-ignored one from
-§3.0, never the published file. Use their real first name or handle: the
-audit rows carry that string, and *who used it* is the question those
-rows have to answer.
+### O-1. Create their account
+
+**What you are doing:** giving your colleague a login that is theirs
+alone. Every action they take gets recorded under this name, and that
+recording is the evidence this whole run exists to produce. If they used
+your login, or the shared `reporter` one, the run would prove nothing.
+
+**The file:** `.secrets/idp-users.json` — the private account list. Not
+the one inside the project folder that gets published.
+
+You have two ways to do this:
+
+*Either* ask the assistant in this session to add the account — give it
+their name and it writes the entry, generates a password, and reloads
+the login service.
+
+*Or* do it yourself. This opens the file in TextEdit, the normal Mac
+text editor:
 
 ```bash
 cd ~/Desktop/DataProject
-nano .secrets/idp-users.json
+open -e .secrets/idp-users.json
 ```
 
-The new entry, beside the existing ones:
+You will see a list in square brackets, with entries in curly braces.
+Copy an existing entry, paste it as a new one, and change it to look
+like this — keeping the commas between entries:
 
 ```json
   {
-    "username": "<their-handle>",
-    "password": "<a password you generate, not one you reuse>",
+    "username": "deniz",
+    "password": "pick-something-they-can-type",
     "roles": ["reporter"],
-    "display": "<Their Name>"
+    "display": "Deniz"
   }
 ```
 
-Then restart just the identity provider and confirm the account exists
-and carries exactly the reporter role:
+Use their real first name. Save with **Cmd-S** and close the window.
 
-```bash
-# `restart` alone would re-read nothing: the file is a bind mount from
-# the live overlay, so bring it up through both files.
-docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d devidp
-sleep 2
-curl -sS -X POST http://127.0.0.1:8180/token \
-  -d grant_type=password -d username='<their-handle>' -d password='<their password>' |
-  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"][:12], "…")'
-```
-
-**Success criteria:** a token prints. The username is **not** `reporter`
-and **not** `alper` — a shared login fails this checkpoint's gate
-whatever else happens. The role list is exactly `["reporter"]`.
-
-**What to record:** the username you created (it is the string the
-evidence in step 7 filters on).
-
-### O-2. Bring the stack up reachable from their machine
-
-*macOS · machine 1:*
+**Then load it** — the login service only reads that file when it
+starts:
 
 ```bash
 cd ~/Desktop/DataProject
-ipconfig getifaddr en0    # this Mac's LAN address — 10.22.88.149 on
-                          # 2026-08-05. It is DHCP: re-check it on the
-                          # day. The address is compiled into the bundle,
-                          # so a bundle downloaded at one address stops
-                          # connecting when the Mac gets another one.
-# Use the make target, not a bare `docker compose up`: it sources
-# .secrets/sync.env into the shell, which is the D-84.2 trap — an
-# unexported env file yields a stack that looks healthy and never syncs.
-# The rebuild is required this time: the download endpoint is new, and
-# the image now has to carry the shipped skills it compiles from.
-CL_HOST_ADDR=<that address> CL_BIND=0.0.0.0 CORE_MCP_ENABLED=1 make stack-live
-curl -sS http://127.0.0.1:8100/healthz | python3 -m json.tool | head -20
+docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d devidp
 ```
 
-Then confirm the new surface answers *before* anyone is waiting on it:
+**Check it worked.** Put their name and password into this, replacing
+the two words in capitals:
 
 ```bash
-# Unauthenticated: a script gets 401, a browser gets sent to sign in.
+curl -sS -X POST http://127.0.0.1:8180/token -d grant_type=password -d username=THEIRNAME -d password=THEIRPASSWORD
+```
+
+**You should see:** a long block of text containing `access_token`.
+
+**If you see** `{"error":"invalid_grant"}`: the name or password does not
+match what is in the file — check for a typo or a missing comma.
+
+**Write down:** the username you created. You need it again at step 7.
+
+### O-2. Open the platform to their laptop
+
+**What you are doing:** your platform currently only listens to your own
+Mac. This step makes it reachable from their laptop on the same Wi-Fi,
+and rebuilds it so it is running the current code.
+
+**First, find your Mac's address on the network:**
+
+```bash
+ipconfig getifaddr en0
+```
+
+**You should see** four numbers, like `192.168.1.8`. Write it down — it
+goes into the next command and into the link you hand over. It can
+change when you reconnect to Wi-Fi, so use the one you get today, not
+one from a previous run.
+
+**Now start the platform, open to the network.** Replace `THEADDRESS`
+with what you just wrote down:
+
+```bash
+cd ~/Desktop/DataProject
+CL_HOST_ADDR=THEADDRESS CL_BIND=0.0.0.0 CORE_MCP_ENABLED=1 make stack-live
+```
+
+This takes a couple of minutes the first time. Use `make stack-live`
+rather than a plain `docker compose up`: it loads the live credential
+file into the shell first, and a stack started without it looks perfectly
+healthy while silently never syncing — that mistake once cost two days.
+
+**Check the platform is up and knows its address:**
+
+```bash
+curl -sS http://127.0.0.1:8100/healthz
+```
+
+**You should see** `"status":"ok"` and, further along,
+`"public_url":"http://THEADDRESS:8100"` with your address in it.
+
+**If public_url says `localhost`:** the address did not reach it. Run
+the start command again with `CL_HOST_ADDR` set. This matters more than
+it looks — that address gets written into the setup your colleague
+downloads, and `localhost` would point their laptop at itself.
+
+**Check the download page is alive:**
+
+```bash
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8100/v1/setup/bundle
-curl -sS -o /dev/null -w '%{http_code}\n' -H 'accept: text/html' \
-  http://127.0.0.1:8100/v1/setup/bundle
-# Your own binding, as the steward — proves the compile works in the
-# deployed image (it needs the skills the image now ships):
-CL_TOKEN=$(curl -sS -X POST http://127.0.0.1:8180/token \
-  -d grant_type=password -d username=alper -d password='<steward pw>' |
-  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
-curl -sS -H "authorization: Bearer $CL_TOKEN" http://127.0.0.1:8100/v1/setup/status |
-  python3 -m json.tool
+curl -sS -o /dev/null -w '%{http_code}\n' -H 'accept: text/html' http://127.0.0.1:8100/v1/setup/bundle
 ```
 
-Expect `401` then `302`, and a status body naming profile `steward` with
-a `setup_stamp`. A `503 setup_uncompilable` here means the image is
-stale — rebuild before handing anything over.
+**You should see** `401` then `302`. Those are correct: the first says
+"you are not signed in", the second says "a browser gets sent to the
+sign-in page".
 
-The `instance.public_url` in that output must be
-`http://<LAN address>:8100`. It is the address baked into the setup the
-colleague downloads; if it says `localhost`, their session will point at
-their own machine and nothing will connect.
-
-*On the colleague's machine, before you hand anything over — ask them to
-run this one line and read you the answer:*
-
-*macOS/Linux · machine 2:* `curl -sS http://<LAN address>:8100/healthz`
-*Windows PowerShell · machine 2:* `curl.exe -sS http://<LAN address>:8100/healthz`
-
-**Success criteria:** `{"status":"ok"...}` on their screen. If it hangs,
-fix the network before anything else — this is the one step where you
-are still allowed to help.
-
-**What to record:** nothing, unless it failed; then everything.
-
-### O-3. Record the start instant
-
-*macOS · machine 1:*
+**Check a real bundle can be built.** Replace `YOURPASSWORD` with your
+own steward password:
 
 ```bash
+cd ~/Desktop/DataProject
+CL_TOKEN=$(curl -sS -X POST http://127.0.0.1:8180/token -d grant_type=password -d username=alper -d password=YOURPASSWORD | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+curl -sS -H "authorization: Bearer $CL_TOKEN" http://127.0.0.1:8100/v1/setup/status
+```
+
+**You should see** a line containing `"profile": "steward"` and a
+`setup_stamp`.
+
+**If you see** `setup_uncompilable`: the platform is running an old
+build. Re-run the start command above; it rebuilds.
+
+**Last check, and the only one that needs them:** ask your colleague to
+open a terminal on their laptop and run this, with your address:
+
+*macOS/Linux:* `curl -sS http://THEADDRESS:8100/healthz`
+*Windows PowerShell:* `curl.exe -sS http://THEADDRESS:8100/healthz`
+
+**They should see** `{"status":"ok"...}`.
+
+**If it hangs or refuses:** they are on a different network, your Mac
+went to sleep, or the Wi-Fi blocks devices from seeing each other (common
+on guest, campus and hotel networks). Fix this now — it is the last
+moment you are allowed to help them.
+
+### O-3. Note the time
+
+**What you are doing:** marking the start of the run, so that afterwards
+you can pull out exactly the records belonging to it.
+
+```bash
+cd ~/Desktop/DataProject
 date -u +%Y-%m-%dT%H:%M:%SZ | tee results/phase2/a2/window-start.txt
 ```
 
-**What to record:** that file is the evidence window's left edge. Do not
-skip it — step 7 filters on it.
+**You should see** a timestamp printed. Do not skip this — step 7 reads
+that file.
 
-### O-4. Hand over
+### O-4. Hand over, then go quiet
 
-Give them, on paper or in a message:
+**What you are doing:** giving them everything they need, in one go, and
+then stopping.
 
-1. `results/phase2/a2/COLLEAGUE-BRIEFING.md` (print it or paste it whole).
-2. Section 5 of this page — the four colleague steps, nothing else.
-3. The download address: **`http://<LAN address>:8100/v1/setup/bundle`**
-4. Their username and password from O-1.
+Give them:
 
-If — and only if — you expect their journey to end in a published Power
-BI report, set the three publishing variables in the shell they will
-start the session from, **before** they begin:
+1. **`results/phase2/a2/COLLEAGUE-BRIEFING.md`** — print it, or paste it
+   into a message. It explains what this is and the two rules.
+2. **Section 5 of this page** — their four steps. Nothing else from this
+   document; the rest is yours.
+3. **The link:** `http://THEADDRESS:8100/v1/setup/bundle`
+4. **Their username and password** from O-1.
 
-*Windows PowerShell · machine 2 (typed by them, dictated by you, values
-from your secret store):*
+**Only if** you expect their journey to end in a published Power BI
+report, have them set three values in the terminal window they will
+start the session from — before they begin, never in the middle:
+
+*Windows PowerShell · their laptop (they type, you read the values out):*
 
 ```powershell
 $env:POWERBI_TENANT_ID     = "<tenant id>"
@@ -256,15 +319,13 @@ $env:POWERBI_CLIENT_ID     = "<app client id>"
 $env:POWERBI_CLIENT_SECRET = "<client secret value>"
 ```
 
-This is a known rough edge, not a product step: a user should not need
-an operator to dictate credentials. Record it as friction note #1 before
-the run even starts — it is the honest first finding, and the vault work
-that removes it is a later checkpoint.
+This is a rough edge, not a feature: a real user should never need
+someone to dictate credentials to them. Write it down as friction note
+number 1 before the run even starts. The work that removes it is a later
+checkpoint.
 
-**Then stop talking.** Sit where you can see and hear, with the notes
-file open.
-
----
+**Then stop talking.** Sit where you can see and hear, with your notes
+open. From here your only line is "I am not allowed to answer that".
 
 ## 5. Machine 2 — the colleague's four steps
 
