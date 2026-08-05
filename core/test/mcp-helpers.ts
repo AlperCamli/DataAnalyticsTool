@@ -374,9 +374,12 @@ export async function mcpRequest(
   profile: string | null,
   method: string,
   params: Record<string, unknown> = {},
+  /** A-2: the compiled bundle's setup stamp, as the client config carries it. */
+  opts: { setup?: string } = {},
 ): Promise<{ status: number; json: Record<string, unknown> | null; headers: Headers }> {
   const url = new URL(`${rig.base}/mcp`);
   if (profile !== null) url.searchParams.set("profile", profile);
+  if (opts.setup !== undefined) url.searchParams.set("setup", opts.setup);
   const response = await fetch(url, {
     method: "POST",
     headers: {

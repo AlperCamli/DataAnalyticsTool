@@ -51,6 +51,14 @@ COPY --from=wheelbuild /wheels /opt/contextlayer/wheels
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+# The shipped skills (D-75.1: skills come from the core image, never the
+# KB clone). Until A-2 the only compile ran from a developer checkout on
+# the host, where `core/skills/` sits beside `dist/` anyway; now the core
+# itself compiles bundles on request (/v1/setup/bundle), so the image has
+# to carry what `defaultSkillsRoot()` resolves to — without this, every
+# download 503s with the F-7 "profile names a skill this release does not
+# ship" refusal, which would be true of the image and false of the release.
+COPY core/skills ./skills
 COPY core/migrations ./migrations
 COPY deploy/jobs ./jobs
 COPY fixtures/drill /opt/contextlayer/fixtures/drill

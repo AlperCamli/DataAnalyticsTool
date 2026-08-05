@@ -14,7 +14,11 @@
  *   *absorbed*: its trigger history merges into the retrying job (both
  *   describe identical work — snapshots are absolute states) and the
  *   follower row is deleted, preserving the retrying job's attempt
- *   count and backoff so persistent failures still dead-letter.
+ *   count and backoff so persistent failures still dead-letter;
+ * - a *deferral* facing the same collision resolves the other way round
+ *   (D-106.2): nothing failed, so the queued job survives and the
+ *   deferred instance terminates `coalesced`, handing the survivor the
+ *   later of the two `not_before`s.
  */
 
 import pg from "pg";
@@ -511,6 +515,72 @@ export async function failJob(
   return outcome;
 }
 
+/**
+ * Coalesce a deferral into the queued duplicate that already holds this
+ * key (§8 amendment, D-106.2).
+ *
+ * The deferring job cannot return to `queued` — the partial unique index
+ * allows exactly one queued batch job per (system, type) — and nothing
+ * about it failed, so `dead_lettered` would be a lie. Both rows describe
+ * identical work (snapshots are absolute states), so the queued job is
+ * the survivor and the deferred instance terminates `coalesced`.
+ *
+ * The survivor **adopts the later `not_before` of the two**: the
+ * deferral's wait is a statement about the source ("the quota resets in
+ * an hour"), and a survivor that ran at its own earlier time would walk
+ * straight back into the same wall. Trigger history merges the same way
+ * a requeue's absorb does, so no accepted trigger loses its record.
+ */
+async function coalesceIntoQueued(
+  client: pg.PoolClient,
+  row: JobRow,
+  retryAfterS: number,
+  reason: { code?: string; message?: string },
+): Promise<boolean> {
+  if (row.class !== "batch") return false;
+  const { rows: queued } = await client.query<JobRow>(
+    `SELECT * FROM jobs
+      WHERE system = $1 AND type = $2 AND class = 'batch' AND state = 'queued'
+        AND job_id <> $3
+      FOR UPDATE`,
+    [row.system, row.type, row.job_id],
+  );
+  const survivor = queued[0];
+  if (!survivor) return false;
+
+  await client.query(
+    `UPDATE jobs
+        SET not_before = GREATEST(not_before, now() + make_interval(secs => $2)),
+            triggers = $3::jsonb, updated_at = now()
+      WHERE job_id = $1`,
+    [
+      survivor.job_id,
+      retryAfterS,
+      JSON.stringify([
+        ...survivor.triggers,
+        ...row.triggers.map((t) => ({ ...t, merged_from: row.job_id })),
+      ]),
+    ],
+  );
+  await client.query(
+    `UPDATE jobs
+        SET state = 'coalesced', finished_at = now(),
+            lease_token = NULL, lease_expires_at = NULL, runner_id = NULL,
+            progress = NULL, result_meta = $2::jsonb, updated_at = now()
+      WHERE job_id = $1`,
+    [
+      row.job_id,
+      // Not an error envelope: `error` stays null because none occurred.
+      JSON.stringify({
+        coalesced_into: survivor.job_id,
+        retry_after_s: retryAfterS,
+        reason,
+      }),
+    ],
+  );
+  return true;
+}
+
 export async function deferJob(
   pool: pg.Pool,
   cfg: CoreConfig,
@@ -518,7 +588,7 @@ export async function deferJob(
   leaseToken: string,
   retryAfterS: number,
   reason: { code?: string; message?: string },
-): Promise<"deferred" | "requeued" | "dead_lettered" | "cancelled" | null> {
+): Promise<"deferred" | "requeued" | "dead_lettered" | "cancelled" | "coalesced" | null> {
   reason = redactDeep(reason); // §7 defense in depth (review F3 / D-66 §2)
   const outcome = await withTransaction(pool, async (client) => {
     const row = await lockLeased(client, jobId, leaseToken);
@@ -553,27 +623,13 @@ export async function deferJob(
         "attempts_exhausted",
       );
     }
-    let triggers = row.triggers;
-    if (row.class === "batch") {
-      // A follower may have queued while this job was leased/running.
-      // Deferring the active job makes it queued again, so absorb that
-      // follower first to preserve the §8 single-queued invariant.
-      const { rows: followers } = await client.query<JobRow>(
-        `SELECT * FROM jobs
-          WHERE system = $1 AND type = $2 AND class = 'batch' AND state = 'queued'
-            AND job_id <> $3
-          FOR UPDATE`,
-        [row.system, row.type, row.job_id],
-      );
-      const follower = followers[0];
-      if (follower) {
-        await client.query(`DELETE FROM jobs WHERE job_id = $1`, [follower.job_id]);
-        triggers = [
-          ...triggers,
-          ...follower.triggers.map((t) => ({ ...t, merged_from: follower.job_id })),
-        ];
-      }
+    // D-106.2: a duplicate already queued for this key means the work
+    // this deferral would re-queue is waiting anyway. Coalesce into it
+    // rather than colliding with the §8 index.
+    if (await coalesceIntoQueued(client, row, retryAfterS, reason)) {
+      return "coalesced" as const;
     }
+    const triggers = row.triggers;
     await client.query(
       `UPDATE jobs
           SET state = 'queued', not_before = now() + make_interval(secs => $2),
@@ -592,7 +648,10 @@ export async function deferJob(
     );
     return "deferred" as const;
   });
-  if (outcome === "requeued") await notifyJobs(pool);
+  // A coalesce can leave the survivor immediately claimable (retry_after_s
+  // of 0, or a survivor already past its own not_before), and no other
+  // NOTIFY announces that.
+  if (outcome === "requeued" || outcome === "coalesced") await notifyJobs(pool);
   return outcome;
 }
 

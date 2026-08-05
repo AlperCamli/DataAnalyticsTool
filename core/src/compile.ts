@@ -21,6 +21,7 @@
  *    could rot.
  */
 
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -46,8 +47,48 @@ export interface CompiledSetup {
   /** `CLAUDE.md` — the profile's fragment plus the compiled preamble. */
   claudeMd: string;
   skills: CompiledSkill[];
+  /**
+   * The setup stamp (PA-2 / A-2): a digest of everything this bundle
+   * would put on a session's disk. It rides in the compiled `.mcp.json`
+   * URL, so the server sees on every connection which compile the
+   * session is running and can say so when that is no longer what
+   * compiling now would produce. See `setupStamp`.
+   */
+  stamp: string;
   /** Non-fatal problems the operator should see. */
   warnings: string[];
+}
+
+/**
+ * The stamp is taken over the bundle's *contract-bearing* bytes: the
+ * server URL, the CLAUDE.md the session reads as its statement of what
+ * it may do, and every skill file. It deliberately does **not** cover
+ * the stamp's own carrier (the `.mcp.json` URL) or anything time- or
+ * requester-dependent, so two compiles of one profile state produce one
+ * stamp — and any change that could narrow what a session attempts
+ * produces a different one.
+ */
+function setupStamp(input: {
+  profile: string;
+  displayName: string;
+  url: string;
+  claudeMd: string;
+  skills: CompiledSkill[];
+}): string {
+  const digest = (text: string) => createHash("sha256").update(text, "utf-8").digest("hex");
+  const canonical = JSON.stringify({
+    v: 1,
+    profile: input.profile,
+    display: input.displayName,
+    url: input.url,
+    claude_md: digest(input.claudeMd),
+    skills: input.skills.map((s) => ({
+      name: s.name,
+      sha256: digest(s.content),
+      files: s.files.map((f) => ({ path: f.path, sha256: digest(f.content) })),
+    })),
+  });
+  return createHash("sha256").update(canonical, "utf-8").digest("hex").slice(0, 16);
 }
 
 /**
@@ -166,14 +207,7 @@ export async function compileProfile(
   }
 
   const base = opts.publicUrl.replace(/\/+$/, "");
-  const mcpConfig = {
-    mcpServers: {
-      contextlayer: {
-        type: "http",
-        url: `${base}/mcp?profile=${encodeURIComponent(name)}`,
-      },
-    },
-  };
+  const mcpUrl = `${base}/mcp?profile=${encodeURIComponent(name)}`;
 
   const context = raw.context as { claude_md_fragment?: unknown } | undefined;
   const fragment = typeof context?.claude_md_fragment === "string" ? context.claude_md_fragment.trim() : "";
@@ -202,12 +236,41 @@ export async function compileProfile(
       ? ["## Skills", "", ...skills.map((s) => `- \`${s.name}\` — see \`.claude/skills/${s.name}/SKILL.md\``), ""]
       : []),
     ...(fragment ? ["## From your profile", "", fragment, ""] : []),
+    // PA-2, the July-29 lesson stated where the session will read it:
+    // the tool list above is a *snapshot*, and a session that treats a
+    // stale snapshot as its permissions silently ships a smaller
+    // product than the profile describes.
+    "## If this file and the server disagree",
+    "",
+    "The tool list above was compiled at a point in time. The server",
+    "re-checks your identity and profile on every call, so its list is",
+    "the authoritative one and it can only ever be *wider* than this",
+    "file. If the server says your setup is out of date, do not narrow",
+    "what you attempt — get a fresh setup in one step:",
+    "",
+    `    ${base}/v1/setup/bundle`,
+    "",
+    "(Sign in there with your own identity; the download is your own",
+    "profile's, and it carries no credential.)",
+    "",
   ]
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd();
 
-  return { profile: name, displayName, mcpConfig, claudeMd, skills, warnings };
+  const stamp = setupStamp({ profile: name, displayName, url: mcpUrl, claudeMd, skills });
+  const mcpConfig = {
+    mcpServers: {
+      contextlayer: {
+        type: "http",
+        // The stamp rides here because this URL is the one thing the
+        // session sends the server on every connection (PA-2 / A-2).
+        url: `${mcpUrl}&setup=${stamp}`,
+      },
+    },
+  };
+
+  return { profile: name, displayName, mcpConfig, claudeMd, skills, stamp, warnings };
 }
 
 /**

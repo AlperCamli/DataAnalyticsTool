@@ -129,6 +129,10 @@ Additive DDL: the `ledger_issues.status` CHECK gains `approved | rejected | batc
 
 **Reply path.** Rejection reasons and batch-merge resolutions surface to the filer through the same channel as every other resolution (the F-10 reply path; mechanism per dashboard spec UI-D, asserted by DT-10).
 
+**Amendment (D-106.4, 2026-08-05) — the proposal bound is 2000 characters.** The alias to `description`'s 500 above is **decoupled by intent**: suggested content legitimately carries enum decodings and structure sketches, which a gap description never does. The defense against data-value dumping is the LED-R2 scrub, not brevity. Everything else about the proposal's treatment is unchanged — the same scrub, the same server-set identity, the same render neutralization — and `description` stays 500.
+
+**Amendment (D-106.5, 2026-08-05) — recurrence after rejection reopens.** Symmetric with L-4 and with §7's dismissed-issue rule: a new occurrence on a `rejected` request **reopens** it to `open` with `reopen_count += 1`, its occurrence and distinct-subject counts cumulative, and its **prior verdict preserved** — `verdict_by`/`verdict_at`/`verdict_reason` are not cleared. The steward therefore reads *rejected before, refiled by N more* and may re-reject on the spot. No threshold sophistication in v1: one refiling reopens, exactly as one recurrence reopens a `wont_fix`, and the count is the argument. The verdict columns hold the latest verdict only — a re-rejection overwrites the previous reason, while `reopen_count` keeps the tally of refilings.
+
 ## 5. Class-1 detector rules (shipped defaults; ops-config data per L-3)
 
 Rules run in the core against the audit stream: cheap single-record rules synchronously on audit write; window rules in a periodic sweep (default every 5 min).
@@ -199,7 +203,7 @@ Events: retained 90 days (config), then deleted; issues: indefinite (they are th
 | FL-7 | Event retention sweep deletes >90d events, never issues; issue history intact | §10 |
 | FL-8 | Benchmark CI drop beyond tolerance → `benchmark_regression` issues keyed to kb_ref, author notified | §6c |
 | FL-9 | Rule threshold edited in ops config takes effect next sweep without deploy | L-3 |
-| FL-10 | Dismissed issue reoccurring → reopened, `reopen_count` incremented | §7 |
+| FL-10 | Dismissed issue reoccurring → reopened, `reopen_count` incremented; a **rejected** `enrichment_request` refiled → reopened the same way, verdict preserved and counts cumulative (D-106.5) | §7, §4 amendment |
 | FL-11 | `enrichment_request` lifecycle: two requests on one target dedup to one issue (`occurrences=2`); a proposal carrying a canary value and a markdown payload is stored scrubbed and served inert; approve → `approved` with `verdict_by`/`verdict_at`, **no KB write and no git call**; deliver batch → `batched(batch_id)`; merge of the batch PR resolves exactly the trailered requests, an undraftable one returning to `approved` with its note; reject records the reason and the filer's reply path carries it | §4 amendment (D-101.2), LED-R2/R3/R5, L-5, UI-11 |
 
 ## 12. Amendments to other specs (additive) and register actions

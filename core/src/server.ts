@@ -47,6 +47,7 @@ import { KbReader } from "./kbread.js";
 import { registerMcp } from "./mcp.js";
 import { OidcClient } from "./oidc.js";
 import { registerAuth } from "./session.js";
+import { registerSetup } from "./setup.js";
 import { RateLimiter } from "./ratelimit.js";
 import { getSnapshotBody, listSnapshots } from "./snapshots.js";
 import { getHookSecretHash, getSyncSystem, triggerSystem } from "./triggers.js";
@@ -131,7 +132,11 @@ export function buildServer(
       // resolved by the same verifier) — the ops-token path below would
       // be exactly the privileged backend-for-frontend UI-2 forbids.
       path.startsWith("/v1/auth/") ||
-      path.startsWith("/v1/dashboard/")
+      path.startsWith("/v1/dashboard/") ||
+      // A-2: the setup download authenticates as the requester and
+      // serves that requester's own profile binding — an ops token here
+      // would be a bundle handed out on somebody else's authority.
+      path.startsWith("/v1/setup/")
     );
   };
 
@@ -546,6 +551,9 @@ export function buildServer(
     };
     registerAuth(app, deps);
     registerDashboard(app, deps);
+    // A-2: the Setup module's server half — bundle download + staleness,
+    // on the same session layer and the same KB read.
+    registerSetup(app, deps);
   }
 
   // -- health probe (unauthenticated) -----------------------------------------

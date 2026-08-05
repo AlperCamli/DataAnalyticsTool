@@ -156,7 +156,7 @@ describe("ledger triage writes (§5.3) — inlets, verdicts, batches", () => {
       expect(served).toContain("&lt;script");
     });
 
-    it("bounds an oversized proposal at the same limit as a description", async () => {
+    it("bounds an oversized proposal at 2000, decoupled from description (D-106.4)", async () => {
       const issueId = await fileRequest(rig, reporter, {
         description: "the inventory doc is missing entirely",
         proposal: "overlong ".repeat(400), // ~3600 chars
@@ -166,9 +166,36 @@ describe("ledger triage writes (§5.3) — inlets, verdicts, batches", () => {
         [issueId],
       );
       expect(rows[0]!.detail.proposal.length).toBeLessThanOrEqual(PROPOSAL_MAX);
-      // The amendment's "identical treatment to description" is not a
-      // coincidence of two numbers that happen to match today.
-      expect(PROPOSAL_MAX).toBe(DESCRIPTION_MAX);
+      // D-106.4: the alias is gone by intent. Suggested content carries
+      // enum decodings and structure sketches; a description does not.
+      expect(PROPOSAL_MAX).toBe(2000);
+      expect(DESCRIPTION_MAX).toBe(500);
+    });
+
+    it("keeps a long structural proposal intact — the point of the wider bound", async () => {
+      // What a real proposal looks like: an enum decoded line by line.
+      // Under the old 500-char alias this arrived truncated mid-table.
+      const enumSketch = Array.from(
+        { length: 40 },
+        (_, i) => `status_${String.fromCharCode(97 + (i % 26))}${i} means the order is in stage ${i}`,
+      ).join("; ");
+      expect(enumSketch.length).toBeGreaterThan(DESCRIPTION_MAX * 3);
+      expect(enumSketch.length).toBeLessThan(PROPOSAL_MAX);
+      const issueId = await fileRequest(rig, reporter, {
+        description: "the order status enum is undocumented",
+        proposal: enumSketch,
+      });
+      const { rows } = await rig.core.pool.query<{ detail: { proposal: string } }>(
+        `SELECT detail FROM ledger_events WHERE issue_id = $1`,
+        [issueId],
+      );
+      const stored = rows[0]!.detail.proposal;
+      expect(stored.length).toBeGreaterThan(DESCRIPTION_MAX);
+      // The tail survived — the old bound cut this proposal in a third.
+      expect(stored).toContain("status_n39");
+      // Nothing about the scrub relaxed: the bare stage numbers still go.
+      expect(stored).toContain("means the order is in stage");
+      expect(/stage \d/.test(stored)).toBe(false);
     });
 
     it("MT-14: flag_gap carries the same proposal treatment from a session", async () => {
@@ -285,6 +312,56 @@ describe("ledger triage writes (§5.3) — inlets, verdicts, batches", () => {
       expect(issue.verdict.reason).not.toContain("2026 pricing");
       expect(issue.verdict.reason).not.toContain("ops@example.com");
       expect(issue.verdict.reason).toContain("superseded by the");
+    });
+
+    it("D-106.5: a rejected request refiled reopens with its verdict preserved", async () => {
+      const object = "drill.shop.refund_ledger";
+      const issueId = await fileRequest(rig, reporter, {
+        description: "no document explains how refunds are counted",
+        object,
+      });
+      const rejected = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, {
+        verdict: "reject",
+        reason: "the finance wiki covers this; not KB material",
+      });
+      expect(rejected.status).toBe(200);
+
+      // A second person hits the same wall. Same fingerprint (§3.3), so
+      // the same issue — symmetric with L-4's wont_fix rule.
+      const other = await login(rig, "restricted");
+      const refiled = await apiPost(rig, other, "/v1/dashboard/ledger/requests", {
+        description: "refund counting is still undocumented",
+        object,
+      });
+      expect(refiled.status).toBe(201);
+      expect(refiled.json.issue_id).toBe(issueId);
+      expect(refiled.json.occurrences).toBe(2);
+
+      const view = await apiGet(rig, steward, `/v1/dashboard/ledger/issues/${issueId}`);
+      const issue = view.json.issue as {
+        status: string;
+        occurrences: number;
+        distinct_subjects: number;
+        reopen_count: number;
+        verdict: { by: string; reason: string } | null;
+      };
+      // Reopened, cumulative, and the prior verdict still legible: the
+      // steward reads "rejected before, refiled by N more".
+      expect(issue.status).toBe("open");
+      expect(issue.occurrences).toBe(2);
+      expect(issue.distinct_subjects).toBe(2);
+      expect(issue.reopen_count).toBe(1);
+      expect(issue.verdict?.by).toBe(USERS.steward.username);
+      expect(issue.verdict?.reason).toContain("finance wiki");
+
+      // …and may re-reject, because the issue is open again.
+      const again = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, {
+        verdict: "reject",
+        reason: "still not KB material",
+      });
+      expect(again.status).toBe(200);
+      expect((again.json.issue as { status: string }).status).toBe("rejected");
+      expect((again.json.issue as { reopen_count: number }).reopen_count).toBe(1);
     });
 
     it("verdicts apply to knowledge requests only, and only once", async () => {

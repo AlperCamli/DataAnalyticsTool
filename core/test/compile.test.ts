@@ -57,7 +57,32 @@ describe("profile compilation", () => {
       .mcpServers.contextlayer;
     expect(server.type).toBe("http");
     // Trailing slash on publicUrl must not double up.
-    expect(server.url).toBe("https://ctx.acme.internal/mcp?profile=reporter");
+    expect(server.url).toBe(
+      `https://ctx.acme.internal/mcp?profile=reporter&setup=${setup.stamp}`,
+    );
+    // PA-2: the stamp the server compares against at connection.
+    expect(setup.stamp).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it("PA-2: the stamp is stable per profile state and moves when the setup changes", async () => {
+    const skillsRoot = await scratchSkills({ report: "# report\nbody\n" });
+    const opts = { publicUrl: "https://ctx.acme.internal", skillsRoot };
+    const first = await compileProfile("reporter", YAML.parse(REPORTER), opts);
+    const again = await compileProfile("reporter", YAML.parse(REPORTER), opts);
+    expect(again.stamp).toBe(first.stamp);
+
+    // A new tool grant — the July-29 change — moves the stamp.
+    const widened = YAML.parse(REPORTER) as Record<string, unknown>;
+    (widened.tools as { allow: string[] }).allow.push("publish_report:powerbi");
+    expect((await compileProfile("reporter", widened, opts)).stamp).not.toBe(first.stamp);
+
+    // So does a change to a shipped skill's body, which narrows a
+    // session just as effectively as a missing tool.
+    const editedSkills = await scratchSkills({ report: "# report\nrewritten body\n" });
+    expect(
+      (await compileProfile("reporter", YAML.parse(REPORTER), { ...opts, skillsRoot: editedSkills }))
+        .stamp,
+    ).not.toBe(first.stamp);
   });
 
   it("bundles the named skill and carries the profile's CLAUDE.md fragment", async () => {

@@ -486,6 +486,10 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
     status: issue.status,
     occurrences: issue.occurrences,
     distinct_subjects: issue.distinct_subjects,
+    // D-106.5: an issue reopened after a rejection keeps its verdict
+    // below and carries this count — together they are the steward's
+    // "rejected before, refiled by N more".
+    reopen_count: issue.reopen_count,
     first_seen: issue.first_seen,
     last_seen: issue.last_seen,
     links: issue.links,

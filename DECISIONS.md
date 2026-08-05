@@ -4552,3 +4552,194 @@ are identical either way; this is what let `extract-audit.sh` become an API
 client holding no database credential — only the operator's own identity.
 CSRF is required on every cookie-authenticated write, and the cookie always
 takes precedence, so presenting a bearer header cannot shed that check.
+
+**RULING D-106 — B-0 acceptance + flagged dispositions**
+(owner ruling, 2026-08-05; recorded verbatim)
+
+1. B-0 CLOSED as landed (af31811). The evidence-reproduction standard
+   (reload committed evidence into a scratch estate, reproduce byte-
+   for-byte) is ADOPTED as the norm for future extractor changes.
+2. deferJob COLLISION — ruled: COALESCE, never dead-letter (nothing
+   failed). On defer of a leased job when a queued duplicate exists for
+   the same (system, type): the deferred instance terminates in a
+   coalesced state; the queued job survives and ADOPTS the later
+   run_after of the two (the deferral's quota-reset wait must not be
+   lost, or the survivor immediately re-hits the same quota wall).
+   Additive clarifying amendment to the job-protocol spec (diff leads)
+   + queue fix + a JC-series conformance test reproducing the exact
+   collision. Rides the next session as task 0.
+3. FLAKE RE-ATTRIBUTION: the property.test.ts intermittent from the
+   CP-8 record is root-caused to this collision — deterministic repro
+   on pristine HEAD is the capture the quarantine demanded. The
+   docker-heavy watch item narrows to the container-start-latency
+   class only; DECISIONS notes the split.
+4. PROPOSAL LENGTH: the alias to description's 500 chars is DECOUPLED
+   by intent — proposal bound = 2000 chars. Rationale: suggested
+   content legitimately carries enum decodings and structure sketches;
+   the defense against data-value dumping is the LED-R2 scrub, not
+   brevity. Description stays 500. Ledger-spec one-line amendment.
+5. REJECTED-REQUEST RECURRENCE — ruled symmetric with L-4: a new
+   occurrence after rejection REOPENS the request to open with the
+   prior verdict history preserved and occurrence counts cumulative;
+   the steward sees "rejected before, refiled by N more" and may
+   re-reject. No threshold sophistication in v1. Ledger-spec
+   amendment, same diff.
+6. OPERATOR ITEM, precedes A-2: KB PR #34 and the 34 contaminated
+   docs. The SS-5 wave's contamination is real steward work, not test
+   noise — review with review-sync, merge as R2, then triage the
+   contaminated set (re-verify where the claims still hold — most
+   will, the CHECK facts largely CONFIRM existing prose). The
+   environmental Python test failure clears as a side effect. The
+   live-extraction re-run with a steward token: optional, operator's
+   convenience.
+
+# DECISIONS — A-2 build (2026-08-05)
+
+Checkpoint A-2 ("setup delivery is a product surface") built to the
+point where the remaining work is the operator's and the colleague's.
+Task 0 applied D-106; tasks 1 and 2 built the download and the
+staleness signal; task 3 wrote the two run artifacts and stopped.
+The decisions below are recommendations for ratification; each is
+implemented exactly as described, so the code and this record cannot
+quietly disagree.
+
+## D-106 as applied
+
+**D-106.2 — the coalesce.** `deferJob` now checks for a queued duplicate
+before it re-queues (`core/src/queue.ts`), and when it finds one the
+deferring instance terminates in the new terminal state `coalesced`
+(migration `0010_defer_coalesce.sql`) while the survivor takes
+`GREATEST(its own not_before, now + retry_after_s)`. The job-protocol
+amendment leads the diff (§4.3 note, §5 amendment paragraph, JC-11 row);
+`JC-11` in `conformance.test.ts` reproduces the exact collision from
+PR-B0's write-up — enqueue → claim → enqueue same key → defer — and
+asserts the outcome three ways: the deferring job ends `coalesced` with
+no `error` recorded, the survivor's wait is the later of the two, and
+`{coalesced: 1, queued: 1}` is the whole of the key's state. Two
+adjacent cases are pinned beside it: a survivor whose own `not_before`
+is later keeps it (GREATEST, not "the deferral wins"), and a deferral
+with no duplicate behaves exactly as JC-5 says it does.
+
+*Two judgment calls inside the ruling, both visible in the amendment
+text.* (a) **Trigger history merges into the survivor**, marked
+`merged_from`, the same way a requeue's absorb already merges it — a
+coalesce that dropped the accepted trigger would lose the record of work
+the queue accepted. (b) **The §5 deferral cap is checked first**: past
+the cap a deferral is already converted to a retryable failure, which is
+the existing path and the one that emits the `deferral_cap_reached`
+health event, so the coalesce applies to honoured deferrals only. The
+survivor keeps its own `deferrals` count; the terminating instance does
+not increment anything.
+
+**D-106.3 — the flake split, recorded.** `property.test.ts > dedupe
+invariant holds under arbitrary interleavings` is green and is now the
+regression witness for the collision rather than a quarantined
+intermittent: fast-check generates the offending sequence, and before
+this fix that sequence raised `duplicate key value violates
+"jobs_dedupe_queued"`. The quarantine standard's remaining scope is the
+**docker-heavy container-start-latency** class alone (JC-4's watch item)
+— the two were one line in the CP-8 record and are two different things.
+
+**D-106.4 — proposal bound 2000.** `PROPOSAL_MAX` no longer aliases
+`DESCRIPTION_MAX`; the ledger-spec amendment states why. The scrub is
+untouched, which the tests hold: a 40-item enum sketch survives intact
+(it did not at 500) while its bare stage numbers are still dropped, and
+an oversized proposal is still bounded.
+
+**D-106.5 — rejection recurrence.** The L-4 upsert's reopening set gains
+`rejected`; the verdict columns are deliberately not cleared, and the
+dashboard's issue shape gains `reopen_count`, so the queue renders
+exactly the sentence the ruling asks for — *rejected before, refiled by
+N more*. A steward may re-reject, because the reopened issue is `open`
+again and `recordVerdict`'s transition set is unchanged. **Recorded
+limitation:** the columns hold the **latest** verdict only, so a second
+rejection overwrites the first reason while `reopen_count` keeps the
+tally. A full per-verdict log would be new DDL and is not in the ruling;
+if the register wants one it is a new item, not a patch.
+
+**D-106.6 — the operator item, as found.** KB PR #34 **is merged**
+(2026-08-04); the memory note saying otherwise was stale. The
+**triage is not done**: `origin/main` carries **34** docs still marked
+`status: contaminated`, so
+`tests/test_benchmark_integrity.py::test_no_contamination_in_current_kb`
+still fails. That failure is a statement about the estate, not about
+this code — it reads the operator's working clone by design — and it
+clears when the re-verification campaign runs. Python suite at this
+entry: **744 passed / 1 failed (that one) / 14 skipped**.
+
+## D-107 — decisions this build had to take
+
+**D-107.1 — the bundle is compiled on request, never cached.** A
+download runs `compileProfile` against the workspace the caller's read
+would see and streams the result; there is no stored artifact and no
+invalidation rule. Rationale: a cache would need exactly the staleness
+machinery D-107.2 builds for the copy on the user's disk, and would add
+a second, invisible copy that can be wrong. The compile is milliseconds
+of file reads over the core image's own skills, and the KB workspace is
+already cached by the reader both surfaces share. **PA-2 implication,
+stated plainly:** with no server-side cache, the only stale bundle in
+the system is the one already unpacked on someone's machine — which is
+the thing the stamp reports and the one-step download replaces.
+
+**D-107.2 — the staleness signal is a compile stamp in the client's own
+URL, compared at connection.** `compileProfile` digests everything the
+bundle puts on disk (server URL, `CLAUDE.md`, every skill file) into a
+16-hex `stamp` and writes it into the compiled `.mcp.json` URL as
+`&setup=<stamp>`. The MCP handler recomputes the current stamp for the
+resolved profile (cached per KB-state × profile) and, on a mismatch,
+returns a `SETUP OUT OF DATE` notice as the server's `instructions` in
+the `initialize` result — at connection, before the session forms any
+belief about what it may do. Three properties this shape has and a
+"recompile on profile change" shape does not: it needs no push channel
+to a machine the core cannot reach; it is exact rather than heuristic
+(the comparison is over the bytes, so a skill edit counts as much as a
+tool grant); and it degrades honestly — a bundle with **no** stamp,
+which is every bundle compiled before today including the one that ended
+the 2026-07-29 attempt, reports `SETUP UNVERIFIABLE` rather than passing
+silently. `GET /v1/setup/status` answers the same question for a
+runbook. No MCP-spec surface changed: `instructions` is a transport
+field the tool reference does not specify, and no tool result gained a
+member.
+
+**D-107.3 — an ambiguous binding is refused, not resolved.** If a
+caller's roles bind them to more than one profile, the download answers
+`409 ambiguous_binding` naming both and pointing at the operator. No IdP
+user wears two bound roles today, so this is asserted on the binding
+function rather than over the wire. Picking one silently would ship a
+user a smaller product than their roles describe, which is PA-2's
+failure shape with a different cause; the role map is a KB PR, which is
+where a two-binding identity should be settled.
+
+**D-107.4 — a browser gets the login flow, a script gets 401.** An
+unauthenticated `GET /v1/setup/bundle` whose `Accept` carries
+`text/html` is redirected to `/v1/auth/login?redirect=…`; everything
+else keeps the JSON 401. This is what lets the address handed to a first
+user *be the download* — one link, one sign-in, one file — which is the
+minimum for "setup delivery is a product surface" to mean anything for
+someone who has never seen the system. It is a redirect, not a page: no
+pixels were built (B-1 owns those).
+
+**D-107.5 — the core image now ships `core/skills/`** (`core/Dockerfile`).
+Found by asking where the compile runs: until today every compile ran
+from a developer checkout on the host, where the skills directory sits
+beside `dist/` anyway. In the deployed image it did not exist, so the
+first real download would have answered `503 setup_uncompilable` —
+F-7's refusal, telling the truth about the image and a lie about the
+release. Verified in the built image (`listShippedSkills()` → benchmark,
+enrich, report, review-sync), not merely in tests that run from source.
+
+## What is NOT closed by this entry
+
+The A-2 gate has a human half that no session can run: **the second
+human's journey**. `results/phase2/a2/` carries the two artifacts it
+needs — `COLLEAGUE-BRIEFING.md` (one page, plain language, the two
+rules) and `A2-RUNBOOK.md` (dual-shell, per-act success criteria, the
+operator's hands-off discipline and note format) — and the run stops
+there by ruling D-104: their own machine, their own identity, the
+operator silent. Evidence extraction, field notes, and the gate check
+are the task that follows the run, not part of this build.
+
+**Suites at this entry:** core **267 passed / 24 files** (+17 on B-0's
+250: 3 JC-11, 2 ledger amendments, 11 setup/staleness, 1 compile stamp);
+python **744 passed / 14 skipped / 1 failed** — the estate-state failure
+above, unchanged by this work.

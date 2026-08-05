@@ -24,6 +24,10 @@
 #
 # Environment:
 #   CL_API     base URL of the core (default http://127.0.0.1:8100)
+#   CL_OUT     directory to write the five files into (default: beside
+#              this script). Later windows — A-2's second-human run, say
+#              — extract with the same code into their own evidence
+#              directory rather than a forked copy of it.
 #   CL_TOKEN   an OIDC access token for a steward identity — required,
 #              because §5's audit read is subject-filtered: a reporter's
 #              token would return that reporter's rows only, which is
@@ -70,6 +74,11 @@ CL_TOKEN is required (an OIDC access token for a steward identity).
       results/cp7-gate/extract-audit.sh '<since>'
 HINT
   exit 2
+fi
+
+if [ -n "${CL_OUT:-}" ]; then
+  mkdir -p "$CL_OUT"
+  cd "$CL_OUT"
 fi
 
 export CL_API CL_TOKEN SINCE

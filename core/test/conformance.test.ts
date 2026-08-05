@@ -437,6 +437,100 @@ describe("JC-9: dedupe — one running + at most one queued per (system, type)",
   });
 });
 
+describe("JC-11: defer into a queued duplicate coalesces (§5 amendment, D-106.2)", () => {
+  it("terminates the deferring job coalesced and hands the survivor the later not_before", async () => {
+    // The exact collision: the leased job's key is invisible to the §8
+    // partial index, so a second enqueue is admitted; the deferral then
+    // has nowhere to return to. Before D-106.2 this raised
+    // `duplicate key value violates "jobs_dedupe_queued"`.
+    const a = await client.enqueue(snapshotJob("jc11"));
+    const claimed = await client.claim(claimBody());
+    expect(claimed.json.job_id).toBe(a.json.job_id);
+    const token = (claimed.json.lease as { token: string }).token;
+    await client.start(a.json.job_id as string, token);
+
+    const b = await client.enqueue(
+      snapshotJob("jc11", { trigger: { kind: "webhook", detail: "ci-during-lease" } }),
+    );
+    expect(b.json.job_id).not.toBe(a.json.job_id);
+    const survivorBefore = (await client.job(b.json.job_id as string)).json;
+
+    const deferred = await client.defer(a.json.job_id as string, token, 3600, {
+      code: "quota",
+      message: "tokens exhausted",
+    });
+    expect(deferred.status).toBe(200);
+    expect(deferred.json.status).toBe("coalesced");
+
+    // Nothing failed, so nothing is dead-lettered.
+    const deferredJob = (await client.job(a.json.job_id as string)).json;
+    expect(deferredJob.state).toBe("coalesced");
+    expect(deferredJob.error).toBeNull();
+    expect(deferredJob.finished_at).not.toBeNull();
+    expect((deferredJob.result_meta as { coalesced_into: string }).coalesced_into).toBe(
+      b.json.job_id,
+    );
+
+    // The survivor adopts the deferral's wait — the quota-reset window
+    // must not be lost, or it re-hits the same wall immediately.
+    const survivor = (await client.job(b.json.job_id as string)).json;
+    expect(survivor.state).toBe("queued");
+    expect(survivor.attempt).toBe(1);
+    const adopted = Date.parse(survivor.not_before as string);
+    expect(adopted).toBeGreaterThan(Date.parse(survivorBefore.not_before as string));
+    expect(adopted).toBeGreaterThan(Date.now() + 3000 * 1000);
+
+    // §8 invariant intact: one row per state, and nothing claimable
+    // until the adopted not_before matures.
+    const { rows } = await core.pool.query<{ state: string; n: string }>(
+      `SELECT state, count(*) AS n FROM jobs WHERE system = 'jc11' GROUP BY state`,
+    );
+    expect(Object.fromEntries(rows.map((r) => [r.state, Number(r.n)]))).toEqual({
+      coalesced: 1,
+      queued: 1,
+    });
+    expect((await client.claim(claimBody())).status).toBe(204);
+
+    // The coalesced job's trigger history rides along on the survivor.
+    const triggers = survivor.triggers as { detail?: string; merged_from?: string }[];
+    expect(triggers.some((t) => t.merged_from === a.json.job_id)).toBe(true);
+  });
+
+  it("keeps the survivor's own later not_before when the deferral asks for sooner", async () => {
+    const a = await client.enqueue(snapshotJob("jc11-later"));
+    const claimed = await client.claim(claimBody());
+    const token = (claimed.json.lease as { token: string }).token;
+    const b = await client.enqueue(snapshotJob("jc11-later"));
+    // A follower already waiting on its own schedule (a backoff, say).
+    await core.pool.query(
+      `UPDATE jobs SET not_before = now() + interval '2 hours' WHERE job_id = $1`,
+      [b.json.job_id],
+    );
+
+    const deferred = await client.defer(a.json.job_id as string, token, 1, {
+      code: "quota",
+      message: "brief",
+    });
+    expect(deferred.json.status).toBe("coalesced");
+
+    // GREATEST of the two, not "the deferral wins".
+    const survivor = (await client.job(b.json.job_id as string)).json;
+    expect(Date.parse(survivor.not_before as string)).toBeGreaterThan(Date.now() + 3600 * 1000);
+  });
+
+  it("a deferral with no queued duplicate is unchanged (JC-5 still holds)", async () => {
+    await client.enqueue(snapshotJob("jc11-solo"));
+    const claimed = await client.claim(claimBody());
+    const jobId = claimed.json.job_id as string;
+    const token = (claimed.json.lease as { token: string }).token;
+    const deferred = await client.defer(jobId, token, 1, { code: "quota", message: "alone" });
+    expect(deferred.json.status).toBe("deferred");
+    const job = (await client.job(jobId)).json;
+    expect(job.state).toBe("queued");
+    expect(job.deferrals).toBe(1);
+  });
+});
+
 describe("JC-8: credential redaction in stored error detail (job §7 / review F3)", () => {
   it("scrubs a DSN from a runner-supplied error before storing and surfacing it", async () => {
     const CANARY = "cl-canary-fail-7b3e91d";

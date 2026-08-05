@@ -51,12 +51,13 @@ const NUMBER_RE = /\b\d+(?:[.,]\d+)*\b/g;
 export const TITLE_MAX = 160;
 export const DESCRIPTION_MAX = 500;
 /**
- * The §4 amendment (D-101.2) and MCP §6.10's amendment both say the
- * proposal's treatment is *identical* to `description`'s — "the same
- * server-enforced length bound", no exception carved for it. Aliases
- * rather than new numbers, so the two can never drift apart.
+ * D-106.4 decoupled this from `DESCRIPTION_MAX` **by intent**: suggested
+ * content legitimately carries enum decodings and structure sketches,
+ * which a gap description never does. The defense against data-value
+ * dumping is the LED-R2 scrub above — not brevity — so the bound is
+ * generous and the scrub is unchanged. A description stays 500.
  */
-export const PROPOSAL_MAX = DESCRIPTION_MAX;
+export const PROPOSAL_MAX = 2000;
 /** Rejection reasons are shown to the filer, so LED-R2 binds them too. */
 export const VERDICT_REASON_MAX = DESCRIPTION_MAX;
 
@@ -150,13 +151,18 @@ export async function recordEvent(pool: pg.Pool, input: LedgerEventInput): Promi
          (issue_id, fingerprint, kind, system, object_fqn, title, routed_to,
           first_seen, last_seen, occurrences, distinct_subjects)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, 1, 0)
+       -- L-4 recurrence, with 'rejected' in the reopening set by D-106.5:
+       -- a request refiled after a rejection is the same signal a
+       -- reoccurring wont_fix is, so it reopens on the same rule. The
+       -- verdict columns are deliberately NOT cleared — the steward
+       -- reads "rejected before, refiled by N more" and may re-reject.
        ON CONFLICT (fingerprint) DO UPDATE SET
          occurrences = ledger_issues.occurrences + 1,
          last_seen   = EXCLUDED.last_seen,
-         reopen_count = CASE WHEN ledger_issues.status IN ('resolved','dismissed')
+         reopen_count = CASE WHEN ledger_issues.status IN ('resolved','dismissed','rejected')
                              THEN ledger_issues.reopen_count + 1
                              ELSE ledger_issues.reopen_count END,
-         status      = CASE WHEN ledger_issues.status IN ('resolved','dismissed')
+         status      = CASE WHEN ledger_issues.status IN ('resolved','dismissed','rejected')
                             THEN 'open' ELSE ledger_issues.status END
        RETURNING issue_id, occurrences`,
       [
@@ -273,6 +279,9 @@ export async function listIssues(
 
 export interface TriageIssue extends GapIssue {
   detector_class: number | null;
+  /** L-4 recurrences, including the post-rejection refilings D-106.5
+   * added: the "refiled by N more" half of what a steward re-reads. */
+  reopen_count: number;
   verdict_by: string | null;
   verdict_at: string | null;
   verdict_reason: string | null;
@@ -337,7 +346,7 @@ export async function listTriageIssues(pool: pg.Pool, filter: TriageFilter): Pro
             i.occurrences, i.distinct_subjects,
             to_jsonb(i.first_seen) #>> '{}' AS first_seen,
             to_jsonb(i.last_seen)  #>> '{}' AS last_seen,
-            i.links, i.verdict_by,
+            i.links, i.reopen_count, i.verdict_by,
             to_jsonb(i.verdict_at) #>> '{}' AS verdict_at,
             i.verdict_reason, i.batch_id, i.resolution,
             (SELECT max(e.detector_class) FROM ledger_events e
@@ -428,7 +437,7 @@ export async function getIssue(pool: pg.Pool, issueId: string): Promise<TriageIs
             i.occurrences, i.distinct_subjects,
             to_jsonb(i.first_seen) #>> '{}' AS first_seen,
             to_jsonb(i.last_seen)  #>> '{}' AS last_seen,
-            i.links, i.verdict_by,
+            i.links, i.reopen_count, i.verdict_by,
             to_jsonb(i.verdict_at) #>> '{}' AS verdict_at,
             i.verdict_reason, i.batch_id, i.resolution,
             (SELECT max(e.detector_class) FROM ledger_events e

@@ -52,6 +52,7 @@ import type { Identity, OidcClient } from "./oidc.js";
 import { parseProfile, profilePermitted, toolAllowed, type Profile } from "./profiles.js";
 import { publishReport } from "./publish.js";
 import { categoryForTool, type RateLimiter } from "./ratelimit.js";
+import { currentStamp, freshnessOf, setupNotice } from "./setup.js";
 import { buildIndex, search, type IndexEntry } from "./searchindex.js";
 import { humanTrust, machineTrust, refsEnvelope, type TrustBlock } from "./trust.js";
 import { validateRequest, SqlValidatorUnavailable } from "./valsql.js";
@@ -968,9 +969,31 @@ export function registerMcp(app: FastifyInstance, deps: McpDeps): void {
     }
     const scopes = visibilityScopes(ws.roles, identity.roles);
 
+    // PA-2 (A-2): the compiled bundle stamps itself into this URL, so
+    // the server can compare what the session is running against what
+    // compiling this profile now would produce — and say so at
+    // connection. A stale bundle's CLAUDE.md cannot widen the allow-set
+    // (M-3 recomputes it per call), but it *narrows what the session
+    // attempts*: on 2026-07-29 a reporter's session declined to build a
+    // report its profile already permitted. The notice below is the
+    // signal that was missing.
+    const presentedStamp = typeof (req.query as { setup?: string }).setup === "string"
+      ? (req.query as { setup: string }).setup
+      : "";
+    const notice = setupNotice(
+      freshnessOf(presentedStamp, await currentStamp(ws, profileName, rawProfile, cfg.mcp.publicUrl)),
+      cfg.mcp.publicUrl,
+    );
+
     const server = new Server(
       { name: "context-layer", version: "1.0.0" },
-      { capabilities: { tools: {} } },
+      {
+        capabilities: { tools: {} },
+        // Delivered in the `initialize` result — the first thing a
+        // session reads, and the earliest point the July-29 shape could
+        // have been caught.
+        ...(notice ? { instructions: notice } : {}),
+      },
     );
 
     server.setRequestHandler(ListToolsRequestSchema, () => ({

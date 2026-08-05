@@ -99,6 +99,8 @@ Registry growth is additive; runners skip claim-offers for types they don't decl
    └──────────────────────────────────────────┴─ cancelled
 ```
 
+One additive terminal state joins the diagram by the D-106.2 amendment (§5): `leased/running ─ defer ─► coalesced`, taken **only** when a duplicate for the same `(system, type)` is already queued — the deferring instance ends there and the queued job carries the work forward.
+
 Transitions are effected only via the wire calls in §6 plus two core-side events: **lease expiry** (missed heartbeats → job returns to `queued`, `attempt+1`) and **cancellation** (producer sets `cancel_requested`; the runner learns of it in its next heartbeat response and must stop and acknowledge within one heartbeat interval).
 
 ## 5. Leases, heartbeats, retries
@@ -108,6 +110,8 @@ Transitions are effected only via the wire calls in §6 plus two core-side event
 - **Retry backoff:** on retryable failure or lease expiry, requeue delay = `min(base * 2^(attempt-1), cap)` with ±20% jitter; defaults `base 30s`, `cap 30m`.
 - **Deferral (J-5):** `defer` requeues with `not_before = now + retry_after_s`, attempt unchanged. A job may defer at most `max_deferrals` (default 20) before the core converts further deferrals into retryable failures — a stuck quota shows up in health rather than deferring forever.
 - **Dead-letter:** non-retryable failure or exhausted attempts. Dead-lettered jobs are visible in the dashboard health feed with full error detail and are manually re-enqueueable (new job, `attempt 1`, same payload, `trigger.kind = manual`).
+
+**Amendment (D-106.2, 2026-08-05) — deferral into a queued duplicate: coalesce.** A leased batch job that defers while a duplicate for its `(system, type)` is already queued cannot return to `queued` — §8 permits exactly one queued batch job per key. Nothing about the deferring job failed (J-5: quota exhaustion is a deferral, not a failure), so it is neither dead-lettered nor charged a retry. It **coalesces**: the deferred instance terminates in the additive terminal state `coalesced` — no result delivered, no `error` recorded, `finished_at` set, and the survivor named in its `result_meta` — and the queued job survives, adopting **the later `not_before` of the two**. Adopting the later time is the load-bearing half: the deferral's `retry_after_s` is a statement about the source ("the quota resets in an hour"), and a survivor released at its own earlier time would walk straight back into the same wall. Trigger history merges into the survivor exactly as a requeue's absorb does (§8), so no accepted trigger loses its record. Deferral accounting is unchanged: the terminating instance does not increment `deferrals`, the survivor keeps its own count, and a deferral *past* the §5 cap converts to a retryable failure before this rule is reached (that path already absorbs the follower). Interactive jobs are never deduped and therefore never coalesce. Additive: `coalesced` is a new terminal state and a new `status` value in the §6.6 response; a client that does not know it treats it as terminal (§9).
 
 ## 6. Wire protocol
 
@@ -210,6 +214,7 @@ The `payload.credentials` array contains vault **references** (`vault://…` or 
 | JC-7 | `cancel_requested` in heartbeat → runner stops and reports `cancelled` within one interval | §4.3, §6.3 |
 | JC-8 | No secret material appears in any protocol message, log line, or stored error detail (canary-secret test) | J-4, §7 |
 | JC-9 | Dedupe: N rapid enqueues of same `(system,type)` while one runs → exactly one queued follower | §8 |
+| JC-11 | Defer of a leased batch job while a duplicate is queued → the deferring instance ends `coalesced`, the queued job survives with the later `not_before`, no index violation and no dead-letter | §5 amendment (D-106.2), §8, J-5 |
 | JC-10 | Interactive job result reaches a blocked producer within the latency budget (JP-2) under a warm runner | J-3 |
 
 ## 11. Open decisions (spec-local register)
