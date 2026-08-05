@@ -4496,3 +4496,23 @@ fence otherwise unchanged; each diff leads its PR)**
    multi-team customer, never a filter-side invention. Reporter = own
    rows only, unchanged. Auditor = B-4, unchanged.
 3. UI-A (stack) deferred to B-1 as specced.
+
+**RULING D-103 — B-1 pre-decisions**
+
+1. UI-A: frontend = light SPA (React), built to static assets served by
+   the core; no separate frontend server, no client-side permission
+   logic, no client persistence (UI-1/2/9 restated as build
+   constraints). Component/library specifics proposed by the B-1
+   session in ≤5 lines.
+2. UI-D confirmed: resolution/rejection surfacing v1 = dashboard badge
+   on the filer's next session; in-session surfacing remains a
+   skill-side candidate, unbuilt.
+
+**RULING D-104 — A-2 second-human designation**
+
+The A-2 gate's second human = the operator's colleague. Requirements
+when it arrives: their own machine, their own identity in the IdP (a
+real reporter account, not a shared login — the audit rows must show
+THEM), operator hands-off during the journey, and their friction notes
+recorded as first-user field notes in the CP-8 style. What they find
+is gate evidence, not anecdote.
