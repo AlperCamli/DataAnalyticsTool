@@ -21,7 +21,9 @@ Config (YAML):
     resolver: { kind: vault }                  # or process-env / env-file + path:
     execution_preflight:           # G3 gate; see below
       - connector: postgres
-        config: { system: supabase, execute_dsn_env: CL_EXEC_DSN }
+        config: { system: supabase }
+        credentials:                   # resolved like a job's (A-4)
+          - { key: execute_dsn, ref: "vault://secret/…/supabase#exec_dsn" }
 
 Credential injection: each payload credential `{ref, key}` resolves to a
 value held in a job-scoped environment variable; the connector receives
@@ -324,6 +326,19 @@ class Runner:
         jobs. The failure is loud and names the reason: silently serving
         execution against a role that can write is the exact outcome the
         check exists to prevent, so "fail open" is not an option here.
+
+        **Credentials resolve exactly as a job's do (A-4).** An entry may
+        carry `credentials: [{ref, key}]`, resolved through this runner's
+        resolver into job-scoped variables and cleaned up afterwards —
+        the same `_inject_credentials` path, so there is one credential
+        route through this process and not two. Before A-4 the only way
+        to configure this gate was `execute_dsn_env: NAME`, naming a
+        variable the runner had to already hold in its environment; that
+        is a plaintext credential by construction, and it kept working
+        after the estate migrated because nothing here consulted the
+        resolver. The pilot found it the moment the last plaintext file
+        was deleted: every connection probed green through vault while
+        this gate failed and the runner silently withheld `execute`.
         """
         refused: dict[str, str] = {}
         for entry in self.config.execution_preflight:
@@ -339,7 +354,15 @@ class Runner:
                 refused[name] = f"connector {name!r} declares no query capability"
                 logger.error("execution preflight: %s", refused[name])
                 continue
+            env_names: list[str] = []
             try:
+                # Same resolution path as a job payload's credentials, so a
+                # `vault://` reference works here and a plaintext one is not
+                # required. No entry ⇒ nothing injected, and a config still
+                # naming `*_env` directly keeps working unchanged.
+                env_names, _ = self._inject_credentials(
+                    {"payload": {"credentials": entry.get("credentials") or []}}, config
+                )
                 facts = executor.preflight(config)
             except Exception as exc:
                 reason = redact_text(str(exc))
@@ -349,6 +372,9 @@ class Runner:
                     "execution for it", name, reason,
                 )
                 continue
+            finally:
+                for var in env_names:
+                    os.environ.pop(var, None)
             logger.info("execution preflight passed for %s: %s", name, facts)
         self.execution_refused = refused
         return refused

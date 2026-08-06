@@ -151,7 +151,14 @@ export function buildServer(
       // authenticates on its own.
       path === "/" ||
       path === APP_BASE ||
-      path.startsWith(`${APP_BASE}/`)
+      path.startsWith(`${APP_BASE}/`) ||
+      // Browsers request this unprompted on every page load. Left to the
+      // ops-surface check below it answers 401, which puts a red
+      // `GET /favicon.ico 401 (Unauthorized)` in the console of a
+      // perfectly healthy dashboard — reported by the operator as a
+      // suspected fault during the A-4 run. It is not a protected
+      // resource and must not be answered as though it were.
+      path === "/favicon.ico"
     );
   };
 

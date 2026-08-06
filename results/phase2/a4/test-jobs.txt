@@ -1,1 +1,7 @@
+2026-08-06T09:10:36.848Z|supabase|dead_lettered|alper|auth_error|postgres authentication failed for the execution role (check the read-only execution role credentials)|01KZB5DFHGMZPR6MQHVGM08Y33
 2026-08-06T09:11:42.010Z|supabase|succeeded|alper|-|-|01KZB5FF5TEZ9WEMYA32VTM4GB
+2026-08-06T09:22:24.975Z|ga4|succeeded|alper|-|-|01KZB6332EBPCCXGJ6FTMJ8FX0
+2026-08-06T09:22:28.000Z|gsc|succeeded|alper|-|-|01KZB6360ZD02DS3BRP8ETMJNW
+2026-08-06T09:22:30.596Z|looker_studio|succeeded|alper|-|-|01KZB638J331Y392X9FMTQY771
+2026-08-06T09:22:33.499Z|powerbi|succeeded|alper|-|-|01KZB63BCT5VDCA1VTYKKZM4JE
+2026-08-06T09:22:36.484Z|supabase|succeeded|alper|-|-|01KZB63EA4G1AM9K1T02VCFKME

@@ -35,15 +35,24 @@ wait_s: 25
 # from a claim into a mechanism.
 resolver:
   kind: vault
-  allow_env: true
+  allow_env: false
 
 # G3 startup gate: prove the execution role cannot write before this
 # runner offers to claim `execute` jobs. If CL_EXEC_DSN is unset or
 # points at a role with write grants, the runner logs why and withholds
 # `execute` from its claim declaration — snapshot sync keeps running.
 # Provision the role with deploy/execution-role.sql.
+#
+# A-4: the credential resolves through the resolver above, exactly as a
+# job's does. It used to read `execute_dsn_env: CL_EXEC_DSN` — a variable
+# this runner had to already hold, i.e. a plaintext credential by
+# construction, and one nothing here re-checked after the estate moved to
+# vault. The pilot found it the moment the last plaintext file was
+# deleted: all five connections probed green through vault while this
+# gate failed and the runner silently withheld `execute`.
 execution_preflight:
   - connector: postgres
     config:
       system: supabase
-      execute_dsn_env: CL_EXEC_DSN
+    credentials:
+      - { key: execute_dsn, ref: "vault://secret/contextlayer/connections/supabase#exec_dsn" }

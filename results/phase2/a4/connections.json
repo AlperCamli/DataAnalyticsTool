@@ -25,12 +25,12 @@
       ],
       "health": {
         "status": "red",
-        "reason": "the newest accepted snapshot is 1450965s old, past this system's 259200s threshold",
+        "reason": "the newest accepted snapshot is 1451470s old, past this system's 259200s threshold",
         "snapshot": {
           "snapshot_id": "01KXZXXSQ35ZKAVQEGGEXNTHGX",
           "captured_at": "2026-07-20T14:12:21+00:00",
           "accepted_at": "2026-07-20T14:12:22.370565+00:00",
-          "age_s": 1450965,
+          "age_s": 1451470,
           "object_count": 466,
           "source_mode": "api"
         },
@@ -40,10 +40,10 @@
         },
         "freshness": "stale",
         "last_job": {
-          "job_id": "01KZB1XR3JD2WNN10JNJY7E5T7",
+          "job_id": "01KZB6332EBPCCXGJ6FTMJ8FX0",
           "type": "test_connection",
           "state": "succeeded",
-          "finished_at": "2026-08-06T08:09:36.894595+00:00",
+          "finished_at": "2026-08-06T09:22:25.741668+00:00",
           "error": null
         }
       }
@@ -70,12 +70,12 @@
       ],
       "health": {
         "status": "red",
-        "reason": "the newest accepted snapshot is 511736s old, past this system's 259200s threshold",
+        "reason": "the newest accepted snapshot is 512241s old, past this system's 259200s threshold",
         "snapshot": {
           "snapshot_id": "01KYVXMRVXX7EYTSA3YNGV4WSH",
           "captured_at": "2026-07-31T11:06:10+00:00",
           "accepted_at": "2026-07-31T11:06:10.684744+00:00",
-          "age_s": 511736,
+          "age_s": 512241,
           "object_count": 10,
           "source_mode": "api"
         },
@@ -85,10 +85,10 @@
         },
         "freshness": "stale",
         "last_job": {
-          "job_id": "01KZB1XSCSVFBK0N74JMWN8JSK",
+          "job_id": "01KZB6360ZD02DS3BRP8ETMJNW",
           "type": "test_connection",
           "state": "succeeded",
-          "finished_at": "2026-08-06T08:09:37.471106+00:00",
+          "finished_at": "2026-08-06T09:22:28.48799+00:00",
           "error": null
         }
       }
@@ -139,10 +139,10 @@
         "policy": null,
         "freshness": "not_a_sync_source",
         "last_job": {
-          "job_id": "01KZB1RRYSSDJTCXWWJ955A3YG",
+          "job_id": "01KZB638J331Y392X9FMTQY771",
           "type": "test_connection",
           "state": "succeeded",
-          "finished_at": "2026-08-06T08:06:52.640308+00:00",
+          "finished_at": "2026-08-06T09:22:30.606771+00:00",
           "error": null
         }
       }
@@ -175,10 +175,10 @@
         "policy": null,
         "freshness": "not_a_sync_source",
         "last_job": {
-          "job_id": "01KZB1RRXW2WZ7F7DF4N0Y4ET6",
+          "job_id": "01KZB63BCT5VDCA1VTYKKZM4JE",
           "type": "test_connection",
           "state": "succeeded",
-          "finished_at": "2026-08-06T08:06:52.614697+00:00",
+          "finished_at": "2026-08-06T09:22:33.52478+00:00",
           "error": null
         }
       }
@@ -215,12 +215,12 @@
       ],
       "health": {
         "status": "green",
-        "reason": "snapshot 124377s old, inside the 2592000s threshold",
+        "reason": "snapshot 124882s old, inside the 2592000s threshold",
         "snapshot": {
           "snapshot_id": "01KZ7F2168CQHSWXFC4ZV0S6BB",
           "captured_at": "2026-08-04T22:42:09+00:00",
           "accepted_at": "2026-08-04T22:42:09.736044+00:00",
-          "age_s": 124377,
+          "age_s": 124882,
           "object_count": 38,
           "source_mode": "live"
         },
@@ -230,10 +230,10 @@
         },
         "freshness": "fresh",
         "last_job": {
-          "job_id": "01KZB5MP87DJ486VJ3N5X7WPZV",
-          "type": "execute",
+          "job_id": "01KZB63EA4G1AM9K1T02VCFKME",
+          "type": "test_connection",
           "state": "succeeded",
-          "finished_at": "2026-08-06T09:14:34.442107+00:00",
+          "finished_at": "2026-08-06T09:22:37.64838+00:00",
           "error": null
         }
       }

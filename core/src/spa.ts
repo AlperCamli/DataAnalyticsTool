@@ -278,4 +278,10 @@ export function registerSpa(app: FastifyInstance, deps: SpaDeps): void {
   // A person handed the bare address should land somewhere, not on a
   // 401 from the ops surface.
   app.get("/", async (_req, reply) => reply.code(302).header("location", `${APP_BASE}/`).send());
+
+  // Browsers ask for this on every page load whether or not a page names
+  // one. We ship no icon, so the honest answer is "nothing here" — 204,
+  // not the 401 the ops surface would otherwise give, and not a 404 that
+  // re-fires on every navigation. Keeps a healthy dashboard's console clean.
+  app.get("/favicon.ico", async (_req, reply) => reply.code(204).send());
 }

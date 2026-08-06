@@ -215,3 +215,79 @@ that owns the dashboard's install story:
 Either way the playbook needs a line: an install where the browser and
 the stack share a host is the normal case and must not need `/etc/hosts`
 surgery.
+
+---
+
+## A4-F6 — the G3 execution preflight never went through the resolver
+
+**Found at act 8, the moment the last plaintext file was gone.** The
+runner started, every connection probed green through vault, and the
+startup log said:
+
+```
+execution preflight FAILED for postgres: environment variable
+'CL_EXEC_DSN' (config.execute_dsn_env) is unset or empty
+— this runner will NOT serve execution for it
+```
+
+**What was wrong.** `execution_preflight` in `deploy/runner-config.yaml`
+was configured as `execute_dsn_env: CL_EXEC_DSN` — the *name of an
+environment variable the runner must already hold*. That is a plaintext
+credential by construction, and `preflight_execution()` called
+`executor.preflight(config)` directly, consulting no resolver. So the
+G3 gate was the one credential path in the runner that A-4 did not
+migrate, and nothing noticed, because it kept working for as long as the
+plaintext file still existed beside it.
+
+**Why it is worse than a failed check.** G3's design is to withhold
+`execute` from the claim declaration rather than fail loudly at job time
+— correct, since serving governed execution against a role that might
+write is the outcome it exists to prevent. But that means the symptom of
+this bug is **governed execution silently disappearing** while every
+visible surface stays green: five green probes, a healthy dashboard, and
+no execute capability. Precisely the D-84 shape the platform has now paid
+for four times.
+
+**Fixed.** `preflight_execution()` resolves through `_inject_credentials`
+— the same path a job's credentials take, so there is one credential
+route through the runner and not two — and cleans the variables up
+afterwards. The config entry now reads:
+
+```yaml
+execution_preflight:
+  - connector: postgres
+    config: { system: supabase }
+    credentials:
+      - { key: execute_dsn, ref: "vault://secret/contextlayer/connections/supabase#exec_dsn" }
+```
+
+A config still naming `*_env` directly keeps working, so no other
+deployment breaks.
+
+**Verified after the fix, with no plaintext credential anywhere on the
+host:** preflight passes reading the DSN from vault, all five connections
+probe `succeeded`, and a governed execute (`validate_sql` → `execute_sql`)
+returns rows.
+
+**The lesson, and it generalises.** A migration is complete when the old
+source is *removed*, not when the new one works. Every path that reads a
+credential has to be inventoried before the plaintext goes — and the way
+to find the ones you missed is to delete the plaintext and see what
+breaks, which is exactly what act 8 is for. Had `.secrets/runner.env`
+been left in place "just in case", this would have shipped.
+
+---
+
+## A4-F7 — `/favicon.ico` answered 401 on a healthy dashboard
+
+Minor, and reported by the operator as a suspected fault, which is the
+cost. Browsers request `/favicon.ico` unprompted on every page load; the
+ops-surface auth hook 401s anything not explicitly exempt, so a perfectly
+healthy dashboard printed `GET /favicon.ico 401 (Unauthorized)` in the
+console. Exempted and answered `204` — we ship no icon, so "nothing here"
+is the honest reply, and it does not re-fire on every navigation the way
+a 404 would.
+
+*(The `GET /v1/auth/session 401` in the same console output is **not** a
+fault: it is how the SPA discovers it has no session and renders the
+sign-in button. Worth knowing before it gets reported again.)*
