@@ -5247,3 +5247,83 @@ with no restart, the policy split refusing in both directions, boot
 refusing to proceed half-resolved, and no secret in any error message.
 What is *not* verified is any of that against the pilot's own
 credentials, which is precisely what STOP-1 is for.
+
+## D-112 — A-4 build acceptance + STOP-1 (owner ruling, applied 2026-08-06)
+
+Recorded as issued. Clause 1 affirms the D-110/D-111 renumbering; clause
+2 authorised the commit to `main`; clause 3 affirmed the toggle fix
+including the removed shell-override hatch and the no-version-pin call;
+clause 4 filed A4-F1 to B-1, accepted A4-F2's file-backed vault + runbook
+gate ("this finding likely saved the pilot's credentials"), and recorded
+A4-F3 as a caught-by-running lesson; clause 5 authorised STOP-1.
+
+**STOP-1 ran the same day, operator-driven, with the terminal work
+delegated to the session at the operator's request after repeated
+copy-paste failures.** That delegation is itself recorded rather than
+smoothed over: the operator performed acts 1–3 by hand and generated
+three findings doing so, then handed over. The DDL half stayed theirs
+throughout (the `ALTER ROLE` in Supabase), as did the decision to delete
+the last plaintext file.
+
+**Gate, clause by clause — all four met.**
+
+1. *One vault resolver behind the existing `resolver:` seam, JC-8 canary
+   green through it.* `VaultResolver` + `SchemeRouter` behind the CP-3a
+   seam; the canary re-pointed, not duplicated. Verified live against the
+   pilot's own credentials, not only fixtures.
+2. *`.secrets/` path marked pilot-only in the playbook.* §4.1, in those
+   words, with `env://` marked pilot-only in the module docstring too and
+   made mechanical by `resolver.allow_env: false`.
+3. *Playbook §4 matches reality.* Followed literally on the pilot. It did
+   not match in seven places — that is what the findings are.
+4. *Rotation of one credential through the vault path verified live.* The
+   exec-role password, `results/phase2/a4/ROTATION-EVIDENCE.md`. The
+   load-bearing step is the failure before the write: with the old DSN
+   still in vault the probe returns `auth_error`, which is what proves
+   the runner reads from vault rather than a file.
+
+**End state, verified with zero plaintext credential on the host:** all
+five connections `vault://` and probing `succeeded`; the core resolving
+`SYNC_GIT_TOKEN` at boot; the G3 preflight resolving from vault; a
+governed execute returning rows; `env://` resolutions since restart, 0.
+
+**Seven findings, and the shape they share.** A4-F1 (no edit affordance
+in Connections → B-1), A4-F2 (dev-mode vault is in-memory; the file-backed
+overlay and the gated deletion), A4-F3 (a Vault policy glob does not
+cover its own prefix), A4-F4 (shell-sourcing an env file ≠ Compose's
+parse; the Google key arrived 44 bytes short and invalid), A4-F5 (browser
+sign-in fails on a same-machine stack — playbook §4's exit condition
+failing as written, filed to whichever checkpoint owns the install
+story), A4-F6 (the G3 execution preflight never went through the
+resolver), A4-F7 (`/favicon.ico` answered 401).
+
+Five of the seven are the same shape: **a step whose failure was
+invisible.** The listener race looked like a broken vault; an empty
+`read` looked like a completed one; a shell-sourced credential looked
+identical to a working one; a silently-withheld `execute` sat behind five
+green probes. That is the D-84 family, and A-4's own instrumentation is
+what surfaced each of them — the loud boot failure, the `unprobed`
+contract, the `PILOT-ONLY` log line, the effective-flags packet.
+
+**A4-F6 deserves its own sentence in the record**, because it is the one
+that would have shipped. The G3 execution preflight read
+`execute_dsn_env: CL_EXEC_DSN` — a plaintext credential by construction —
+and consulted no resolver, so it was the single credential path A-4
+missed. It kept working for exactly as long as the plaintext file sat
+beside it, and its failure mode is governed execution *silently
+disappearing* while every visible surface stays green. It was found by
+deleting the plaintext, which is the whole reason act 8 exists as a step
+rather than a cleanup. **A migration is complete when the old source is
+removed, not when the new one works.**
+
+**Not closed, and owed by the operator:** the unseal-key rekey and root-
+token revoke (both passed through a chat transcript during the run; a
+rekey was started and deliberately **cancelled** rather than completed,
+because completing it in-session would have put the new key in the same
+transcript), and the four "owed" rows in
+`results/phase2/a4/SECRETS-INVENTORY.md` — helper files still holding
+copies of values vault now owns.
+
+**Suites at this entry:** core **306 passed / 4 skipped / 28 files**;
+python **777 passed / 14 skipped / 1 failed** — the contamination triage,
+now **35** docs, estate state, untouched by this work.
