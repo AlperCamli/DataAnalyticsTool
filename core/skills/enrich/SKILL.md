@@ -58,10 +58,33 @@ got wrong.
 
 Pick a bounded batch, **default ≤ 10 objects** (SP-3). Priority order:
 
-1. Fault-ledger items assigned to enrichment (`list_gaps`, if your profile
-   grants it) — these are real users hitting real gaps.
+1. Fault-ledger items **of the kinds enrichment can close** (`list_gaps`,
+   if your profile grants it) — these are real users hitting real gaps.
 2. Hot objects lacking human docs — the system index marks hot/stub.
 3. Harvested customer documents awaiting conversion.
+
+**Not every acknowledged gap is yours.** A steward acknowledging an issue
+means *this is real*, not *a skill can fix it*. Filter by kind:
+
+| Kind | Yours? | Why |
+|---|---|---|
+| `missing_doc`, `missing_entity`, `missing_join_path` | **yes** | a document closes it |
+| `uncertified_metric` | **yes** — draft it | you draft; a human certifies (CP-E3) |
+| `doc_schema_mismatch` | **yes** | re-ground the doc against the current snapshot |
+| `coverage_gap` | **usually** | the search found nothing, which is normally a missing doc |
+| `capability_gap` | **no** | it carries DDL a customer DBA must apply — often a reporting view. The object does not exist yet, so there is nothing to document. Leave it |
+| `guardrail_hit` | **no** | guardrail thresholds are ops config |
+| `abandoned_journey`, `benchmark_regression`, `result_disputed` | **no** | signals for a human to interpret, not documentation work |
+
+```
+list_gaps(status: "triaged", kind: "missing_doc")     # one call per kind you take
+```
+
+**Writing a doc about an object that does not exist is the failure this
+table prevents.** A reporting-view handoff sitting in the queue looks
+exactly like a documentation gap — same queue, same shape, same
+`triaged` — and drafting against it produces a confident doc about a
+view nobody has created.
 
 **State the batch and why, before writing anything.** If the request names
 no specific objects, apply a defensible default and say what you applied:

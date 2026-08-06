@@ -361,3 +361,11 @@ pre.config {
 
 ul.worklist { list-style: none; margin: 0.3rem 0 0.6rem; padding: 0; }
 ul.worklist li { padding: 0.2rem 0; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: baseline; }
+
+.disposition { margin: 0.5rem 0; padding: 0.55rem 0.8rem; border-radius: 0.4rem; border: 1px solid var(--line); background: var(--bg); }
+.disposition.enrichable { border-left: 3px solid var(--green); }
+.disposition.manual { border-left: 3px solid var(--amber); }
+.disposition-head { font-weight: 620; font-size: 0.9rem; margin-bottom: 0.25rem; }
+.disposition p { margin: 0.2rem 0; }
+ul.worklist li.stacked { flex-direction: column; align-items: flex-start; gap: 0.1rem; }
+.panel h4 { margin: 0.8rem 0 0.35rem; font-size: 0.95rem; display: flex; align-items: baseline; gap: 0.4rem; }

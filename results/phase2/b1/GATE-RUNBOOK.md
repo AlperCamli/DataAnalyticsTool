@@ -38,7 +38,7 @@ usable by a person on the real estate.
   counts per caller's visibility, contamination paths, DT-3, the no-merge
   property asserted over the server sources *and* the shipped bundle, the
   lineage read view's node-by-node filtering.
-- `core/test/dashboard-b1.test.ts` (39) — DT-10 (the badge, its ack, and
+- `core/test/dashboard-b1.test.ts` (41) — DT-10 (the badge, its ack, and
   a re-verdict firing it again), the governance-audit rows, Ops
   re-enqueue leaving the dead job dead, DT-5, the `batched → approved`
   return, and the **whole D-101.5 loop end to end without an agent**:
@@ -72,7 +72,7 @@ behavioral half** (act 9's alternative), which needs a model call.
 
 | Prerequisite | How to check |
 |---|---|
-| Suites green at this commit | `cd core && npx vitest run` (expect **358 passed / 4 skipped / 30 files**) and `.venv/bin/python -m pytest -q` (expect **792 passed / 14 skipped / 1 failed**) — that one failure is `test_no_contamination_in_current_kb`, which is **estate state** (34 docs awaiting triage), not this code, and act 5 is where you start working it down |
+| Suites green at this commit | `cd core && npx vitest run` (expect **360 passed / 4 skipped / 30 files**) and `.venv/bin/python -m pytest -q` (expect **792 passed / 14 skipped / 1 failed**) — that one failure is `test_no_contamination_in_current_kb`, which is **estate state** (34 docs awaiting triage), not this code, and act 5 is where you start working it down |
 | Stack running the build that contains B-1 | act 0 |
 | Vault unsealed | `curl -s localhost:8100/healthz \| grep -o '"sealed":[a-z]*'` → `"sealed":false` |
 | Your identity carries `steward` | the pilot steward account carries `["steward","ops"]` |
@@ -281,9 +281,26 @@ every time this gap fired, which detector or which person, and when.
 
 Each open gap now offers two buttons.
 
-**Acknowledge — "this is real, work it."** The gap moves to `triaged`,
-which is the enrich skill's work list. Nothing drafts by itself; you have
-told the skill where to go, and you run it in 5.3.
+**Acknowledge — "this is real."** The gap moves to `triaged`. **What that
+buys depends on the kind**, and the panel on each gap says which:
+
+- **A skill can close this** (`missing_doc`, `missing_entity`,
+  `missing_join_path`, `uncertified_metric`, `doc_schema_mismatch`,
+  usually `coverage_gap`) — acknowledging puts it on the enrich skill's
+  work list, and you run the skill in 5.3.
+- **This one needs a person** — most importantly **`capability_gap`**,
+  which is the kind four of your six open issues are. These carry DDL a
+  customer DBA must apply, usually a reporting view; the object does not
+  exist yet, so there is nothing to document and no skill can close it.
+  Acknowledging records that you have seen it. **The next move is yours:**
+  apply the DDL, re-sync so the new object lands in a snapshot, and only
+  then does documenting it become ordinary enrichment. (`guardrail_hit`
+  is ops config; `abandoned_journey`, `benchmark_regression` and
+  `result_disputed` are signals for you to interpret.)
+
+The **Working the queue** panel splits your acknowledged items along
+exactly that line: *the enrich skill can close these* / *these need you*,
+each with its next act.
 
 **Dismiss — "not worth doing."** Needs a reason, and the reason is kept.
 The row is not deleted: if the same gap happens again it reopens by
@@ -291,9 +308,10 @@ itself and the next person reads why you declined it. That is on purpose
 — a `wont_fix` that eleven more people hit deserves a second look, and
 the count is the argument.
 
-Acknowledge two or three that look genuinely worth writing. Dismiss one
-with a real reason. Look at the **Working the queue** panel that appears
-below: it lists what you acknowledged. That list is the handoff.
+Acknowledge two or three. **Acknowledge at least one `capability_gap`
+too** — it is the case that proves the distinction, and seeing it land in
+"these need you" rather than on the skill's list is the point of the act.
+Dismiss one with a real reason.
 
 #### 5.3 — hand it to the skill
 
@@ -305,8 +323,10 @@ as the batch, ground each claim in evidence you can cite, and open one
 pull request.
 ```
 
-The skill reads the triaged items (`list_gaps` is in the steward
-profile), gathers evidence for each, drafts the docs with graded
+The skill reads the triaged items **of the kinds it can close** —
+`list_gaps` is in the steward profile, and the skill filters by kind
+rather than taking everything acknowledged, so your `capability_gap`
+rows stay where they are. It gathers evidence for each, drafts the docs with graded
 `sources`, re-renders the machine docs, runs the KB validation locally,
 and opens **one pull request** for the batch. Anything it cannot ground
 it skips and names in the PR body rather than guessing at — that is its

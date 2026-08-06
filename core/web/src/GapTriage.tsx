@@ -272,11 +272,34 @@ function Triage({ issue, csrf, onDone }: { issue: Issue; csrf: string | null; on
           <button onClick={() => setDismissing(true)}>Dismiss…</button>
         )}
       </div>
-      <p className="muted small">
-        Acknowledging puts this on the enrich skill&apos;s work list — it reads triaged ledger items
-        first. <strong>Nothing drafts by itself:</strong> you run <code>enrich</code> in a session
-        and it picks these up, writes the docs, and opens a pull request for you to review.
-      </p>
+      {/* B1-F4: what acknowledging *means* depends on the kind. A
+          missing doc is work a skill can do; a reporting-view handoff is
+          a DDL statement only the customer's DBA may run (D-81). Saying
+          "this goes to enrich" for both was simply false for the
+          second. */}
+      <div className={`disposition${issue.disposition.enrichable ? " enrichable" : " manual"}`}>
+        <div className="disposition-head">
+          {issue.disposition.enrichable ? "A skill can close this" : "This one needs a person"}
+        </div>
+        <p>
+          <strong>Next act:</strong> <Text value={issue.disposition.next_act} />
+        </p>
+        <p className="muted small">
+          <strong>Who:</strong> <Text value={issue.disposition.actor} /> · <Text value={issue.disposition.why} />
+        </p>
+        {issue.disposition.enrichable ? (
+          <p className="muted small">
+            Acknowledging puts it on the enrich skill&apos;s work list. <strong>Nothing drafts by
+            itself:</strong> you run <code>enrich</code> in a session, it writes the docs and opens
+            one pull request, and you merge it.
+          </p>
+        ) : (
+          <p className="muted small">
+            Acknowledging records that you have seen it and it is real. It does <em>not</em> queue
+            any work — no skill can close this kind, so the next move is yours.
+          </p>
+        )}
+      </div>
       {dismissing && (
         <form
           className="reject-form"
@@ -663,37 +686,67 @@ function DeliverBatch({ approved, csrf, onDone }: { approved: number; csrf: stri
  * one the person is holding.
  */
 function WorkList({ triaged }: { triaged: Issue[] }) {
+  const forSkill = triaged.filter((i) => i.disposition.enrichable);
+  const forYou = triaged.filter((i) => !i.disposition.enrichable);
+
   return (
     <section className="panel">
       <h3>Working the queue</h3>
       {triaged.length === 0 ? (
         <p className="muted">
-          Nothing acknowledged yet. Acknowledge a gap above and it appears here — that is how you
-          tell the enrich skill what is worth writing.
+          Nothing acknowledged yet. Acknowledge a gap above and it appears here, sorted by who can
+          actually close it.
         </p>
       ) : (
         <>
-          <p>
-            <Text value={triaged.length} /> acknowledged gap(s) are on the enrich skill&apos;s work
-            list:
-          </p>
-          <ul className="worklist">
-            {triaged.map((i) => (
-              <li key={i.issue_id}>
-                <code><Text value={i.object_fqn ?? i.kind} /></code>{" "}
-                <span className="muted"><Text value={i.title} /></span>
-              </li>
-            ))}
-          </ul>
+          <h4>
+            The enrich skill can close these <span className="count-badge">{forSkill.length}</span>
+          </h4>
+          {forSkill.length === 0 ? (
+            <p className="muted small">
+              None — everything you have acknowledged needs a person, not a skill.
+            </p>
+          ) : (
+            <>
+              <ul className="worklist">
+                {forSkill.map((i) => (
+                  <li key={i.issue_id}>
+                    <code><Text value={i.object_fqn ?? i.kind} /></code>{" "}
+                    <span className="muted"><Text value={i.title} /></span>
+                  </li>
+                ))}
+              </ul>
+              <p className="muted small">
+                Open a Claude Code session with your steward bundle and ask it to run the{" "}
+                <code>enrich</code> skill over the acknowledged ledger items. It grounds each claim
+                in evidence it can cite and opens one pull request; you review that diff and merge
+                it — the merge is what certifies, and nothing here can do it for you.
+              </p>
+            </>
+          )}
+
+          <h4>
+            These need you <span className="count-badge">{forYou.length}</span>
+          </h4>
+          {forYou.length === 0 ? (
+            <p className="muted small">None.</p>
+          ) : (
+            <ul className="worklist">
+              {forYou.map((i) => (
+                <li key={i.issue_id} className="stacked">
+                  <span>
+                    <code><Text value={i.object_fqn ?? i.kind} /></code>{" "}
+                    <span className="muted"><Text value={i.title} /></span>
+                  </span>
+                  <span className="muted small">
+                    → <Text value={i.disposition.next_act} />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       )}
-      <p className="muted small">
-        <strong>The dashboard does not write documents.</strong> Open a Claude Code session with
-        your steward bundle and ask it to run the <code>enrich</code> skill; it reads acknowledged
-        ledger items first, grounds each claim in evidence it can cite, and opens one pull request.
-        You review that diff and merge it — the merge is the act that certifies, and nothing in
-        this product can do it for you.
-      </p>
     </section>
   );
 }

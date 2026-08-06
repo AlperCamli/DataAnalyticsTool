@@ -802,6 +802,52 @@ describe("B-1 dashboard surfaces", () => {
       expect(res.json.detail as string).toContain("verdict lifecycle");
     });
 
+
+    it("B1-F4: the disposition says what closes each kind, and a DDL handoff is not enrichment", async () => {
+      // `routed_to` says who hears about an issue; it does not say what
+      // act closes it. Acknowledging a missing doc and acknowledging a
+      // reporting-view handoff both produce `triaged`, and only one of
+      // them is work a skill can do.
+      const docGap = await fileGap("subscriptions.plan_code has no doc", "drill.shop.orders");
+      const list = await apiGet(rig, steward, "/v1/dashboard/ledger?status=all&limit=100");
+      const issues = list.json.issues as {
+        issue_id: string;
+        kind: string;
+        disposition: { enrichable: boolean; actor: string; next_act: string; why: string };
+      }[];
+
+      const doc = issues.find((i) => i.issue_id === docGap)!;
+      // human_filed is free-form and deliberately NOT auto-enrichable —
+      // somebody has to decide which kind it really is.
+      expect(doc.disposition).toBeDefined();
+      expect(typeof doc.disposition.next_act).toBe("string");
+
+      // The kinds the enrich skill may take, and the ones it must not.
+      const { ENRICHABLE_KINDS, dispositionFor } = await import("../src/ledger.js");
+      expect(ENRICHABLE_KINDS).toContain("missing_doc");
+      expect(ENRICHABLE_KINDS).toContain("uncertified_metric");
+      expect(ENRICHABLE_KINDS).not.toContain("capability_gap");
+      expect(ENRICHABLE_KINDS).not.toContain("guardrail_hit");
+
+      // The one that matters on the pilot: a reporting-view handoff.
+      const cap = dispositionFor("capability_gap");
+      expect(cap.enrichable).toBe(false);
+      expect(cap.next_act).toContain("DDL");
+      // And the reason names the ruling, so nobody re-litigates it.
+      expect(cap.why).toContain("D-81");
+      expect(cap.actor).toContain("DBA");
+    });
+
+    it("B1-F4: the shipped enrich skill filters by kind, not by status alone", () => {
+      // S1 read "items assigned to enrichment" — a filter that never
+      // existed, so a skill obeying it literally would pick up DDL
+      // handoffs and document views that do not exist yet.
+      const skill = readFileSync(path.join(CORE_DIR, "skills", "enrich", "SKILL.md"), "utf-8");
+      expect(skill).toContain("Not every acknowledged gap is yours");
+      expect(skill).toContain("capability_gap");
+      expect(skill).toMatch(/does not exist yet/);
+    });
+
     it("a reporter cannot triage, and the refusal is audited", async () => {
       const issueId = await fileGap("the exports table is undocumented");
       const res = await apiPost(rig, reporter, `/v1/dashboard/ledger/issues/${issueId}/triage`, {

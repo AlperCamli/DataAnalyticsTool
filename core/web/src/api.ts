@@ -225,6 +225,7 @@ export interface Issue {
   verdict: { by: string | null; at: string | null; reason: string | null } | null;
   batch_id: string | null;
   resolution: Record<string, unknown> | null;
+  disposition: { enrichable: boolean; actor: string; next_act: string; why: string };
   returned: { at: string; note: string | null } | null;
 }
 

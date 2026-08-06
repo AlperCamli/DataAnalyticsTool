@@ -690,6 +690,141 @@ export async function deliverBatch(
 }
 
 // ---------------------------------------------------------------------------
+// What closes an issue, per kind (finding B1-F4)
+//
+// `routed_to` says which *role* hears about an issue; it does not say
+// what act closes it, and those are different questions. Acknowledging a
+// `missing_doc` and acknowledging a `capability_gap` both produce
+// `triaged`, but the first is work for the enrich skill and the second
+// is a DDL statement a customer DBA applies — the product never runs DDL
+// against a customer estate (D-81), so no skill can close it.
+//
+// The distinction already existed in the specs and had no mechanism: the
+// enrich skill's S1 reads "fault-ledger items **assigned to
+// enrichment**", and nothing ever assigned one. `list_gaps` filters by
+// status, kind and system, so a skill obeying S1 literally would pick up
+// reporting-view handoffs and try to document views that do not exist
+// yet.
+//
+// Each row below is derived from something written; the table itself is
+// not in a spec, and that is flagged rather than hidden.
+
+export interface Disposition {
+  /** Can the enrich skill close this by writing a document? */
+  enrichable: boolean;
+  /** Who acts next, in the playbook's persona vocabulary. */
+  actor: string;
+  /** The act that actually closes it. */
+  next_act: string;
+  /** Why it is that act — the rule or ruling behind the row. */
+  why: string;
+}
+
+const ENRICHABLE = (next_act: string, why: string): Disposition => ({
+  enrichable: true,
+  actor: "the enrich skill, then a human merging its PR",
+  next_act,
+  why,
+});
+
+export const DISPOSITIONS: Record<string, Disposition> = {
+  missing_doc: ENRICHABLE(
+    "write the missing document",
+    "the enrich skill's first priority is ledger items it can ground and document (skill spec §6 S1)",
+  ),
+  missing_entity: ENRICHABLE(
+    "write or extend the entity doc that should have routed this",
+    "an entity doc is a human doc; writing one is enrichment",
+  ),
+  missing_join_path: ENRICHABLE(
+    "document the join, graded by the evidence that supports it",
+    "join guidance is human-doc content; usage evidence upgrades it from inference to observation",
+  ),
+  uncertified_metric: ENRICHABLE(
+    "draft the metric doc — then a human certifies it",
+    "the skill never sets `verified`; certification is a human merging a reviewed diff (KB-7/CP-E3)",
+  ),
+  doc_schema_mismatch: ENRICHABLE(
+    "re-ground the doc against what the snapshot says now",
+    "the doc drifted from its source; the repair is grounding work",
+  ),
+  coverage_gap: ENRICHABLE(
+    "usually: write the doc the search could not find",
+    "the zero-result rule fires when nothing resolves, which is normally a missing document (§5)",
+  ),
+  // --- not enrichment, and saying so is the point ------------------------
+  capability_gap: {
+    enrichable: false,
+    actor: "you, as the customer's DBA — or an ops owner, if it is a profile gap",
+    next_act:
+      "apply the DDL this issue carries (a reporting view, usually), then re-sync so the new " +
+      "object appears in a snapshot — after which documenting it becomes ordinary enrichment",
+    why:
+      "§4 registry: capability gaps include SK-6 reporting-view handoffs with the DDL in `detail`, " +
+      "and D-81 is explicit that this product never applies DDL to a customer estate. No skill " +
+      "can close this one, because closing it means running a statement only you may run.",
+  },
+  guardrail_hit: {
+    enrichable: false,
+    actor: "an ops owner",
+    next_act:
+      "tune the guardrail, or give the query a reporting view to run against instead of raising a limit",
+    why: "guardrail thresholds are profile/ops configuration (L-3), not knowledge-base content",
+  },
+  abandoned_journey: {
+    enrichable: false,
+    actor: "you, reading it",
+    next_act:
+      "look at what people gave up on. It may turn out to be a documentation gap worth filing as " +
+      "one, or it may be nothing — this kind is a signal, not a finding",
+    why: "the rule fires on a session shape (resolution reads, a validate, no execute), which is evidence about people rather than about the estate",
+  },
+  benchmark_regression: {
+    enrichable: false,
+    actor: "you, with whoever merged the change",
+    next_act: "read the KB change that degraded the suite and decide whether to repair or accept it",
+    why: "§7 routes this kind to the data team *and* the merging author, because the change is the suspect",
+  },
+  result_disputed: {
+    enrichable: false,
+    actor: "you, investigating",
+    next_act:
+      "find out which it is: a document that says something wrong (then it becomes enrichment), " +
+      "or a genuine disagreement about the data",
+    why: "the user said the answer was wrong (CP-R4/SK-5); which layer was wrong is not yet known",
+  },
+  human_filed: {
+    enrichable: false,
+    actor: "you, deciding",
+    next_act: "read it and decide which of the above it really is",
+    why: "a free-form filing carries no kind of its own",
+  },
+  other: {
+    enrichable: false,
+    actor: "you, deciding",
+    next_act: "read it and decide which of the above it really is",
+    why: "`other` is deliberately unclassified",
+  },
+};
+
+/** The kinds an enrich session should pick up. The skill filters on
+ * these rather than on "triaged", which would hand it DDL work. */
+export const ENRICHABLE_KINDS = Object.entries(DISPOSITIONS)
+  .filter(([, d]) => d.enrichable)
+  .map(([kind]) => kind);
+
+export function dispositionFor(kind: string): Disposition {
+  return (
+    DISPOSITIONS[kind] ?? {
+      enrichable: false,
+      actor: "you, deciding",
+      next_act: "read it and decide what closes it",
+      why: `this core has no disposition recorded for the kind '${kind}'`,
+    }
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Class-1 detector rules (§5) — config-driven (L-3)
 
 export interface DetectorRule {

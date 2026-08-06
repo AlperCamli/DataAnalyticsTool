@@ -5895,6 +5895,60 @@ so the pilot's 34 have no product entry point. It belongs to **A-5**,
 whose gate is precisely "every report-path L1 doc human-verified"; act 5b
 now says so instead of implying the backlog is one click of work.
 
+## B1-F4 — acknowledging meant one thing and the screen claimed another (2026-08-06, operator)
+
+Asked immediately after B1-F3 shipped: *"when a capability_gap is
+acknowledged what happens to it. Does it go to enrich as well, or does it
+go to somewhere else, if the problem is not about context enrichment"*.
+
+It does not go to enrich, and the screen said it did. B1-F3's panel told
+every gap the same sentence — *"acknowledging puts this on the enrich
+skill's work list"* — which is true for a `missing_doc` and false for a
+`capability_gap`, the kind **four of the pilot's six open issues** are.
+Those four are SK-6 reporting-view handoffs: closing one means running
+DDL against the customer's estate, which **D-81 forbids the product from
+doing**, and the object does not exist yet so there is nothing to
+document either.
+
+**`routed_to` did not cover this.** It says which role *hears* about an
+issue; it does not say what act closes it, and those are different
+questions that this build had collapsed into one.
+
+**The distinction existed in the specs with no mechanism.** The enrich
+skill's S1 reads "fault-ledger items **assigned to enrichment**" — so the
+spec knew — but nothing ever assigned one, and `list_gaps` filters by
+status, kind and system only. A skill obeying S1 literally takes every
+`triaged` item including the DDL handoffs and drafts confident
+documentation for views nobody created: the gap-vs-guess failure arriving
+through the front door with a steward's acknowledgement on it.
+
+**Built: a disposition per kind** — `enrichable`, `actor`, `next_act`,
+`why` — computed server-side and rendered on every issue, with each row
+derived from something written (§4's own description of `capability_gap`
+as carrying SK-6 DDL; D-81 for who may run it; L-3 for guardrail
+thresholds; CP-E3/KB-7 for who certifies a metric). The triage panel now
+reads *"A skill can close this"* or *"This one needs a person"* with the
+act and the rule behind it; the work-list splits on the same line; and
+**the enrich skill filters by kind**, carrying the table and the sentence
+that matters — *writing a doc about an object that does not exist is the
+failure this table prevents*.
+
+*Flagged, not done:* the kind→next-act table **is not in a spec**. Every
+row derives from one, but the mapping is new and belongs in fault-ledger
+§7 beside the routing table — an amendment outside this fence, proposed
+for the next task 0 with the other two. And `list_gaps` does not expose
+the disposition; the skill filters by kind instead, which needs no change
+to an MCP response shape. Adding it would be additive and probably right,
+and it is a spec surface, so it is flagged rather than taken.
+
+**The pattern across four findings.** B1-F1: a stale capture presented as
+current. B1-F2: a capability with no caller. B1-F3: a queue with no
+verbs. B1-F4: one verb meaning four different things. Every one of them
+is a surface *claiming* something the machinery behind it did not do —
+which is the same family as D-84 and A4-F6, and is exactly what a person
+sitting in front of the product finds and a test asserting its own
+staged data cannot.
+
 ## What this build does not claim
 
 - **The gate demo has not been run to completion.** Act 3 has (it found

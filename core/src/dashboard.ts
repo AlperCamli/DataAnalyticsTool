@@ -39,6 +39,7 @@ import type { CoreConfig } from "./config.js";
 import type { KbReader, KbState } from "./kbread.js";
 import {
   deliverBatch,
+  dispositionFor,
   ENRICHMENT_REQUEST,
   getIssue,
   HUMAN_FILED,
@@ -535,6 +536,12 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
       : null,
     batch_id: issue.batch_id,
     resolution: issue.resolution,
+    // B1-F4: what closes this issue, and who acts next. `routed_to`
+    // says who *hears* about it; this says what to do, and the two are
+    // different questions — acknowledging a missing doc and a
+    // reporting-view handoff both produce `triaged`, and only one of
+    // them is work a skill can do.
+    disposition: dispositionFor(issue.kind),
     // Why a request came back rather than being drafted (§4). Present
     // only on one that did — an absent note is not an empty one.
     returned: issue.returned_at

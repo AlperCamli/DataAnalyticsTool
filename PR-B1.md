@@ -6,7 +6,7 @@ and the operator's gate runbook. Task 0 rode along: D-113 recorded,
 D-108's two bracketed clauses resolved on the operator's attestation, and
 playbook §4's exit condition made true for the install shape A4-F5 found.
 
-**Suites:** core **358 passed / 4 skipped / 30 files** (was 306/4/28 at
+**Suites:** core **360 passed / 4 skipped / 30 files** (was 306/4/28 at
 A-4). Python **792 passed / 14 skipped / 1 failed** — the contamination
 triage, 34 docs, estate state, untouched by this work.
 
@@ -146,6 +146,7 @@ this session's fence.
 | **B1-F1**: payload rebuilt from the registration; second-press 409; no-registration and `execute` refusals | `dashboard-b1.test.ts` (5, added after the gate demo's act 3) |
 | **B1-F2**: a session's `flag_gap(enrichment_request)` reaches the steward's queue with its proposal, runs the full lifecycle, and the shipped report skill carries the instruction | `dashboard-b1.test.ts` (3) |
 | **B1-F3**: gap acknowledge/dismiss, the required reason, L-4 reopen preserving the dismissal, the two lifecycles refusing each other, and triage making no git call | `dashboard-b1.test.ts` (6) |
+| **B1-F4**: `ENRICHABLE_KINDS` excludes `capability_gap`; its disposition names DDL, the DBA and D-81; the shipped enrich skill filters by kind | `dashboard-b1.test.ts` (2) |
 | S1b citation / trailer / no-verbatim rules (CI regression, **not** AS-18's evidence) | `tests/test_skill_conformance.py` (15 new) |
 | AS-18 behavioral scenario (D-78 layer b) | `tools/skill_scenarios.py --only enrich-batch` — **ships, not run** |
 
@@ -183,7 +184,11 @@ is the same silent-failure family this checkpoint exists to surface.
   dismiss-with-reason were never built, so a steward could read ten open
   gaps and act on none. Built, and act 5 rewritten around triage → run
   the skill → merge, after the operator objected to a runbook step that
-  told them to hand-edit the KB. `results/phase2/b1/GATE-RUNBOOK.md`
+  told them to hand-edit the KB. And **B1-F4**: acknowledging claimed one
+  destination for every kind, when four of the pilot's six open gaps are
+  `capability_gap` — DDL a customer DBA applies (D-81), which no skill can
+  close. Fixed with a per-kind disposition the screen and the enrich skill
+  both read. `results/phase2/b1/GATE-RUNBOOK.md`
   is the operator's morning: KB Health showing the true backlog → Ops →
   drift review → contamination triage → the knowledge-request loop end to
   end, stopping at act 10 for the R2 merge. A PR merged by this session

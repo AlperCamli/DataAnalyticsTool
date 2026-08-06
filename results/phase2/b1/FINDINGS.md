@@ -342,3 +342,105 @@ pointing a session at named files, which works and is not a surface.
 Filed here; it belongs to **A-5**, whose gate is exactly "every
 report-path L1 doc human-verified". Act 5b now says this plainly instead
 of pretending the backlog is one click of work.
+
+---
+
+## B1-F4 — acknowledging meant one thing and the screen claimed another
+
+**Found 2026-08-06 by the operator**, immediately after B1-F3's actions
+shipped:
+
+> what is the conditions in triage, when a capability_gap is
+> acknowledged what happens to it. Does it go to enrich as well, or does
+> it go to somewhere else, if the problem is not about context enrichment
+
+It does not go to enrich, and the screen said it did.
+
+### The fault
+
+B1-F3's triage panel told every gap the same thing: *"acknowledging puts
+this on the enrich skill's work list."* That is true for a `missing_doc`
+and false for a `capability_gap`, which is the kind **four of the pilot's
+six open issues** are:
+
+```
+capability_gap: supabase.reporting                      (×3)
+capability_gap: supabase.reporting.v_user_signups_by_day
+capability_gap: supabase.public
+capability_gap: gsc.standard.impressions, ga4.standard.screen…
+```
+
+These are **SK-6 reporting-view handoffs**: the report skill hit a
+request that needed a view, produced the DDL, and filed it with the DDL
+in `detail`. Closing one means *running a DDL statement against the
+customer's estate*, which **D-81 forbids the product from doing** — so no
+skill can close it, and the object does not exist yet, so there is
+nothing to document either.
+
+`routed_to` did not save this. It says which *role* hears about an issue
+(everything routes to `data-team` here); it does not say what act closes
+it, and those are different questions.
+
+### The distinction already existed and had no mechanism
+
+The enrich skill's S1 reads *"fault-ledger items **assigned to
+enrichment**"* — so the spec knew not every ledger item is enrichment
+work. But **nothing ever assigned one**, and `list_gaps` filters by
+status, kind and system only. A skill obeying S1 literally would take
+every `triaged` item, including the four DDL handoffs, and draft
+confident documentation for views nobody has created. That is the
+gap-vs-guess failure arriving through the front door with a steward's
+acknowledgement on it.
+
+### Fixed
+
+**A disposition per kind**, computed server-side and rendered on every
+issue: `enrichable`, `actor`, `next_act`, `why`. Each row is derived from
+something written — the §4 registry's own description of `capability_gap`
+("includes SK-6 reporting-view handoffs — the DDL rides in `detail`"),
+D-81 for who may run DDL, L-3 for guardrail thresholds being ops config,
+CP-E3/KB-7 for who certifies a metric.
+
+| Kind | Enrichable | Next act |
+|---|---|---|
+| `missing_doc`, `missing_entity`, `missing_join_path` | yes | write the doc |
+| `uncertified_metric` | yes | draft it — a **human** certifies |
+| `doc_schema_mismatch` | yes | re-ground against the current snapshot |
+| `coverage_gap` | usually | normally a missing doc |
+| **`capability_gap`** | **no** | **apply the DDL as the customer's DBA, re-sync, and only then is documenting it enrichment** |
+| `guardrail_hit` | no | tune the guardrail or add a view — ops config |
+| `abandoned_journey`, `benchmark_regression`, `result_disputed` | no | a person interprets the signal |
+| `human_filed`, `other` | no | decide which of the above it is |
+
+**The triage panel now says the right thing per kind**, in two shapes —
+*"A skill can close this"* / *"This one needs a person"* — each with its
+next act and the rule behind it. The **Working the queue** panel splits
+the acknowledged list along the same line.
+
+**And the enrich skill filters by kind**, with the table in its S1 and
+the sentence that matters: *writing a doc about an object that does not
+exist is the failure this table prevents* — a reporting-view handoff in
+the queue looks exactly like a documentation gap, same shape, same
+`triaged`.
+
+### Tests
+
+Two in `core/test/dashboard-b1.test.ts`: `ENRICHABLE_KINDS` excludes
+`capability_gap` and `guardrail_hit` while including `missing_doc` and
+`uncertified_metric`; `capability_gap`'s disposition is non-enrichable,
+names DDL and the DBA, and cites D-81 in its `why` so nobody
+re-litigates it. Plus a grep asserting the shipped skill carries the
+filter.
+
+### Flagged, not done
+
+**The kind → next-act table is not in a spec.** Every row is derived from
+one, but the mapping itself is new: §4 gives kinds, §7 gives kind→role
+routing, and nothing gives kind→closing-act. It belongs in fault-ledger
+§7 beside the routing table, and that is an amendment outside this
+session's fence — proposed for the next task 0 with the other two.
+
+**`list_gaps` does not expose the disposition.** The skill filters by
+kind instead, which needs no change to an MCP tool's response shape.
+Adding the field would be additive and probably right; it is a spec
+surface, so it is flagged rather than taken.
