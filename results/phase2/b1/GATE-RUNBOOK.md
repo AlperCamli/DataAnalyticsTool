@@ -531,12 +531,20 @@ queue is scoped to *what you filed* — the server says so in a banner, and
 it is a server scope, not a filter the page applied. Use the form at the
 bottom, choose **Knowledge request**, and fill in **What it should say**.
 
-**Either way, file a second request that is deliberately vague** —
-something no evidence could settle, like "the churn number should be
-written down". That one is act 9's honest-skip case, and the demo is
-weaker without it.
+**File three in total.** One is the run; three is the demonstration, and
+each one exercises a different half of the loop:
 
-*Record:* both issue ids; **the sentence you typed and the agent's reply,
+| # | What to file | What it is for |
+|---|---|---|
+| 1 | **The real one** — volunteered mid-session in 6a, with your words as the proposal | the loop end to end: verdict → batch → PR → resolution (clause 8) |
+| 2 | **Deliberately vague** — something no evidence could settle, e.g. *"the churn number should be written down"* | act 9's honest-skip: the skill **returns** it with a note rather than guessing |
+| 3 | **One worth declining** — something you would genuinely say no to (already documented, or out of scope) | act 7's **rejection with a reason**, and the badge it fires |
+
+Number 3 is the one added by D-114's gate instruction: rejection and its
+reply path are a different act from approval, and the runbook previously
+had you approve everything, which never exercised them.
+
+*Record:* all three issue ids; **the sentence you typed and the agent's reply,
 verbatim** (this is the clause's evidence, so a paraphrase of it is not
 evidence); and, once you reach act 7, whether the stored `proposal`
 matches what you typed word for word. If the agent claimed it had *added*
@@ -547,16 +555,31 @@ write that down — either is a finding.
 
 Sign out. Sign back in as **yourself**.
 
-Open **Gap Triage → Knowledge requests**. Both requests are there, open.
+Open **Gap Triage → Knowledge requests**. All three requests are there,
+open.
 
 Press **History & proposal** on the first. The proposal is shown in its
 own frame, labelled as the requester's words, quoted — not in the
 product's voice. Read the label: if this is approved and drafted, the doc
 is written in the KB's voice and *cites* the submission rather than
-containing it.
+containing it. **Compare the quoted text to the sentence you typed in
+6a** — word for word. A tidied proposal is finding-worthy (skill spec §5,
+bound 1).
 
-**Approve both.** Read the sentence above the button before you press it:
-approving means worth drafting; it writes ledger state and nothing else.
+**Approve #1 and #2. Reject #3 with a real reason.** Read the sentence
+above the button before you press either: approving means *worth
+drafting*; it writes ledger state and nothing else. Rejecting keeps the
+row rather than deleting it, and the reason you type **is shown to the
+person who filed it** — so write it as something you would be content to
+have read back to you.
+
+**Then watch the reply path fire, immediately.** Sign out, sign in as
+`eda`, and look at **What came back**: the rejection is there with your
+reason, before any batch or any PR exists. That is DT-10's badge on the
+rejection half — a distinct act from act 11's resolution half, and this
+is the only place in the run that exercises it. Do **not** press *Mark
+all as read* yet; leave it, so act 11 shows a badge that grew rather than
+one that appeared from nothing. Sign back in as yourself.
 
 *Optional, and worth doing once:* before approving, sign in as the
 reporter and press Approve on their own request. You get the server's
@@ -564,12 +587,15 @@ reporter and press Approve on their own request. You get the server's
 them — hiding it would have taught them nothing, and the client is never
 the thing that says no.
 
-*Record:* the approved states with your name and timestamp on them.
+*Record:* the two approved states with your name and timestamp on them;
+the rejected one with its reason; the stored proposal beside the sentence
+you typed; and `eda`'s badge carrying the rejection.
 
 ### Act 8 — deliver the batch
 
 Still in **Knowledge requests**, the **Approved worklist** panel now shows
-the count. Press **Deliver batch to the enrich skill**.
+the count — **2**, not 3: the rejected one is not work. Press **Deliver
+batch to the enrich skill**.
 
 Read the response: a batch id, a count, and a sentence stating that
 nothing has been written to the knowledge base and no pull request
@@ -651,14 +677,26 @@ that is the single most important line in the whole dashboard spec.
 Within a minute of the merge, the core's resolution sweep reads the
 trailer and closes the issue.
 
-Sign in **as the requester**. Look at the sidebar: **What came back**
-carries a badge.
+Sign in **as `eda`**. Look at the sidebar: **What came back** carries a
+badge, and it should now read **2** — the rejection you left unread at
+act 7, plus this resolution. A badge that grew is a stronger reading than
+a badge that appeared: it says the count is per-item and server-held, not
+a boolean somebody flipped.
 
 Open it. The resolved request is there, with a link to the merged pull
 request — the diff that answered them, which is the thing worth reading.
+The rejected one sits beside it with your reason. Both are the same
+mechanism; only the verdict differs, which is the point.
+
 Press **Mark all as read**; the badge clears. Reload, and it stays
 cleared: "seen" is server state under their identity, not something the
 browser remembered.
+
+**One more check, and it is cheap.** Sign in as yourself and open your
+own **What came back**: it is empty, and it should be. You gave the
+verdicts; you did not file the requests. The badge is per-filer, not
+per-role — which is why it is a table keyed on `(subject, issue)` rather
+than a column on the issue.
 
 **The loop is closed.** Somebody asked, a steward judged, a skill drafted
 what it could ground and honestly handed back what it could not, a human
