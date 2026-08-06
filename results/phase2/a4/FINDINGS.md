@@ -152,3 +152,66 @@ method. Worth generalising beyond A-4: any future migration that moves a
 credential between two systems must verify against the *consumer's* copy,
 not the producer's, because only the consumer's copy is evidence that
 anything works.
+
+---
+
+## A4-F5 — browser sign-in fails on a same-machine stack, out of the box
+
+**Found 2026-08-06, first time anyone opened the dashboard sign-in on the
+host that runs the stack.** Clicking **Sign in** redirects to
+
+```
+http://host.docker.internal:8180/authorize?...
+```
+
+and the browser cannot resolve `host.docker.internal`. The site simply
+cannot be reached; nothing in the product reports a fault, because
+nothing in the product is at fault yet — the redirect is well-formed and
+the IdP is healthy.
+
+**Why the default is what it is.** `docker-compose.yml` sets
+`CORE_OIDC_ISSUER` and `DEVIDP_HOST` from `${CL_HOST_ADDR:-host.docker.internal}`.
+That default is correct for the *core*: Docker Desktop routes
+`host.docker.internal` from a container to the host's loopback, so
+discovery and token introspection work. It is wrong for the *browser*,
+which has no such name — Docker Desktop does not add it to the host's
+`/etc/hosts`.
+
+**Why it survived A-2.** The second-human run put the colleague on a
+different machine, so that runbook required the dev-IdP exposure step
+(`CL_HOST_ADDR=<LAN IP>`, `CL_BIND=0.0.0.0`). Under those settings the
+issuer resolves for browser and container alike. The same-machine
+loopback path — the configuration a customer operator tries **first** —
+was never exercised.
+
+**Why no in-product workaround exists.** `core/src/devidp.ts` builds
+every advertised endpoint from one string (`issuer = http://${DEVIDP_HOST}:${port}`),
+and `core/src/oidc.ts` uses the single configured `oidcIssuer` for
+discovery *and* introspection. So there is no way to advertise one host
+to the browser and use another server-side; the name has to resolve
+identically from both.
+
+**Immediate unblock** (loopback only, no LAN exposure, no restart):
+
+```bash
+sudo sh -c 'echo "127.0.0.1 host.docker.internal" >> /etc/hosts'
+```
+
+**Where it closes, and what the real fix is.** Playbook §4's exit
+condition is "dashboard reachable, **OIDC login works**" — which does not
+hold as written for a single-machine install, so this is a playbook-grade
+defect, not a local annoyance. Two candidate fixes, for the checkpoint
+that owns the dashboard's install story:
+
+1. **Split external from internal.** Add an internal-only URL (the
+   compose service name, `http://devidp:8180`) used for discovery and
+   introspection, while the advertised issuer stays browser-resolvable.
+   Costs care around OIDC's issuer-match validation.
+2. **Default to `127.0.0.1` and document the exception.** Make the
+   same-machine case work with no setup, and require `CL_HOST_ADDR` only
+   for the genuinely multi-machine case (which A-2 already documents).
+   Cheaper, and matches which case is common.
+
+Either way the playbook needs a line: an install where the browser and
+the stack share a host is the normal case and must not need `/etc/hosts`
+surgery.
