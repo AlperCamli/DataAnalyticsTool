@@ -125,27 +125,43 @@ docker compose exec vault vault operator init -key-shares=1 -key-threshold=1
 > git-ignored, but it is on the disk this vault is meant to get secrets
 > off.
 
-```bash
-docker compose exec vault vault operator unseal <unseal-key>
-docker compose exec vault vault status          # Sealed false
-```
+### The rule for the rest of this page
 
-## Act 3 — policies and identities
-
-> **The root token and the unseal key are typed at the prompt. They are
-> never saved into this page, into `deploy/vault-dev.env`, or into any
-> other file in this repo.** Substituting them into the code blocks here
-> is the obvious thing to do and it puts live credentials into a
+> **The unseal key and the root token are typed at a prompt. They are
+> never substituted into a code block, into `deploy/vault-dev.env`, or
+> into any other file in this repo.** Filling in the placeholders as you
+> read is the obvious thing to do and it puts live credentials into a
 > **tracked** file — `deploy/vault-dev.env` in particular is committed
-> and ships in the public platform release. Keep them in your password
-> manager and paste from there. Easiest safe pattern: set them once as
-> shell variables in a terminal you will close afterwards.
+> and ships in the public platform release.
+
+So load them into shell variables once, here, in a terminal you will
+close when the migration is done. Every later act uses `"$VK"` and
+`"$VT"` and never shows the values again:
 
 ```bash
 set +o history              # keep them out of ~/.zsh_history
-read -rs VT                 # paste the ROOT TOKEN, press enter
 read -rs VK                 # paste the UNSEAL KEY, press enter
+read -rs VT                 # paste the ROOT TOKEN, press enter
+```
 
+`read -rs` does not echo, so nothing appears on screen and nothing enters
+history. If you close this terminal before act 8, just re-run these two
+lines from your password manager.
+
+**Now unseal:**
+
+```bash
+docker compose exec -T vault vault operator unseal "$VK"
+docker compose exec -T vault vault status | grep -E "Initialized|Sealed"
+```
+
+Expect `Initialized true` and `Sealed false`. The container flips from
+`unhealthy` to `healthy` within a few seconds — that is the signal
+`core` and `runner` have been waiting on.
+
+## Act 3 — policies and identities
+
+```bash
 docker compose exec -e VAULT_TOKEN="$VT" vault sh /vault/seed.sh
 ```
 
@@ -208,21 +224,21 @@ Their current homes are `.secrets/runner.env` and `.secrets/sync.env`.
 
 ```bash
 # customer connection credentials → the cl-runner policy's subtree
-docker compose exec -e VAULT_TOKEN=<root-token> vault \
+docker compose exec -e VAULT_TOKEN="$VT" vault \
   vault kv put secret/contextlayer/connections/supabase \
     introspect_dsn='<CL_INTROSPECT_DSN from .secrets/runner.env>' \
     exec_dsn='<CL_EXEC_DSN from .secrets/runner.env>'
 
-docker compose exec -e VAULT_TOKEN=<root-token> vault \
+docker compose exec -e VAULT_TOKEN="$VT" vault \
   vault kv put secret/contextlayer/connections/google \
     sa_key_json='<GOOGLE_SA_KEY_JSON from .secrets/runner.env>'
 
-docker compose exec -e VAULT_TOKEN=<root-token> vault \
+docker compose exec -e VAULT_TOKEN="$VT" vault \
   vault kv put secret/contextlayer/connections/powerbi \
     client_secret='<POWERBI_CLIENT_SECRET from .secrets/runner.env>'
 
 # the core's own secret → the cl-core policy's subtree
-docker compose exec -e VAULT_TOKEN=<root-token> vault \
+docker compose exec -e VAULT_TOKEN="$VT" vault \
   vault kv put secret/contextlayer/core \
     git_token='<SYNC_GIT_TOKEN from .secrets/sync.env>'
 
@@ -370,7 +386,7 @@ set +o history
 .secrets/reset-exec-password.sh
 
 # 2. Write the new DSN into vault. ONLY here.
-docker compose exec -e VAULT_TOKEN=<root-token> vault \
+docker compose exec -e VAULT_TOKEN="$VT" vault \
   vault kv patch secret/contextlayer/connections/supabase \
     exec_dsn='<the new DSN>'
 set -o history
@@ -469,7 +485,7 @@ A-4's field note and it is worth more than a clean checklist.
 | Vault container `(unhealthy)` before act 2 finishes | the healthcheck *is* `vault status` | expected — it flips to healthy seconds after the unseal, and `core`/`runner` wait for it on purpose |
 | `docker compose up` hangs on `core`/`runner` | vault is sealed, so its dependency is unmet | unseal it; the wait is the gate working |
 | Core will not start, names a variable | that variable's `vault://` reference does not resolve | check spelling of mount/path/field; `vault kv get` it as root |
-| `/healthz` shows `vault.sealed: true` | the host or the container restarted | `docker compose exec vault vault operator unseal <key>` |
+| `/healthz` shows `vault.sealed: true` | the host or the container restarted | `docker compose exec vault vault operator unseal "$VK"` (re-read the key from your password manager if the shell is gone) |
 | `/healthz` shows `vault.reachable: false` | vault container down, or `VAULT_ADDR` wrong | `docker compose ps vault` |
 | A connection test says `denied by vault policy` | the identity's policy does not cover that path | act 3; remember `path "x/*"` does not match `x` |
 | A connection test says `has no field` | the field name in the reference ≠ the key in vault | `vault kv get secret/...` as root and compare |
