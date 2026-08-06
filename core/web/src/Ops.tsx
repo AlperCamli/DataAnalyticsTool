@@ -190,10 +190,21 @@ function JobRow({ job, csrf, onChanged }: { job: Job; csrf: string | null; onCha
       {/* B1-F1: the chain, so repeated failures read as one story. A row
           that already has a successor offers no button — pressing it
           again would fork the chain from a job two attempts old. */}
-      {job.reenqueued_as && (
-        <div className="muted small">
-          Already re-enqueued as <code><Text value={job.reenqueued_as} /></code>. If that one failed
-          too, continue from it — not from here.
+      {job.chain && (
+        <div className={`chain-line${job.chain.resolved ? " resolved" : ""}`}>
+          {job.chain.resolved ? (
+            <>
+              <strong>Fixed.</strong> Re-enqueued {job.chain.links === 1 ? "once" : `${job.chain.links} times`};
+              the last attempt (<code><Text value={job.chain.final_job_id} /></code>) succeeded. This
+              row is kept as the record of the original failure.
+            </>
+          ) : (
+            <>
+              Re-enqueued {job.chain.links === 1 ? "once" : `${job.chain.links} times`}; the newest
+              attempt is <code><Text value={job.chain.final_job_id} /></code> and it is{" "}
+              <Text value={job.chain.final_state} />. Continue from that one — not from here.
+            </>
+          )}
         </div>
       )}
 
@@ -235,12 +246,14 @@ function Jobs({ csrf }: { csrf: string | null }) {
   const [list, setList] = useState<JobList | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [state, setState] = useState("dead_lettered");
+  const [superseded, setSuperseded] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     const res = await api.get<JobList>(
-      `/v1/dashboard/ops/jobs?limit=50${state === "all" ? "" : `&state=${encodeURIComponent(state)}`}`,
+      `/v1/dashboard/ops/jobs?limit=50${state === "all" ? "" : `&state=${encodeURIComponent(state)}`}` +
+        (superseded ? "&superseded=1" : ""),
     );
     setLoading(false);
     if (!res.ok) {
@@ -250,7 +263,7 @@ function Jobs({ csrf }: { csrf: string | null }) {
     }
     setError(null);
     setList(res.data);
-  }, [state]);
+  }, [state, superseded]);
 
   useEffect(() => {
     void load();
@@ -266,10 +279,28 @@ function Jobs({ csrf }: { csrf: string | null }) {
           {["dead_lettered", "queued", "running", "succeeded", "all"].map((s) => (
             <button key={s} className={state === s ? "active" : ""} onClick={() => setState(s)}>
               <Text value={s} />
-              {list.counts[s] !== undefined && <span className="count-badge">{list.counts[s]}</span>}
+              {/* The dead-letter tab counts what still needs somebody,
+                  not every row that ever died (B1-F2). */}
+              {s === "dead_lettered" ? (
+                <span className="count-badge">{list.dead_letter.open}</span>
+              ) : list.counts[s] !== undefined ? (
+                <span className="count-badge">{list.counts[s]}</span>
+              ) : null}
             </button>
           ))}
         </div>
+      )}
+
+      {list && state === "dead_lettered" && (
+        <p className="muted small dead-split">
+          <strong>
+            <Text value={list.dead_letter.open} /> still need attention
+          </strong>{" "}
+          · <Text value={list.dead_letter.superseded} /> already re-enqueued and kept as record.{" "}
+          <button className="link" onClick={() => setSuperseded((v) => !v)}>
+            {superseded ? "hide the ones already handled" : "show the ones already handled"}
+          </button>
+        </p>
       )}
       {loading ? (
         <Spinner label="reading the queue…" />

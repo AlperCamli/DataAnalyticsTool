@@ -38,7 +38,7 @@ usable by a person on the real estate.
   counts per caller's visibility, contamination paths, DT-3, the no-merge
   property asserted over the server sources *and* the shipped bundle, the
   lineage read view's node-by-node filtering.
-- `core/test/dashboard-b1.test.ts` (30) — DT-10 (the badge, its ack, and
+- `core/test/dashboard-b1.test.ts` (33) — DT-10 (the badge, its ack, and
   a re-verdict firing it again), the governance-audit rows, Ops
   re-enqueue leaving the dead job dead, DT-5, the `batched → approved`
   return, and the **whole D-101.5 loop end to end without an agent**:
@@ -72,7 +72,7 @@ behavioral half** (act 9's alternative), which needs a model call.
 
 | Prerequisite | How to check |
 |---|---|
-| Suites green at this commit | `cd core && npx vitest run` (expect **349 passed / 4 skipped / 30 files**) and `.venv/bin/python -m pytest -q` (expect **792 passed / 14 skipped / 1 failed**) — that one failure is `test_no_contamination_in_current_kb`, which is **estate state** (34 docs awaiting triage), not this code, and act 5 is where you start working it down |
+| Suites green at this commit | `cd core && npx vitest run` (expect **352 passed / 4 skipped / 30 files**) and `.venv/bin/python -m pytest -q` (expect **792 passed / 14 skipped / 1 failed**) — that one failure is `test_no_contamination_in_current_kb`, which is **estate state** (34 docs awaiting triage), not this code, and act 5 is where you start working it down |
 | Stack running the build that contains B-1 | act 0 |
 | Vault unsealed | `curl -s localhost:8100/healthz \| grep -o '"sealed":[a-z]*'` → `"sealed":false` |
 | Your identity carries `steward` | the pilot steward account carries `["steward","ops"]` |
@@ -165,8 +165,17 @@ gate does not depend on doing it by hand.
 
 Open **Ops**.
 
-**Jobs** opens on the dead-letter tab. Expect around **11 dead-lettered
-jobs** — the queue has a tail going back before A-4.
+**Jobs** opens on the dead-letter tab, showing **the jobs that still
+need somebody** — not every job that ever died. A dead job you have
+already re-enqueued is kept as the record of the original failure and
+moved out of the way; the line above the list gives both numbers and a
+toggle for the handled ones, and a handled row says whether its chain
+ended in a success. (That split is finding B1-F2's first half: after one
+morning of act 3, eleven dead rows turned out to be three problems and
+eight pieces of history.)
+
+Expect roughly **3 needing attention** and **8 already handled** once you
+have worked through this act.
 
 **Read the errors before pressing anything.** Several of these jobs were
 queued *before* the vault migration and carry `env://SUPABASE_DSN` in
@@ -210,19 +219,33 @@ press one to see the refusal, and read it.
 
 ### Act 4 — the drift-PR queue
 
-Back to **KB Health**, bottom section. If the syncs from act 3 produced
-drift, an open PR is listed here.
+Back to **KB Health**, bottom section.
 
-**Read the affordances.** Each row is a link out to GitHub. There is no
-merge button — and the absence is asserted two ways in the suite: no
-merge-shaped path exists in the server sources, and none in the shipped
-browser bundle. The product never merges (SO-B); reviewing the diff and
-merging it is your act, in your git provider, under your own sign-in.
+**An empty queue is very likely, and it is a pass.** Drift PRs exist only
+when a source's schema actually moved; if nothing changed in Supabase
+since the last sync, the correct answer is *no open drift PRs*, and the
+screen says exactly that rather than showing you a zero. Read the dark
+state — it names why the list is empty — and record it. **That is act 4
+complete.** The gate clause here is *routing without a merge affordance*,
+and its no-merge half is machine-checked two ways (no merge-shaped path
+in the server sources, none in the shipped bundle), which does not depend
+on a PR existing.
 
-Follow one link. Merge or don't — that decision is yours and it happens
-*there*, which is the whole point.
+**If a PR is listed** (because act 3's syncs found drift, or because you
+have staged some): each row is a link out to GitHub, carrying no
+credential. There is no merge button. The product never merges (SO-B);
+reviewing the diff and merging it is your act, in your provider, under
+your own sign-in. Follow one link and see where it takes you.
 
-*Record:* the queue with its links, and the absence of a merge control.
+**If you want to see the queue populated on purpose** — worth doing once,
+but it is a bigger act and it is optional here — stage a breaking change
+the way A-1's drill did (`results/phase2/a1-drill/`): change a column in
+Supabase, run the sync, and the pipeline opens a real drift PR you can
+then review with `review-sync`. That is A-1's demo, not B-1's, and B-1's
+clause does not need it.
+
+*Record:* either the populated queue with its links and the absence of a
+merge control, or the dark state and the sentence it gives you.
 
 ### Act 5 — triage the contamination
 
@@ -273,18 +296,40 @@ Open **Gap Triage**. Note the queue is scoped to *what you filed* — the
 server says so in a banner, and it is a server scope, not a filter the
 page applied.
 
-Use the form at the bottom. Choose **Knowledge request**. Write something
-real about the pilot estate — a genuine hole you know of. Fill in **What
-it should say** with the content you believe is right.
+**There are two ways in, and the session one is the one that matters.**
 
-Submit. Read the confirmation: the issue id, the occurrence count, and
-who it routed to.
+**6a — from a session (the real path).** Open a Claude Code session with
+the reporter's setup bundle and ask a real question of the estate. Then,
+when the answer surfaces something the knowledge base should have said,
+just *say so*:
 
-File **a second request** that is deliberately vague — something no
-evidence could settle, like "the churn number should be written down".
-That one is act 9's honest-skip case, and the demo is weaker without it.
+> "That's right — but the KB should really say that a refund is counted
+> in the month the credit note is issued, not the month of the order."
 
-*Record:* both issue ids.
+The agent files it for you: `flag_gap(kind: enrichment_request)` carrying
+your words as the `proposal`, under your own identity, into the same
+queue the form writes to. It should tell you it filed rather than that it
+added, relay who was notified, and say a steward reviews it next.
+
+This is the path a reporter actually takes — they are mid-question, not
+mid-form — and it is why the queue exists at all. It was the missing half
+of the loop until finding **B1-F2** (`results/phase2/b1/FINDINGS.md`):
+the tool and the queue were both built and no skill knew the move, so in
+practice it was a queue only browser users could file into.
+
+**6b — from the browser (the fallback).** Open **Gap Triage**. Note the
+queue is scoped to *what you filed* — the server says so in a banner, and
+it is a server scope, not a filter the page applied. Use the form at the
+bottom, choose **Knowledge request**, and fill in **What it should say**.
+
+**Either way, file a second request that is deliberately vague** —
+something no evidence could settle, like "the churn number should be
+written down". That one is act 9's honest-skip case, and the demo is
+weaker without it.
+
+*Record:* both issue ids, and — if you used 6a — what the agent said back
+to you. If it claimed it had *added* something to the KB rather than
+filed a request, that is a finding worth writing down.
 
 ### Act 7 — the steward's verdict
 

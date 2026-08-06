@@ -72,6 +72,53 @@ interface OpsViewer {
   profile: string | null;
 }
 
+
+/**
+ * Where each dead job's chain ended (finding B1-F2's first half).
+ *
+ * A re-enqueue makes a *chain*: the dead job, its replacement, that one's
+ * replacement. Rendering every link as its own open fault is how a queue
+ * of eleven rows turns out to be three problems and eight pieces of
+ * history — which is what the pilot's dead-letter list looked like after
+ * one morning of act 3.
+ *
+ * The rule this encodes: **a dead job that has a successor has been acted
+ * on.** Its story continues at the newer job, so it is *superseded*, and
+ * whether it was ultimately fixed is the chain's terminal state, not its
+ * own. A dead job with no successor is the one that still wants somebody.
+ *
+ * Bounded at 20 hops: a cycle is impossible (each link points forward to
+ * a job created later), but a bound costs nothing and a page load that
+ * hangs on a malformed pointer costs a morning.
+ */
+async function chainOutcomes(
+  pool: pg.Pool,
+  jobIds: string[],
+): Promise<Map<string, { final_job_id: string; final_state: string; links: number }>> {
+  if (jobIds.length === 0) return new Map();
+  const { rows } = await pool.query<{
+    head: string;
+    final_job_id: string;
+    final_state: string;
+    links: number;
+  }>(
+    `WITH RECURSIVE walk AS (
+       SELECT j.job_id AS head, j.job_id AS node, j.reenqueued_as AS next_id,
+              j.state, 0 AS depth
+         FROM jobs j WHERE j.job_id = ANY($1)
+       UNION ALL
+       SELECT w.head, n.job_id, n.reenqueued_as, n.state, w.depth + 1
+         FROM walk w JOIN jobs n ON n.job_id = w.next_id
+        WHERE w.depth < 20
+     )
+     SELECT DISTINCT ON (head)
+            head, node AS final_job_id, state AS final_state, depth AS links
+       FROM walk ORDER BY head, depth DESC`,
+    [jobIds],
+  );
+  return new Map(rows.map((r) => [r.head, r]));
+}
+
 export function registerOps(app: FastifyInstance, deps: OpsDeps): void {
   /**
    * Same gate shape as Connections, and deliberately the same roles: an
@@ -192,18 +239,43 @@ export function registerOps(app: FastifyInstance, deps: OpsDeps): void {
     const query = (req.query ?? {}) as Record<string, unknown>;
     const state = typeof query.state === "string" && query.state ? query.state : undefined;
     const system = typeof query.system === "string" && query.system ? query.system : undefined;
+    // B1-F2: the dead-letter list defaults to the jobs that still want
+    // somebody. A dead job with a successor has been acted on — showing
+    // it beside the untouched ones makes a solved problem look like an
+    // open one, eight times over.
+    const superseded = query.superseded === "1" || query.superseded === "true";
     const rows = await listJobs(deps.pool, {
       ...(state ? { state } : {}),
       ...(system ? { system } : {}),
       limit: limitOf(query.limit, 50),
     });
+    const chains = await chainOutcomes(
+      deps.pool,
+      rows.filter((j) => j.state === "dead_lettered").map((j) => j.job_id),
+    );
+    const shown =
+      state === "dead_lettered" && !superseded ? rows.filter((j) => !j.reenqueued_as) : rows;
+
     const { rows: counts } = await deps.pool.query<{ state: string; n: string }>(
       `SELECT state, count(*) AS n FROM jobs GROUP BY state`,
+    );
+    // Two numbers rather than one, because "11 dead-lettered" and "3 that
+    // still need you" are different facts and the second is the one an
+    // operator acts on.
+    const { rows: deadSplit } = await deps.pool.query<{ open: string; superseded: string }>(
+      `SELECT count(*) FILTER (WHERE reenqueued_as IS NULL) AS open,
+              count(*) FILTER (WHERE reenqueued_as IS NOT NULL) AS superseded
+         FROM jobs WHERE state = 'dead_lettered'`,
     );
     return reply.send({
       api_version: API_VERSION,
       counts: Object.fromEntries(counts.map((c) => [c.state, Number(c.n)])),
-      jobs: rows.map((job) => ({
+      dead_letter: {
+        open: Number(deadSplit[0]?.open ?? 0),
+        superseded: Number(deadSplit[0]?.superseded ?? 0),
+        showing_superseded: superseded,
+      },
+      jobs: shown.map((job) => ({
         job_id: job.job_id,
         type: neutralize(job.type),
         system: neutralize(job.system),
@@ -221,9 +293,22 @@ export function registerOps(app: FastifyInstance, deps: OpsDeps): void {
             }
           : null,
         triggers: job.triggers ?? [],
-        // The chain (B1-F1): which job replaced this one, so a queue of
-        // repeated failures reads as one story rather than several.
+        // The chain (B1-F1/B1-F2): which job replaced this one, and how
+        // the whole chain ended — so a queue of repeated failures reads
+        // as one story, with its ending, rather than several faults.
         reenqueued_as: job.reenqueued_as ?? null,
+        chain: (() => {
+          const outcome = chains.get(job.job_id);
+          if (!outcome || outcome.links === 0) return null;
+          return {
+            links: outcome.links,
+            final_job_id: outcome.final_job_id,
+            final_state: outcome.final_state,
+            // The question an operator actually has about an old dead
+            // row: did this ever get fixed?
+            resolved: outcome.final_state === "succeeded",
+          };
+        })(),
         created_at: job.created_at,
         finished_at: job.finished_at,
       })),

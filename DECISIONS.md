@@ -5754,6 +5754,82 @@ so none of them could have carried a *stale* one. The estate's history is
 the thing a fixture does not have, and it is why the demo is run on the
 real one.
 
+## B1-F2 — the queue only browser users could file into (2026-08-06, operator)
+
+The second gate-demo finding, and the more important one. Stated by the
+operator as a description of how the product *should* work — a reporter
+mid-session asks for the KB to say something, the agent queues it, a
+steward verdicts it, the approved ones reach an enrich session and land
+as one PR. That is exactly what B-1 built, with the first step missing.
+
+**Every piece existed and nothing drove the first one.**
+`flag_gap(kind: enrichment_request, proposal: …)` shipped at D-101.3, is
+tested by MT-14, and is in the reporter profile's allowlist. But no skill
+named the kind: the report skill's K-FAIL section said "call `flag_gap`
+with the most specific applicable kind" and never mentioned the one that
+carries a proposal. So an agent whose user volunteered knowledge filed it
+as `missing_doc` without their words, or filed nothing.
+
+**The spec had been satisfied on paper.** The ledger §4 amendment says
+"one queue whether or not the requester has a browser open"; D-101.3 says
+"a queue only browser users can file into is not the queue D-101
+adopted". It was that queue — because a capability with no caller
+satisfies every test written against the capability. MT-14 drives the
+tool directly and proves the inlet works; nothing asserted that anything
+would ever *reach for* it.
+
+**Fixed skill-side**, which is where the gap was: the report skill gains
+a section that is deliberately not a failure exit, because the case is a
+session that went *fine* and a user who volunteered something. Its load-
+bearing rules: `proposal` carries their words verbatim and `description`
+carries the agent's summary of the gap (a tidied proposal is the agent's
+prose wearing the user's authority); a dead end where the user also
+supplies the answer is **two filings, not one**; the honest sentence
+afterwards is "I've filed it", never "I've added it"; and *do not ask
+permission to file* — a request that dies to "shall I note that?" is
+knowledge lost to politeness.
+
+*Flagged, not done:* **skill spec §5 has no clause for this.** The
+behaviour is required by the ledger spec §4 and MCP §6.10, so shipping it
+implements a merged requirement rather than inventing one — but §5 should
+gain a sentence, and that is outside this session's fence. Proposed for
+the next task 0 alongside the fault-ledger §4 DDL enumeration. **And no
+behavioural scenario exists** for whether a real agent reaches for the
+kind; the shipped test is a grep over the skill file, which catches the
+regression that just happened (the instruction being absent) and is not
+reported as covering the behaviour.
+
+### B1-F2's first half — history rendered as open faults
+
+Same message: *"that specific job fixed but other instances of the same
+job are still in dead letters."* After act 3 the pilot showed eleven dead
+rows; six had successors that had **succeeded**, three of them one chain
+four links long. The fix worked and the screen could not say so.
+
+**The rule now encoded:** a dead job with a successor **has been acted
+on** — its story continues at the newer job, so it is *superseded* and
+kept as the record of the original failure rather than shown as
+outstanding work. A dead job with no successor is the one that still
+wants somebody. The tab counts what needs attention (3, not 11), and a
+superseded row states its chain's ending. Computed server-side by walking
+`reenqueued_as`.
+
+### And act 4 could not run, correctly
+
+*"I can't do act 4 because there are no open drift PRs."* True, and the
+right answer: drift PRs exist only when a source's schema moved, and
+nothing had. The runbook was written as though the queue would be
+populated. It now says an empty queue **is a pass** — the clause is
+routing-without-a-merge-affordance, whose no-merge half is machine-checked
+and does not depend on a PR existing — and points at A-1's drill for
+anyone who wants to see it populated on purpose.
+
+**What the three findings share.** None of them could have been found by
+the suites. B1-F1 needed an estate with history; B1-F2 needed somebody to
+notice that a capability had no caller; act 4 needed a real estate with
+nothing wrong with it. That is the argument for the demo, and it has now
+paid for itself twice before reaching act 5.
+
 ## What this build does not claim
 
 - **The gate demo has not been run to completion.** Act 3 has (it found

@@ -19,7 +19,7 @@ import {
   type BrowserSession,
   type DashboardRig,
 } from "./dashboard-helpers.js";
-import { USERS } from "./mcp-helpers.js";
+import { callTool, USERS } from "./mcp-helpers.js";
 import { writeFile } from "node:fs/promises";
 import { createProvider } from "../src/gitkb.js";
 import { sweepResolutions } from "../src/ledger.js";
@@ -707,6 +707,84 @@ describe("B-1 dashboard surfaces", () => {
       expect(
         (inbox.json.items as { issue_id: string }[]).find((i) => i.issue_id === returned),
       ).toBeUndefined();
+    });
+  });
+
+
+  // -- B1-F2: one queue, whether or not the requester has a browser ---------
+
+  describe("B1-F2: a reporter's session files into the same queue as the form", () => {
+    it("flag_gap(enrichment_request) from a session reaches the steward's queue with its proposal", async () => {
+      // The ledger spec's §4 amendment is explicit: two inlets, "one
+      // queue whether or not the requester has a browser open". The
+      // dashboard form was built at B-0 and the tool has existed since
+      // D-101.3 — but nothing instructed a skill to use it, so in
+      // practice it WAS a queue only browser users could file into.
+      // This asserts the two inlets land in one place.
+      const proposal =
+        "A refund is counted in the month the credit note is issued, not the month of the order.";
+      const result = await callTool(rig, rig.token("reporter"), "reporter", "flag_gap", {
+        kind: "enrichment_request",
+        description: "nothing says which month a refund is counted in",
+        proposal,
+      });
+      expect(result.isError).toBe(false);
+      const issueId = result.payload.issue_id as string;
+
+      // The steward sees it in the Knowledge Requests queue — the same
+      // read the dashboard module renders, unfiltered by inlet.
+      const queue = await apiGet(rig, steward, "/v1/dashboard/ledger?status=all&limit=100");
+      const issue = (queue.json.issues as { issue_id: string; kind: string; status: string }[]).find(
+        (i) => i.issue_id === issueId,
+      )!;
+      expect(issue).toBeDefined();
+      expect(issue.kind).toBe("enrichment_request");
+      expect(issue.status).toBe("open");
+
+      // And the proposal is on the event stream, scrubbed at storage and
+      // neutralized at render — the steward reads the requester's words.
+      const detail = await apiGet(rig, steward, `/v1/dashboard/ledger/issues/${issueId}`);
+      const events = detail.json.events as { subject?: string; detail: { proposal?: string } }[];
+      const withProposal = events.find((e) => typeof e.detail.proposal === "string")!;
+      expect(withProposal).toBeDefined();
+      expect(withProposal.detail.proposal).toContain("credit note");
+      // LED-R3: the filer is the session's own identity, server-set.
+      expect(withProposal.subject).toBe(USERS.reporter.username);
+    });
+
+    it("a session-filed request runs the whole verdict lifecycle", async () => {
+      // Filed from a session, approved in the browser, batched — the
+      // inlet must not produce a second-class row.
+      const result = await callTool(rig, rig.token("reporter"), "reporter", "flag_gap", {
+        kind: "enrichment_request",
+        description: "the activation definition is not written down anywhere",
+        proposal: "Activation is the first completed import, not the first sign-in.",
+      });
+      const issueId = result.payload.issue_id as string;
+
+      const verdict = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, {
+        verdict: "approve",
+      });
+      expect(verdict.status).toBe(200);
+      expect((verdict.json.issue as { status: string }).status).toBe("approved");
+
+      const batch = await apiPost(rig, steward, "/v1/dashboard/ledger/batches", {});
+      expect(batch.status).toBe(201);
+      expect((batch.json.issues as { issue_id: string }[]).map((i) => i.issue_id)).toContain(issueId);
+    });
+
+    it("the shipped report skill tells a session how to file one", () => {
+      // The capability existed and nothing drove it — which is what
+      // B1-F2 actually was. The instruction is the fix, so the
+      // instruction is what this asserts, over the shipped skill file.
+      const skill = readFileSync(path.join(CORE_DIR, "skills", "report", "SKILL.md"), "utf-8");
+      expect(skill).toContain("enrichment_request");
+      expect(skill).toContain("proposal");
+      // Their words, not the agent's summary — the rule that makes the
+      // proposal usable as drafting evidence.
+      expect(skill).toMatch(/THEIR words|their words, verbatim/i);
+      // And the honesty rule: filing is not writing.
+      expect(skill).toContain("I've filed it");
     });
   });
 

@@ -353,3 +353,8 @@ pre.config {
 .outcome-dead_lettered { border-left-color: var(--red); }
 .rebuilt { margin: 0 0 0.5rem; padding: 0.5rem 0.75rem; border: 1px solid var(--amber); border-radius: 0.35rem; }
 .rebuilt code { word-break: break-all; }
+
+.chain-line { margin-top: 0.3rem; font-size: 0.88rem; color: var(--muted); border-left: 3px solid var(--line); padding-left: 0.6rem; }
+.chain-line.resolved { border-left-color: var(--green); }
+.chain-line strong { color: var(--green); }
+.dead-split { margin: 0 0 0.6rem; }

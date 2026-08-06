@@ -334,6 +334,78 @@ republish per tweak.
 
 ---
 
+## Knowledge requests — when the user knows something the KB doesn't
+
+**This is not a failure exit.** It fires when the session went fine and
+the user says something like:
+
+> "That's right, but the KB should really say that refunds are counted
+> in the month the credit note is issued."
+
+> "You couldn't find a churn metric because we've never written it down.
+> It's cancellations over active accounts at the start of the month."
+
+They are handing you knowledge. **Take it and file it** — that is the
+whole point of the queue, and it exists precisely so a person who noticed
+something does not have to open a browser and fill in a form to
+contribute it.
+
+```
+flag_gap(
+  kind:        "enrichment_request",
+  description: "<what is missing, in your words — the gap, one or two lines>",
+  object:      "<the FQN it is about, when they named one>",
+  proposal:    "<what they said it should say, in THEIR words, verbatim>",
+)
+```
+
+**`proposal` carries their words, `description` carries yours.** The
+description is the gap as a steward will read it in a queue; the proposal
+is the raw submission, and it is drafting evidence, so do not tidy it,
+summarize it, or turn it into prose. If they said it in one blunt
+sentence, that sentence is what goes in.
+
+Then **tell them what happens next**, using the response:
+
+> Filed as a knowledge request (`routed_to`: data-team). A steward
+> reviews it; if they approve it, it goes into an enrichment batch and
+> lands in the KB as a pull request somebody merges. You'll see the
+> outcome next time you open the dashboard.
+
+Relay `occurrences` when it is greater than 1 — *"you're the third person
+to ask for this"* is worth saying, and it is the argument that gets the
+request approved.
+
+**What this is not.** You are not writing to the knowledge base and you
+must not say you are. A request is *worth drafting* at best until a human
+merges a reviewed diff; the honest sentence is "I've filed it", never
+"I've added it" or "the KB now says".
+
+**When to reach for it, and which kind.** `flag_gap` takes one kind and
+the most specific one wins:
+
+| The situation | kind |
+|---|---|
+| The user tells you what the KB should say | `enrichment_request` (+ `proposal`) |
+| You hit a dead end and nothing resolves | `missing_entity` / `missing_doc` |
+| A doc exists but contradicts the request | `uncertified_metric` / `missing_doc` |
+| A doc's facts no longer match the source | `schema_mismatch` |
+| The result was wrong and they told you so | `result_disputed` |
+| The estate needs a reporting view or a DDL handoff | `capability_gap` |
+
+A dead end where the user *also* tells you the answer is **two facts and
+often two calls**: the gap that blocked you, and the knowledge they
+volunteered. File both rather than collapsing them — they route the same
+way but they are answered differently, and a proposal attached to the
+wrong kind never reaches the enrichment queue.
+
+**Do not ask permission to file.** Filing costs the user nothing, the
+queue deduplicates, and a request that dies because you asked "shall I
+note that?" and they said "don't worry about it" is knowledge the estate
+lost to politeness.
+
+---
+
 ## The honest-gap rule (K-FAIL)
 
 The most important behavior in this skill. When you hit a dead end:
@@ -355,6 +427,11 @@ Gaps are not failures of the session. They are the mechanism by which the
 KB learns what it is missing: every `flag_gap` becomes a ledger item that
 routes to a steward and, eventually, an enrichment batch. A well-named gap
 is a contribution.
+
+And when the user tells you what the *answer* should have been, that is a
+knowledge request, not a gap — see the section above, and carry their
+words in `proposal`. A dead end that the user could have closed for you,
+filed without their answer, is a queue item nobody can act on.
 
 ---
 

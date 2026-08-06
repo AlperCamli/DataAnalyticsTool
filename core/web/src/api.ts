@@ -331,6 +331,7 @@ export interface Job {
   error: { code: string; message: string; retryable: boolean } | null;
   triggers: Record<string, unknown>[];
   reenqueued_as: string | null;
+  chain: { links: number; final_job_id: string; final_state: string; resolved: boolean } | null;
   created_at: string;
   finished_at: string | null;
 }
@@ -345,6 +346,7 @@ export interface Reenqueued {
 
 export interface JobList {
   counts: Record<string, number>;
+  dead_letter: { open: number; superseded: number; showing_superseded: boolean };
   jobs: Job[];
 }
 
