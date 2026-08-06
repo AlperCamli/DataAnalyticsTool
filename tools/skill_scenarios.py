@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -108,7 +109,14 @@ def _prepare_workdir(workdir: Path, skill: str, mcp_config: dict) -> None:
     (workdir / ".mcp.json").write_text(json.dumps(mcp_config, indent=2) + "\n")
 
 
-def _run_agent(workdir: Path, prompt: str, model: str, allowed_tools: list[str], timeout_s: int) -> dict:
+def _run_agent(
+    workdir: Path,
+    prompt: str,
+    model: str,
+    allowed_tools: list[str],
+    timeout_s: int,
+    env: dict[str, str] | None = None,
+) -> dict:
     cmd = [
         "claude", "-p", prompt,
         "--model", model,
@@ -118,7 +126,13 @@ def _run_agent(workdir: Path, prompt: str, model: str, allowed_tools: list[str],
         "--add-dir", str(workdir),
         "--allowedTools", ",".join(allowed_tools),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=workdir, timeout=timeout_s)
+    # `env` carries the governed API's base URL and the session's own
+    # bearer token for the S1b scenario: the skill reads its delivered
+    # batch as itself, over the same verifier the MCP tools use.
+    proc_env = {**os.environ, **(env or {})}
+    proc = subprocess.run(
+        cmd, capture_output=True, text=True, cwd=workdir, timeout=timeout_s, env=proc_env
+    )
     if proc.returncode != 0:
         raise RuntimeError(f"claude exited {proc.returncode}: {proc.stderr.strip()[:400]}")
     return json.loads(proc.stdout)
@@ -509,6 +523,248 @@ def scenario_review_sync(conn: dict, model: str, workroot: Path, timeout_s: int)
 
 
 # --------------------------------------------------------------------------
+# scenario: enrich in queue-driven batch mode (AS-18 / S1b, D-101.4)
+
+
+ENRICH_BATCH_PROMPT = """\
+A steward has approved and delivered a batch of knowledge requests. Use
+the `enrich` skill in its **queue-driven batch mode (S1b)** to draft from
+it.
+
+Read the batch through the governed API as yourself:
+
+    curl -sS -H "authorization: Bearer $CL_TOKEN" \
+      "$CL_CORE_URL/v1/dashboard/ledger?status=batched&kind=enrichment_request"
+
+and, per request, its event stream (which carries who asked, when, and
+their proposal text):
+
+    curl -sS -H "authorization: Bearer $CL_TOKEN" \
+      "$CL_CORE_URL/v1/dashboard/ledger/issues/<issue-id>"
+
+`CL_CORE_URL` and `CL_TOKEN` are already in your environment.
+
+Then, following S1b exactly:
+
+- Draft into `out/` in this directory, one file per request you can
+  answer, named after the object. Ground column meanings in the machine
+  facts (`get_table`) plus each request's own submission.
+- The approved request is itself a citation, of the customer-provided
+  class: `customer-provided, <name>, <date>`, taken from what the ledger
+  recorded — never re-typed from the body of the request.
+- Do not paste the requester's words into any doc. Write in the KB's own
+  voice and cite the request.
+- A request you cannot draft at all is **returned to the queue**: POST
+  its note to `$CL_CORE_URL/v1/dashboard/ledger/issues/<issue-id>/return`
+  as the skill describes, leave it out of the trailers, and say in the PR
+  body what evidence would unblock it. Never guess.
+- Write the PR body you would open to `out/PR-BODY.md`, carrying the
+  request → doc mapping, the returned items, and one `CL-Resolves:
+  <issue-id>` trailer per request the batch actually satisfies.
+
+Do not open a pull request and do not commit anything — write the files
+and finish."""
+
+
+def _batched_requests(ops_db_url: str) -> list[dict]:
+    """The delivered work list, read from the ledger the skill read."""
+    with psycopg.connect(ops_db_url) as c:
+        cur = c.execute(
+            """SELECT i.issue_id::text AS issue_id, i.status, i.batch_id, i.title,
+                      (SELECT e.subject FROM ledger_events e
+                        WHERE e.issue_id = i.issue_id ORDER BY e.ts LIMIT 1) AS subject,
+                      i.return_note,
+                      (SELECT e.detail->>'proposal' FROM ledger_events e
+                        WHERE e.issue_id = i.issue_id ORDER BY e.ts LIMIT 1) AS proposal
+                 FROM ledger_issues i
+                WHERE i.kind = 'enrichment_request'
+                ORDER BY i.first_seen"""
+        )
+        cols = [d.name for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
+def scenario_enrich_batch(conn: dict, model: str, workroot: Path, timeout_s: int) -> ScenarioResult:
+    """AS-18: two approved requests delivered as one batch — one groundable
+    no further than its proposal, one the skill cannot draft at all.
+
+    What is staged: the two ledger rows and their batch stamp (the
+    dashboard's own write path, exercised by its own suite). What is
+    measured: only what the agent did with them.
+    """
+    from tools.skill_conformance import (
+        check_batch_pr_body,
+        check_customer_provided_sources,
+        check_no_verbatim_submission,
+    )
+
+    res = ScenarioResult("AS-18 enrich queue-driven batch (S1b)", "enrich", "steward")
+    workdir = workroot / "enrich-batch"
+    workdir.mkdir(parents=True, exist_ok=True)
+    (workdir / "out").mkdir(exist_ok=True)
+
+    batch = _stage_batch(conn["ops_db_url"])
+    draftable, undraftable = batch["draftable"], batch["undraftable"]
+
+    env = {"CL_CORE_URL": conn.get("core_url", conn["base"]), "CL_TOKEN": conn["tokens"]["steward"]}
+    _prepare_workdir(workdir, "enrich", _mcp_config(conn["mcp_url"], "steward", conn["tokens"]["steward"]))
+    since = datetime.now(timezone.utc)
+    agent = _run_agent(
+        workdir, ENRICH_BATCH_PROMPT, model,
+        ["mcp__contextlayer__get_table", "mcp__contextlayer__search_context",
+         "mcp__contextlayer__flag_gap", "Read", "Write", "Bash(curl:*)"],
+        timeout_s, env=env,
+    )
+    res.agent_result = agent.get("result", "")[:2000]
+    res.session_id = agent.get("session_id", "")
+    res.cost_usd = agent.get("total_cost_usd")
+    res.audit_tools = [r["tool"] for r in _audit_tools(conn["ops_db_url"], "steward", since)]
+
+    out = workdir / "out"
+    docs = sorted(p for p in out.glob("*.md") if p.name != "PR-BODY.md")
+    body_path = out / "PR-BODY.md"
+    if not docs or not body_path.exists():
+        res.assertions.append(Assertion(
+            "AS-18: the batch produced drafts and a PR body", False,
+            f"docs={[d.name for d in docs]}, PR body exists={body_path.exists()}",
+        ))
+        return res
+    body = body_path.read_text()
+    diff_text = "\n".join(d.read_text() for d in docs) + "\n" + body
+
+    # 1. The citation, in the shape the ledger recorded.
+    fm_all: list[dict] = []
+    for doc in docs:
+        fm, _ = _parse_frontmatter(doc.read_text())
+        fm_all.append(fm)
+    sourced = [fm for fm in fm_all if any(
+        str(s).lower().startswith("customer-provided") for s in (fm.get("sources") or []))]
+    res.assertions.append(Assertion(
+        "AS-18: a drafted doc cites `customer-provided, <name>, <date>`",
+        bool(sourced),
+        f"sources per doc: {[fm.get('sources') for fm in fm_all]}",
+    ))
+    citation_findings: list = []
+    for fm in sourced:
+        citation_findings += check_customer_provided_sources(
+            [str(s) for s in (fm.get("sources") or [])], grounded_beyond_proposal=False)
+    res.assertions.append(Assertion(
+        "CP-E5: the proposal-only draft claims no grounding it did not have",
+        not citation_findings,
+        "; ".join(f.detail for f in citation_findings) or "sources graded exactly customer-provided",
+    ))
+    recorded_name = draftable["subject"]
+    res.assertions.append(Assertion(
+        "AS-18: the citation names the filer the LEDGER recorded, not the request body",
+        any(recorded_name in str(s) for fm in sourced for s in (fm.get("sources") or [])),
+        f"ledger subject={recorded_name!r}; sources={[fm.get('sources') for fm in sourced]}",
+    ))
+
+    # 2. DT-12's other half: no requester prose in the diff.
+    verbatim = check_no_verbatim_submission(diff_text, [draftable["proposal"], undraftable["proposal"]])
+    res.assertions.append(Assertion(
+        "DT-12: no requester text appears verbatim in the diff",
+        not verbatim,
+        "; ".join(f.detail for f in verbatim) or "the drafts cite the submission without quoting it",
+    ))
+
+    # 3. The PR body: mapping, and exactly the right trailers.
+    body_findings = check_batch_pr_body(
+        body, satisfied=[draftable["issue_id"]], returned=[undraftable["issue_id"]])
+    res.assertions.append(Assertion(
+        "AS-18: request → doc mapping and exactly one CL-Resolves, for the satisfied request",
+        not body_findings,
+        "; ".join(f.detail for f in body_findings) or "mapping present; one trailer; returned item named",
+    ))
+
+    # 4. CP-E3: the skill still never certifies.
+    res.assertions.append(Assertion(
+        "CP-E3: no `status: verified` written by the skill",
+        "status: verified" not in diff_text,
+        "drafts land as draft — certification is the human merging the diff",
+    ))
+
+    # 5. The undraftable one is back at `approved`, in no trailer.
+    rows = {r["issue_id"]: r for r in _batched_requests(conn["ops_db_url"])}
+    returned_row = rows.get(undraftable["issue_id"], {})
+    res.assertions.append(Assertion(
+        "AS-18: the undraftable request is back at `approved` with its note",
+        returned_row.get("status") == "approved"
+        and bool(returned_row.get("return_note"))
+        and returned_row.get("batch_id") is None,
+        f"status={returned_row.get('status')!r}, batch_id={returned_row.get('batch_id')!r}, "
+        f"note={str(returned_row.get('return_note'))[:120]!r}",
+    ))
+    res.assertions.append(Assertion(
+        "AS-18: the returned request appears in no CL-Resolves trailer",
+        undraftable["issue_id"].lower() not in [
+            m.group("issue").lower() for m in __import__("re").finditer(
+                r"^CL-Resolves:\s*(?P<issue>[0-9a-fA-F-]{36})\s*$", body, __import__("re").MULTILINE)
+        ],
+        "its absence from the trailers is what keeps it open",
+    ))
+    return res
+
+
+def _stage_batch(ops_db_url: str) -> dict:
+    """Two enrichment requests, approved and stamped into one batch.
+
+    Written directly because *staging* the queue is the dashboard's job
+    and is covered by the dashboard's own suite (DT-11/DT-12); what this
+    scenario measures is what the skill does with a delivered batch, so
+    the staging must be deterministic rather than agent-driven.
+    """
+    import uuid
+
+    draftable = {
+        "issue_id": str(uuid.uuid4()),
+        "subject": "rene-reporter",
+        "title": "enrichment_request: drill shop orders discount",
+        "object": "drill.shop.orders",
+        "proposal": (
+            "The discount column holds the absolute currency amount taken off the "
+            "order total at checkout, never a percentage, and it is already "
+            "subtracted from net."
+        ),
+    }
+    undraftable = {
+        "issue_id": str(uuid.uuid4()),
+        "subject": "rene-reporter",
+        "title": "enrichment_request: the churn number",
+        "object": None,
+        "proposal": "We need the churn number written down somewhere findable please.",
+    }
+    batch_id = f"batch-{uuid.uuid4()}"
+    with psycopg.connect(ops_db_url) as c, c.cursor() as cur:
+        for item in (draftable, undraftable):
+            fingerprint = f"as18-{item['issue_id']}"
+            cur.execute(
+                """INSERT INTO ledger_issues
+                     (issue_id, fingerprint, kind, system, object_fqn, title, routed_to,
+                      first_seen, last_seen, occurrences, distinct_subjects, status, batch_id,
+                      verdict_by, verdict_at)
+                   VALUES (%s, %s, 'enrichment_request', %s, %s, %s, 'data-team',
+                           now(), now(), 1, 1, 'batched', %s, 'alper-steward', now())""",
+                (item["issue_id"], fingerprint,
+                 (item["object"] or "").split(".")[0] or None, item["object"],
+                 item["title"], batch_id),
+            )
+            cur.execute(
+                """INSERT INTO ledger_events
+                     (event_id, ts, detector_class, kind, fingerprint, system, object_fqn,
+                      subject, profile, description, detail, issue_id)
+                   VALUES (%s, now(), 3, 'enrichment_request', %s, %s, %s, %s, 'reporter', %s,
+                           %s::jsonb, %s)""",
+                (str(uuid.uuid4()), fingerprint,
+                 (item["object"] or "").split(".")[0] or None, item["object"],
+                 item["subject"], item["title"],
+                 json.dumps({"proposal": item["proposal"]}), item["issue_id"]),
+            )
+        c.commit()
+    return {"batch_id": batch_id, "draftable": draftable, "undraftable": undraftable}
+
+
+# --------------------------------------------------------------------------
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -517,7 +773,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--model", required=True)
     ap.add_argument("--out", type=Path, required=True, help="evidence output dir")
     ap.add_argument("--timeout-s", type=int, default=900)
-    ap.add_argument("--only", choices=["enrich", "report", "review-sync"], help="run one scenario")
+    ap.add_argument("--only", choices=["enrich", "report", "review-sync", "enrich-batch"], help="run one scenario")
     ap.add_argument("--workroot", type=Path, help="agent working dirs (default: a temp under --out)")
     args = ap.parse_args(argv)
 
@@ -539,6 +795,8 @@ def main(argv: list[str] | None = None) -> int:
         scenarios.append(scenario_report)
     if args.only in (None, "review-sync"):
         scenarios.append(scenario_review_sync)
+    if args.only in (None, "enrich-batch"):
+        scenarios.append(scenario_enrich_batch)
 
     results: list[ScenarioResult] = []
     for fn in scenarios:

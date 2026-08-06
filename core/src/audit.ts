@@ -7,7 +7,7 @@
  * ledger's `audit_ref` points into (L-8).
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 
 export interface AuditRecord {
@@ -53,6 +53,73 @@ export function canonicalJson(value: unknown): string {
 
 export function argsDigest(args: unknown): string {
   return createHash("sha256").update(canonicalJson(args ?? {})).digest("hex");
+}
+
+/**
+ * A governance write, recorded (D-114.1 — closes dashboard spec §5.1).
+ *
+ * §5.1 filed the gap plainly: `audit_records` is one row per MCP call
+ * and is exactly that, so connection CRUD — and every governance write
+ * after it — left no durable record beyond a job's `triggers` array,
+ * which exists only where a job exists. A registration that enqueues
+ * nothing left nothing behind.
+ *
+ * **The contract widens from "one row per MCP call" to "one row per
+ * governed act."** No schema change was needed; the table was already
+ * tool-agnostic. Every existing consumer filters by `tool` (the ledger's
+ * window rules name `validate_sql` and `execute_sql`/`publish_report`;
+ * the deliveries read joins on `audit_id`), so none re-reads differently.
+ *
+ * Two shapes are deliberate. `session_id` and `setup_stamp` are null and
+ * `unstamped`: a browser session is not an MCP session and presents no
+ * compiled-setup stamp, and inventing values for those columns would
+ * make governance rows look like tool calls in exactly the register
+ * meant to tell them apart. And **`denied` is recorded**, not only
+ * `allowed` — a reporter's refused verdict attempt is precisely the row
+ * an auditor wants, and a success-only log would omit it.
+ *
+ * The write is best-effort *for the caller's outcome*: an audit failure
+ * is logged and does not fail the act, because a governance write that
+ * already succeeded must not be reported as failed. It is not silent —
+ * the log line is the alarm.
+ */
+export async function writeGovernanceAudit(
+  pool: pg.Pool,
+  rec: {
+    subject: string;
+    roles: string[];
+    profile: string | null;
+    /** `dashboard.<module>.<act>` — the act, not an MCP tool name. */
+    tool: string;
+    args: unknown;
+    kbRef: string | null;
+    decision: "allowed" | "denied";
+    decisionReason: string | null;
+    resultMeta?: Record<string, unknown>;
+  },
+  log?: (msg: string, err?: unknown) => void,
+): Promise<void> {
+  try {
+    await writeAudit(pool, {
+      auditId: randomUUID(),
+      subject: rec.subject,
+      roles: rec.roles,
+      profile: rec.profile,
+      sessionId: null,
+      tool: rec.tool,
+      args: rec.args,
+      kbRef: rec.kbRef,
+      snapshotRef: null,
+      decision: rec.decision,
+      decisionReason: rec.decisionReason,
+      durationMs: 0,
+      resultMeta: rec.resultMeta ?? {},
+      statementText: null,
+      setupStamp: UNSTAMPED,
+    });
+  } catch (err) {
+    log?.("governance audit write failed", err);
+  }
 }
 
 export async function writeAudit(pool: pg.Pool, rec: AuditRecord): Promise<void> {

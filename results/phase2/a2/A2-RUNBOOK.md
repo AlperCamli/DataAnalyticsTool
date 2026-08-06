@@ -441,6 +441,17 @@ Write down, at minimum:
 **Do not tidy these up during the run.** Timestamps and their phrasing
 are the value; the CP-8 field-note style keeps the ugly ones unsmoothed.
 
+**The notes are a named artifact of this run, not an optional extra**
+(added 2026-08-06 by D-108.3, after the first run produced none). A
+future run is not complete until `results/phase2/a2-field-notes/README.md`
+exists and is committed — the same standing as the audit extraction. The
+2026-08-05 run passed its gate on machine-checkable evidence and still
+lost its observation half permanently, because the four clauses the
+audit rows prove are *what the system did*, and only the notes carry
+*what the person felt while it did it*. No later session can reconstruct
+that; nobody was in the room. If a run genuinely takes no notes, that
+sentence is itself the artifact — write it down and say why.
+
 **Per-act success criteria (yours to judge, at the end, not during):**
 
 | Act | Pass |

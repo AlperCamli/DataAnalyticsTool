@@ -54,7 +54,17 @@ Three endpoints, each: authenticated by the caller's OIDC session; role-and-subj
 
 Conformance for each includes the negative: a reporter's call cannot return another subject's rows (DT-1) — proven by test, not by review.
 
-### 5.1 Open — governance writes are absent from the audit read (filed D-110.3a)
+### 5.1 CLOSED at B-1 (D-114.1) — governance writes are in the audit read
+
+**Closed 2026-08-06**, ahead of the trigger below rather than at it, under the amendment fence D-113 set for the B-1 session (proposed in five lines, authorized by the operator). **The contract widens from "one row per MCP call" to "one row per governed act."** No schema change was needed — `audit_records` was already tool-agnostic. Connection upsert/delete/test, ledger verdicts, the deliver-batch trigger and the `batched → approved` return each write one row carrying the acting subject and roles from the resolved session, `tool` naming the act (`dashboard.connection.upsert`, `dashboard.ledger.verdict`, …), `session_id: null` and `setup_stamp: unstamped` (a browser session is neither an MCP session nor a stamped one, and inventing values would make governance rows indistinguishable from tool calls in the register meant to tell them apart), an args digest over the request, and **`decision: allowed | denied`** — denied included, because a reporter's refused verdict attempt is precisely the row an auditor wants and a success-only log would omit it.
+
+Every existing consumer filters by `tool`, so none re-reads differently; asserted by test rather than by review. One consequence, recorded so a future evidence extraction does not read it as corruption: **audit-window row counts now include governance rows**, correctly attributed to the acting subject.
+
+Not done, and not needed for the closure: a separate governance-write table (the other candidate below), and any retro-fill of writes that predate this.
+
+**B-4's gate no longer inherits a blocking clause here.** The original filing is kept below because the reasoning is the record.
+
+#### The original filing (D-110.3a, 2026-08-06)
 
 **The gap, stated plainly.** `audit_records` is specified as one row per MCP call, and it is exactly that. Connection CRUD — the A-3 writes that register, reconfigure and remove a source through `/v1/dashboard/connections` — writes **no audit row**. Today the durable record of a dashboard act is the job's `triggers` array, which carries the acting identity for a probe but exists only where a job exists: a registration that enqueues nothing leaves nothing behind. The same will be true of every governance write B-2/B-3 adds (webhook rotation, detector thresholds, profile edits) unless the shape changes first.
 

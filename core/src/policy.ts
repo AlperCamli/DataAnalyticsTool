@@ -53,9 +53,27 @@ export function parsePolicy(text: string): SyncPolicy {
   } catch (err) {
     throw new PolicyError(`sync-policy.yaml does not parse: ${(err as Error).message}`);
   }
+  return policyFromDoc(doc);
+}
+
+/**
+ * The parse, from an already-loaded document.
+ *
+ * The KB workspace (`KbState.syncPolicy`) has read and parsed this file
+ * once already; the dashboard's KB Health read uses *that* rather than
+ * fetching the file a second time, so the two surfaces cannot disagree
+ * about a threshold while both claim to be reading HEAD. Same rule as
+ * fan-out, applied to a file instead of a value.
+ */
+export function policyFromDoc(doc: unknown): SyncPolicy {
   const systemsRaw = (doc as { systems?: unknown })?.systems;
-  if (typeof systemsRaw !== "object" || systemsRaw === null) {
-    throw new PolicyError("sync-policy.yaml has no systems map");
+  // An array is an object in JS, and `Object.entries` over one yields
+  // "0", "1", "2" as system names — a policy that parses cleanly and
+  // matches no real system, so nothing syncs and nothing complains.
+  // That is the silent-failure family this project keeps meeting, so a
+  // list here is an error rather than a policy about systems 0 and 1.
+  if (typeof systemsRaw !== "object" || systemsRaw === null || Array.isArray(systemsRaw)) {
+    throw new PolicyError("sync-policy.yaml has no systems map (a list is not a map of system names)");
   }
   const systems = new Map<string, SystemPolicy>();
   for (const [system, raw] of Object.entries(systemsRaw as Record<string, unknown>)) {

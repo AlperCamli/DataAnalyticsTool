@@ -46,6 +46,8 @@ import {
 } from "./queue.js";
 import { registerConnections } from "./connections.js";
 import { registerDashboard } from "./dashboard.js";
+import { registerKbHealth } from "./kbhealth.js";
+import { registerOps } from "./ops.js";
 import { APP_BASE, registerSpa } from "./spa.js";
 import { KbReader } from "./kbread.js";
 import { registerMcp } from "./mcp.js";
@@ -584,6 +586,12 @@ export function buildServer(
     // A-3: the Connections API — the only writer of `sync_systems`, and
     // the surface the admin CLI and the B-2 module are both clients of.
     registerConnections(app, { ...deps, ...(doneNotifier ? { notifier: doneNotifier } : {}) });
+    // B-1: KB Health (freshness, doc status, contamination, the drift-PR
+    // queue) and the lineage explorer's read view.
+    registerKbHealth(app, deps);
+    // B-1: Ops reads + the write surfaces §3 puts here (dead-letter
+    // re-enqueue as the user, webhook secret rotation write-only).
+    registerOps(app, deps);
     // B-2: the SPA itself — static assets, served by the core behind the
     // same session (D-103.1: no second server, no second identity
     // domain). Registered last so no asset route can shadow an API one.

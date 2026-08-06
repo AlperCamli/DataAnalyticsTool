@@ -5327,3 +5327,392 @@ copies of values vault now owns.
 **Suites at this entry:** core **306 passed / 4 skipped / 28 files**;
 python **777 passed / 14 skipped / 1 failed** — the contamination triage,
 now **35** docs, estate state, untouched by this work.
+
+# DECISIONS — B-1 (KB Health, Gap Triage & Knowledge Requests), 2026-08-06
+
+The dashboard's second and third modules, the two read views beside them,
+and the enrich skill's queue-driven entry. Task 0 recorded D-113, resolved
+D-108's two bracketed clauses on the operator's attestation, and made
+playbook §4's exit condition true for the install shape A4-F5 found.
+
+## D-113 — A-4 closure + standing rules (owner ruling, 2026-08-06)
+
+Recorded as issued.
+
+1. **A-4 CLOSED as verified.** All four gate clauses, zero plaintext on
+   host, rotation proof live, `env://` fallbacks zero. A4-F6's fix
+   affirmed: G3 routes through the same credential path jobs use — one
+   path, not two.
+2. **STANDING RULE ADOPTED**, beside fan-out and read-back: *a migration
+   is complete when the old source is removed, not when the new one
+   works.* Removal is the test that finds the missed path. Filed in the
+   standing-rules list below.
+3. **TRANSCRIPT HYGIENE AFFIRMED.** The in-session rekey cancellation was
+   correct — secret-bearing ceremonies run out of band, never through a
+   transcript. Recorded as practice.
+4. **A4-F5 playbook amendment AUTHORIZED** to ride this session's task 0.
+   Executed: see D-113.4-as-applied below.
+5. **FINDINGS FILED AS FILED**, incl. A4-F1 → inherited by B-1's build.
+   Executed: see D-114.6.
+6. **SECRETS-INVENTORY debt rows ACCEPTED** as honest bookkeeping; purge
+   per the operator queue, inventory updated to the true bootstrap
+   remainder after. **Operator-owned; nothing in this session touches it.**
+
+### The standing rules, as they now stand
+
+Three, and each was bought with a failure:
+
+| Rule | Bought by |
+|---|---|
+| **Fan-out**: a value that appears in two places will disagree in one of them | the D-84 class |
+| **Read-back**: a write is reported as it was read back from the store, never as it was submitted | A-3's claimed-registered-actually-absent shape |
+| **Removal** (new, D-113.2): a migration is complete when the old source is removed, not when the new one works | A4-F6 |
+
+### D-113.4 as applied — playbook §4's exit condition
+
+The defect was that §4 asserted "OIDC login works" as an exit condition
+while the shipped default made it **false for a single-machine install**,
+which is the configuration a customer operator tries first. Two edits to
+`specs/customer-onboarding-playbook.md` §4:
+
+- A new paragraph before the exit line stating the structural constraint
+  in one sentence — *the issuer URL is used by the core (container-side)
+  and by the browser (host-side) and OIDC's issuer-match rule means it
+  must be the same string for both* — then the two configurations that
+  satisfy it: `CL_HOST_ADDR=127.0.0.1` single-machine,
+  `CL_HOST_ADDR=<LAN IP>` + `CL_BIND=0.0.0.0` multi-machine.
+- The exit condition itself, made checkable rather than assertable:
+  *OIDC login works **from the browser the operator will actually use***
+  — confirmed by loading `/app/`, "not inferred from the IdP being
+  healthy, which is the check that passes on the broken configuration."
+
+**What this amendment deliberately does not do:** it does not change the
+`host.docker.internal` default in `docker-compose.yml`, and it does not
+build the split-horizon issuer (A4-F5's candidate fix 1). Both are code
+changes to the install story, outside this session's fence. A4-F5 stays
+filed against whichever checkpoint owns that story; what closes here is
+only the honesty defect — a playbook step that asserted something untrue.
+
+## D-108's brackets, resolved (operator attestation, 2026-08-06)
+
+Two clauses of D-108 were recorded on 2026-08-06 with their placeholders
+unfilled, and a second session declined to fill them. The operator has now
+supplied both, as attestation, with the explicit statement that **no re-run
+of A-2 is required or implied — A-2 stays CLOSED on D-108.1's extracted
+evidence, unchanged.** Both brackets are resolved and are not carried
+forward. Transcribed:
+
+**Clause 2 (execution shape).** *"The run was successful. She explored the
+estate and stopped satisfied with the validated SQL; execution was
+available to her session and unattempted, not blocked."*
+
+**Finding A2-F1 — recorded as already worded, now on stated ground.** A
+first user's natural stopping point was validated SQL, not results. This
+is input to B-1's surfaces and to the report skill's phrasing, **not a
+defect** — capability is separately proven at M2/M3. What it tells this
+session specifically: the product's own surfaces should not assume a
+journey ends at an executed result, and a reporter who never executes is
+a satisfied user, not an abandoned one. (Contrast the ledger's
+`abandoned_journey` detector, which fingerprints exactly that shape —
+resolution reads plus a validate with no execute. A2-F1 is the evidence
+that the rule's *default* reading of that shape as abandonment is
+sometimes wrong. Not changed here; noted for OD-2's threshold revisit,
+which owns detector tuning.)
+
+**Clause 3 (friction notes).** *"No separate friction notes were taken
+during the run."*
+
+**Finding A2-F2 — recorded, D-108.3's stated branch fired.** The
+observation half of the first-user run was lost. It is not recoverable:
+no session can supply an account of a room it was not in, and the four
+gate clauses the audit rows prove are *what the system did*, never *what
+the person felt while it did it*. `results/phase2/a2-field-notes/` stays
+empty and is now closed as permanently empty rather than pending.
+
+The corrective is prospective, and landed in this task: **A-2's runbook
+§6 now states that the notes are a named artifact of the run**, of the
+same standing as the audit extraction — a future run is not complete
+until `results/phase2/a2-field-notes/README.md` exists and is committed,
+and a run that genuinely takes none writes *that sentence* down as the
+artifact. Filed there rather than in a spec because the runbook is what a
+person actually reads on the morning.
+
+## D-114 — decisions this build had to take
+
+### D-114.1 — governance writes enter the audit record (closes D-110.3a)
+
+Dashboard spec §5.1 filed the gap: `audit_records` is one row per MCP
+call and is exactly that, so connection CRUD — and every governance write
+after it — left no durable record beyond a job's `triggers` array, which
+exists only where a job exists. Its trigger was normative: **close before
+B-4's audit view ships.** Proposed to the operator in five lines under
+D-113's fence and **authorized**; closed here rather than at B-4.
+
+**The contract widens from "one row per MCP call" to "one row per
+governed act."** No schema change — `audit_records` was already
+tool-agnostic. `writeGovernanceAudit` is a thin caller over the existing
+`writeAudit`, and the acts that now write a row are: connection upsert,
+delete and test; ledger verdicts; and the deliver-batch trigger. Each
+carries the acting subject and roles from the resolved session, a `tool`
+naming the act (`dashboard.connection.upsert`, `dashboard.ledger.verdict`,
+…), `session_id: null` because a browser session is not an MCP session,
+`setup_stamp: unstamped` for the same reason, an args digest over the
+request, and `decision: allowed | denied` — **denied included**, because a
+reporter's refused verdict attempt is exactly the row an auditor wants and
+the one a success-only log would omit.
+
+Every existing consumer filters by `tool`, so none re-reads differently:
+the ledger's window rules name `validate_sql` and `execute_sql`/
+`publish_report` explicitly; the deliveries read joins on `audit_id`. The
+one visible consequence, stated because a future evidence extraction will
+meet it: **audit-window row counts now include governance rows.** They are
+correctly attributed to the acting subject, so a windowed count is still
+true — it is just no longer a count of tool calls alone. `extract-audit.sh`
+gains nothing and needs nothing; the rows arrive through the same read.
+
+What this does **not** do: it does not add a governance-write *table*
+(§5.1's other candidate), and it does not retro-fill rows for writes that
+already happened. B-4's gate inherits a closed item and an audit view that
+will render both kinds from one query.
+
+### D-114.2 — KB Health reads one endpoint, and it is the same computation the MCP tool uses
+
+`GET /v1/dashboard/kb-health` is one governed read assembling the whole
+module: per-source freshness against `sync-policy.yaml`, doc-status counts
+from KB HEAD, the contaminated set with its lineage paths, the drift-PR
+queue, and the sync-configuration state. The freshness and doc-status
+halves are computed by functions **lifted out of the MCP
+`report_freshness` tool and imported by both**, rather than re-derived —
+the fan-out rule applied to a computation instead of a value. A dashboard
+that could disagree with `report_freshness` about whether a source is
+stale is a dashboard nobody can trust as evidence.
+
+Visibility is filtered exactly as the MCP read filters it: a doc whose
+path the caller's scopes do not cover is absent from the counts, not
+zeroed. So two roles legitimately see two different totals, and each total
+is true for its reader.
+
+### D-114.3 — DT-9's warning is rendered from the core's own resolved config, not from a second read of /healthz
+
+DT-9 says the configured-but-disabled state renders "from `/healthz`'s
+`sync_enabled`". Taken literally that would have the SPA fetch an
+unauthenticated ops probe and re-derive a warning from it — a second
+source for one fact, and the fan-out rule forbids it. Instead the KB
+Health payload carries a `sync` block resolved from **the same
+`cfg.sync.enabled`** that `effectiveFlags()` reports to `/healthz`: one
+value, two renderings. The test asserts both surfaces agree.
+
+The state the warning describes is precise, and it is the two-silent-days
+shape (D-84.2 / SO-F): `sync-policy.yaml` lists systems with thresholds
+and triggers — the estate is *configured* to sync — and the core's sync
+engine is off, so no trigger will ever fire and every source will age past
+its threshold in silence. The banner says that in those words and names
+the count of systems the policy configures, because "sync is disabled" on
+its own reads like an intentional setting rather than a fault.
+
+### D-114.4 — the drift-PR queue routes and cannot merge, structurally
+
+The queue renders `listOpenSyncPrs()` — number, title, URL, branch, age —
+and every row's only affordance is a link to the git provider, carrying no
+credential (§6). There is no merge button, and the assertion that there is
+none is made two ways: over the **shipped bundle** (no merge-shaped API
+path, no method that could reach one) and over the **server** (the module's
+endpoint is a GET; no dashboard route mutates a PR). §7.3 is the line and
+UI-6 is the ruling; a button is not the risk, a *code path* is, and the
+test is written against the path.
+
+### D-114.5 — the resolution badge is a server-computed count, and the client cannot compute one
+
+UI-D fixed F-10's mechanism as a dashboard badge on the filer's next
+session. It is served by `GET /v1/dashboard/inbox`: the issues this caller
+filed that reached a terminal verdict — `rejected` with its reason, or
+`resolved` with its PR URL — since the caller last acknowledged them.
+Acknowledgement is a write (`POST /v1/dashboard/inbox/ack`) under the
+caller's own identity, so "seen" is server state and survives a reload,
+a second tab, and a different machine.
+
+The filer scope is the server's, not a filter the client applies: the
+endpoint reads the same `filedBy = session subject` rule the ledger queue
+uses, and a reporter asking for another subject's inbox is the DT-1
+refusal. The badge count in the sidebar is a number the server sent.
+
+**In-session surfacing remains unbuilt** (UI-D names it a skill-side
+candidate) and is not reported as shipped anywhere in this build.
+
+### D-114.6 — Connections gains its edit affordance (A4-F1), over references only
+
+A4-F1: the module rendered no config and offered no edit, so changing a
+credential reference through the UI meant retyping the whole registration
+from memory — which is why A-4's migration had to be a script. The card
+now renders the stored `config` and the credential references, and an
+**Edit** affordance opens them prefilled and PUTs the result through the
+same governed endpoint the add form uses.
+
+Two properties hold it inside UI-8. The form edits **references, never
+values** — `vault://…#field`, `env://NAME` — and there is no password
+input on the screen to type a secret into (asserted over the sources, as
+at B-2). And the payload validator already refuses material that looks
+like a credential, so the refusal is the server's, not the form's.
+
+What is prefilled is the **stored row as the API rendered it**, so an
+edit that changes nothing round-trips to an identical row; the response
+shown afterwards is the store's read-back, not the submitted form.
+
+### D-114.7 — verdict, filing and batch UI add no power the server does not already grant
+
+DT-11 was proven server-side at B-0: a reporter's verdict call is a 403,
+approve records identity and timestamp, and no git call or KB write
+happens. This build adds pixels over that and **no new authority**. The
+approve/reject controls and the deliver-batch trigger are rendered for
+every caller — not hidden by role, per UI-1 — and a caller without the
+steward profile gets the server's own 403 rendered as its own words. The
+suite re-runs DT-11 through the UI's exact call shape so the two cannot
+drift.
+
+Rejection requires a reason in the UI because it requires one at the
+server (a rejection the filer cannot read is a disappearance, not a
+decision); the client's `required` attribute is a courtesy over a server
+rule, never the rule.
+
+### D-114.8 — the proposal is displayed inert and marked inert
+
+DT-12 has two halves and they are asserted in two places. In the queue,
+proposal text renders through the same `<Text>` component every
+server-supplied string goes through — no raw-HTML path exists in these
+sources — and the payload it renders was already LED-R2-scrubbed at
+storage and LED-R5-neutralized at the render boundary, so a script or
+markdown payload arrives as characters. The panel labels it *the
+requester's words, quoted — not KB content*, because a proposal shown in
+the product's own chrome reads as endorsed unless something says
+otherwise. The other half — that no requester text appears verbatim in
+the batch PR's diff — is the enrich skill's, and is asserted there.
+
+### D-114.9 — Ops re-enqueues as the user, and never repairs the dead job
+
+The dead-letter list offers re-enqueue, and re-enqueue is `POST /v1/jobs`
+under the caller's identity (dashboard spec §3) — a **new job with the
+dead one's payload**, not a resurrection of the dead row. The dead row
+keeps its error and its terminal state, because it is the evidence that
+something failed and rewriting it would erase the fault the operator is
+looking at. The new job's `triggers` array records the dashboard act and
+the acting subject, and the response names the new job id.
+
+### D-114.10 — webhook secrets are shown once, from the creation response, and never stored
+
+UI-8's last surface. The rotate control PUTs and the **response body
+carries the new secret exactly once**; the UI renders it in a panel that
+says it will not be shown again, and holds it in a React state variable
+that dies with the tab. There is no GET that returns a secret — the store
+holds a sha256 and nothing else can be recovered from it — and DT-5's
+reload assertion passes for the structural reason that no browser storage
+API appears anywhere in these sources.
+
+### D-114.11 — enrich S1b is a mode of the same skill, not a second skill
+
+D-101.4's queue-driven batch mode enters the existing state machine at a
+different S1 and runs S2–S5 unchanged. The skill file gains one section
+rather than a fork, because two enrichment procedures would drift and the
+grounding discipline is the part that must not.
+
+Two rules are the mode, and both are honesty rules. **The approved request
+is a citation of the customer-provided class** — `sources: customer-provided,
+<name>, <date>`, taken from what the ledger recorded (LED-R3 server-set),
+never retyped from the body of the request — and it sits on the S2 maturity
+ladder beside `customer doc: <uri>`: **stated** by someone who knows the
+business, never **observed** by us, and never upgraded because it arrived
+as confident prose. **And a request the skill cannot draft at all returns
+to the queue** with a note saying what evidence would unblock it, drops out
+of the batch's trailers, and is named in the PR body — never guessed at.
+
+The PR body carries the request→doc mapping and one `CL-Resolves` trailer
+per request the batch **actually satisfies**, so a merge resolves exactly
+those. A returned item's absence from the trailers is what keeps it open;
+that is the mechanism, not a convention.
+
+### D-114.12 — the `batched → approved` return, which the diagram drew and nothing implemented
+
+Fault-ledger §4's state diagram has an arrow nothing could take:
+
+```
+approved ──deliver batch──► batched ──undraftable──► approved
+                                       (returns with the skill's note)
+```
+
+The skill spec relies on it (S1b/CP-E5: "one the skill cannot draft at
+all **returns to the queue** with a note stating what evidence would
+unblock it"), and AS-18 asserts it. There was no mechanism — no endpoint,
+no tool, no column — so the honest exit CP-E5 requires had nowhere to go,
+and the only paths available to a skill facing an undraftable request
+were to guess it or to drop it silently. Both are the failure that rule
+exists to prevent.
+
+Built: `POST /v1/dashboard/ledger/issues/:id/return` with a **required**
+note, steward-gated like every other ledger workflow write (the skill
+runs under the steward's own identity, so this is the same gate and not a
+new one). It sets `approved`, clears `batch_id` so the next batch can
+pick the request up, and keeps the verdict columns — the steward's
+approval still stands, because nothing about it turned out to be wrong.
+
+**A note is required, and the refusal is the point.** A return without
+one reads as `approved` to the next steward and says nothing about why it
+came back or what would fix it — a silent drop wearing a state change.
+
+**Occurrences are deliberately not incremented.** The queue is ordered by
+demand; a skill reporting that it could not write something is not
+another person asking for it, and counting it as one would corrupt the
+signal the ordering depends on. For the same reason the note is a column
+on the issue rather than a `ledger_events` row: an event would increment
+that count as a side effect of recording a non-event.
+
+*Flagged, not done:* fault-ledger §4's "Additive DDL" sentence enumerates
+the four verdict columns and does not mention `return_note` /
+`returned_at`. The transition is specified in the same section and its
+storage is additive, so this implements the spec rather than contradicting
+it — but the enumeration is now incomplete, and correcting it is a
+one-line spec amendment **outside this session's fence**. Proposed for the
+next session's task 0.
+
+### D-114.13 — AS-18's two halves are verified by two different instruments
+
+AS-18 spans an agent's judgement and the product's mechanics, and one
+test cannot honestly cover both.
+
+**The agent half** is `tools.skill_scenarios --only enrich-batch`: a real
+headless session runs the shipped skill against a staged batch on the
+fixture deployment, and the assertions are on what it produced — the
+citation in the ledger's recorded shape, no requester prose in the diff,
+the request→doc mapping, exactly one trailer, the returned item back at
+`approved` with a note, no `verified` anywhere. It is D-78 layer (b) and
+it is AS-18's conformance evidence. **It has not been run** — it costs a
+model call and belongs to whoever runs the gate.
+
+**The product half** is `core/test/dashboard-b1.test.ts`: request →
+verdict → batch → a merged PR carrying one trailer → the ledger resolves
+exactly that request → the filer's inbox shows it with the PR link, while
+the untrailered request stays `batched`. Deterministic, no model, runs on
+every commit — and it could fail: it did, twice, while the trailer
+matching was being written.
+
+The split is the D-78 rule applied honestly rather than mechanically:
+each half is tested by the instrument that can actually falsify it, and
+neither is reported as covering the other.
+
+## What this build does not claim
+
+- **The gate demo has not been run.** Every clause below is machine-proven
+  on fixtures and against the live pilot's own data where it reads; the
+  end-to-end demonstration D-101.5 requires — request with a proposal →
+  steward verdict → batch → enrich PR merged as R2 → requester sees the
+  resolution — is the operator's morning and is written up as a runbook,
+  not performed here. A PR merged by this session would not be R2 merging
+  a reviewed diff, which is the whole of what KB-7 means.
+- **AS-18's behavioral half has not been run** (D-114.13). The scenario
+  ships; the evidence is the operator's model call. The validators are
+  green and are explicitly *not* the evidence (D-78).
+- **In-session gap surfacing is unbuilt** (UI-D), and is named as unbuilt
+  in the code, the runbook and here.
+- **A4-F5's code-level fix is not done** — only the playbook's honesty
+  defect closed (D-113.4 as applied).
+- **The register rows for D-107.3 (verdict history) and D-107.4 (jobs
+  retention) are still not filed.** Flagged at A-3/B-2, unchanged here,
+  and still outside a build session's fence.

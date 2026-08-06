@@ -307,3 +307,171 @@ def check_review_summary(text: str) -> list[Finding]:
         )
 
     return findings
+
+
+# --------------------------------------------------------------------------
+# AS-18 / S1b — the queue-driven enrichment batch (D-101.4)
+
+
+#: `customer-provided, <name>, <date>` — the citation an approved request
+#: earns. The date is ISO because the ledger records one; a re-typed
+#: "last week" would be exactly the un-sourceable prose S1b forbids.
+_CUSTOMER_PROVIDED = re.compile(
+    r"^customer-provided,\s*(?P<who>[^,]+?),\s*(?P<when>\d{4}-\d{2}-\d{2})\s*$"
+)
+
+#: The grades that mean "we looked at the estate and saw this". A doc
+#: grounded no further than a proposal may not claim one.
+_OBSERVED_GRADES = ("observed in", "app ddl", "customer doc:", "usage", "join_pairs")
+
+#: The dressing CP-E5 names by name: an inference grading added beside a
+#: customer-provided one to make a one-source list look like two.
+_INFERRED = "inferred from column names"
+
+#: A trailer, exactly as ledger §9 parses it.
+_RESOLVES = re.compile(r"^CL-Resolves:\s*(?P<issue>[0-9a-fA-F-]{36})\s*$", re.MULTILINE)
+
+
+def check_customer_provided_sources(
+    sources: Sequence[str],
+    *,
+    grounded_beyond_proposal: bool,
+) -> list[Finding]:
+    """S1b's citation rule on one drafted doc.
+
+    `grounded_beyond_proposal` is what the *author* claims they found —
+    the caller passes what the evidence actually supported. The check is
+    the pairing: a doc grounded no further than its proposal must carry
+    the customer-provided citation **and nothing that reads as
+    observation**, because a sources list is the only signal a reviewer
+    has and inflating it destroys it (HLR §8 P4).
+    """
+    findings: list[Finding] = []
+    entries = [str(s).strip() for s in sources]
+    customer = [e for e in entries if e.lower().startswith("customer-provided")]
+
+    if not customer:
+        findings.append(
+            Finding("AS-18", "no `customer-provided, <name>, <date>` source on a queue-driven draft")
+        )
+    for entry in customer:
+        if not _CUSTOMER_PROVIDED.match(entry):
+            findings.append(
+                Finding(
+                    "AS-18",
+                    f"customer-provided source is not `customer-provided, <name>, <date>`: {entry!r} "
+                    "— the name and ISO date come from what the ledger recorded, not from the request body",
+                )
+            )
+
+    if not grounded_beyond_proposal:
+        for entry in entries:
+            low = entry.lower()
+            if low.startswith("customer-provided"):
+                continue
+            if _INFERRED in low:
+                findings.append(
+                    Finding(
+                        "CP-E5",
+                        "a draft groundable no further than its proposal carries "
+                        f"{_INFERRED!r} beside the customer-provided citation — "
+                        "the dressing CP-E5 forbids: cite exactly that provenance and nothing better",
+                    )
+                )
+            elif any(grade in low for grade in _OBSERVED_GRADES):
+                findings.append(
+                    Finding(
+                        "CP-E5",
+                        f"a draft groundable no further than its proposal claims observation: {entry!r} "
+                        "— stated by someone who knows the business is never upgraded to observed by us",
+                    )
+                )
+    return findings
+
+
+def check_no_verbatim_submission(diff_text: str, proposals: Sequence[str]) -> list[Finding]:
+    """DT-12's other half: the requester's words are not in the diff.
+
+    Matched on **sentences**, not on tokens: a proposal and a well-drafted
+    doc necessarily share vocabulary ("refund", "order"), and flagging
+    that would make the rule unusable. What must not survive is a run of
+    the requester's own prose — the doc is written in the KB's voice and
+    *cites* the submission, so any long verbatim span is the failure.
+    """
+    findings: list[Finding] = []
+    haystack = re.sub(r"\s+", " ", diff_text).lower()
+    for proposal in proposals:
+        for raw in re.split(r"(?<=[.!?;])\s+|\n+", str(proposal)):
+            phrase = re.sub(r"\s+", " ", raw).strip().lower()
+            # Short fragments collide by chance; a clause of this length
+            # appearing intact is quotation, not coincidence.
+            if len(phrase) < 40:
+                continue
+            if phrase in haystack:
+                findings.append(
+                    Finding(
+                        "DT-12",
+                        f"requester text appears verbatim in the diff: {phrase[:80]!r} — "
+                        "the submission is drafting input, and the doc cites it rather than containing it",
+                    )
+                )
+    return findings
+
+
+def check_batch_pr_body(
+    body: str,
+    *,
+    satisfied: Sequence[str],
+    returned: Sequence[str],
+) -> list[Finding]:
+    """S5's queue-driven additions: the mapping, and exactly the right trailers.
+
+    `satisfied` and `returned` are the issue ids the batch actually
+    answered and actually handed back. The trailers are load-bearing —
+    ledger §9 resolves on merge from these lines alone — so a trailer for
+    a returned item closes a request nobody answered, and a missing
+    trailer leaves an answered one open forever.
+    """
+    findings: list[Finding] = []
+    trailers = [m.group("issue").lower() for m in _RESOLVES.finditer(body)]
+    want = [str(i).lower() for i in satisfied]
+    back = [str(i).lower() for i in returned]
+
+    for issue in want:
+        if issue not in trailers:
+            findings.append(
+                Finding("AS-18", f"no CL-Resolves trailer for satisfied request {issue} — merge would leave it open")
+            )
+    for issue in back:
+        if issue in trailers:
+            findings.append(
+                Finding(
+                    "AS-18",
+                    f"CL-Resolves trailer for {issue}, which was returned to the queue — "
+                    "merging would resolve a request the batch did not answer",
+                )
+            )
+    for issue in trailers:
+        if issue not in want and issue not in back:
+            findings.append(Finding("AS-18", f"CL-Resolves trailer for {issue}, which is not in this batch"))
+    if len(set(trailers)) != len(trailers):
+        findings.append(Finding("AS-18", "a CL-Resolves trailer is repeated"))
+
+    lowered = body.lower()
+    if "request" not in lowered or not re.search(r"^\s*\|.*\|", body, re.MULTILINE):
+        findings.append(
+            Finding("AS-18", "no request → doc mapping in the PR body — a reviewer cannot tell which request each doc answers")
+        )
+    if back:
+        # A returned item that the body does not name has been silently
+        # dropped, which is the exact failure CP-E5 exists to prevent.
+        for issue in back:
+            if issue not in lowered:
+                findings.append(
+                    Finding("CP-E5", f"returned request {issue} is not named in the PR body — a silent drop")
+                )
+        if not re.search(r"unblock|would need|returned|blocked", lowered):
+            findings.append(
+                Finding("CP-E5", "returned items carry no statement of what evidence would unblock them")
+            )
+    return findings

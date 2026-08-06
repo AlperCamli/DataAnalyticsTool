@@ -287,6 +287,10 @@ export interface TriageIssue extends GapIssue {
   verdict_reason: string | null;
   batch_id: string | null;
   resolution: Record<string, unknown> | null;
+  /** The enrich skill's note when it handed this request back rather
+   * than guessing at it (§4: `batched → approved`, note recorded). */
+  return_note: string | null;
+  returned_at: string | null;
 }
 
 export interface TriageFilter {
@@ -348,7 +352,8 @@ export async function listTriageIssues(pool: pg.Pool, filter: TriageFilter): Pro
             to_jsonb(i.last_seen)  #>> '{}' AS last_seen,
             i.links, i.reopen_count, i.verdict_by,
             to_jsonb(i.verdict_at) #>> '{}' AS verdict_at,
-            i.verdict_reason, i.batch_id, i.resolution,
+            i.verdict_reason, i.batch_id, i.resolution, i.return_note,
+            to_jsonb(i.returned_at) #>> '{}' AS returned_at,
             (SELECT max(e.detector_class) FROM ledger_events e
               WHERE e.issue_id = i.issue_id) AS detector_class
        FROM ledger_issues i
@@ -439,7 +444,8 @@ export async function getIssue(pool: pg.Pool, issueId: string): Promise<TriageIs
             to_jsonb(i.last_seen)  #>> '{}' AS last_seen,
             i.links, i.reopen_count, i.verdict_by,
             to_jsonb(i.verdict_at) #>> '{}' AS verdict_at,
-            i.verdict_reason, i.batch_id, i.resolution,
+            i.verdict_reason, i.batch_id, i.resolution, i.return_note,
+            to_jsonb(i.returned_at) #>> '{}' AS returned_at,
             (SELECT max(e.detector_class) FROM ledger_events e
               WHERE e.issue_id = i.issue_id) AS detector_class
        FROM ledger_issues i WHERE i.issue_id = $1::uuid`,
@@ -499,6 +505,60 @@ export async function recordVerdict(
       reason,
       ENRICHMENT_REQUEST,
     ],
+  );
+  if (!rows[0]) {
+    return { ok: false, code: "wrong_state", detail: `issue ${input.issueId} changed state concurrently` };
+  }
+  return { ok: true, issue: (await getIssue(pool, input.issueId))! };
+}
+
+/**
+ * Hand a batched request back to the queue (§4: `batched → approved`,
+ * "returns with the skill's note").
+ *
+ * The transition the state diagram drew and nothing implemented until
+ * B-1. It exists so the enrich skill has somewhere honest to put a
+ * request it cannot draft: the alternative to a mechanism here is a
+ * guess in a document, which is the one outcome CP-E5 forbids.
+ *
+ * `batch_id` is cleared, so the next batch can pick it up — a returned
+ * request is approved work waiting for evidence, not failed work. The
+ * verdict columns are untouched: the steward's approval still stands,
+ * because nothing about it turned out to be wrong.
+ *
+ * Occurrences are deliberately NOT incremented. The queue is ordered by
+ * demand, and a skill reporting that it could not write something is not
+ * another person asking for it.
+ */
+export async function returnToQueue(
+  pool: pg.Pool,
+  input: { issueId: string; note: string; at?: Date },
+): Promise<VerdictOutcome> {
+  const existing = await getIssue(pool, input.issueId);
+  if (!existing) return { ok: false, code: "not_found", detail: `no issue ${input.issueId}` };
+  if (existing.kind !== ENRICHMENT_REQUEST) {
+    return {
+      ok: false,
+      code: "wrong_kind",
+      detail: `only ${ENRICHMENT_REQUEST} issues are returned to the queue; ${input.issueId} is ${existing.kind}`,
+    };
+  }
+  if (existing.status !== "batched") {
+    return {
+      ok: false,
+      code: "wrong_state",
+      detail: `issue ${input.issueId} is ${existing.status}; only a batched request can be returned`,
+    };
+  }
+  // LED-R2: the note is shown to a steward and reaches the filer's reply
+  // path, so it is scrubbed and bounded exactly as a rejection reason is.
+  const note = scrubText(input.note, VERDICT_REASON_MAX);
+  const { rows } = await pool.query<{ issue_id: string }>(
+    `UPDATE ledger_issues
+        SET status = 'approved', batch_id = NULL, return_note = $2, returned_at = $3
+      WHERE issue_id = $1::uuid AND status = 'batched' AND kind = $4
+      RETURNING issue_id`,
+    [input.issueId, note, input.at ?? new Date(), ENRICHMENT_REQUEST],
   );
   if (!rows[0]) {
     return { ok: false, code: "wrong_state", detail: `issue ${input.issueId} changed state concurrently` };

@@ -155,7 +155,12 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  const rig = await setupMcpRig();
+  // B-1: the dashboard surface is up too, because the enrich skill's
+  // queue-driven mode (S1b/AS-18) reads its delivered batch through the
+  // governed ledger API as the session user — the same identity the MCP
+  // tools carry, over the same verifier. A fixture without it could not
+  // exercise the mode at all.
+  const rig = await setupMcpRig({ dashboard: { enabled: true } });
 
   let stopSweeper: () => void = () => {};
   let runner: { stop: () => Promise<void> } | null = null;
@@ -189,6 +194,8 @@ async function main(): Promise<void> {
   const connection = {
     base: rig.base,
     mcp_url: `${rig.base}/mcp`,
+    // The governed API root the S1b batch is read from.
+    core_url: rig.base,
     ops_db_url: rig.core.cfg.databaseUrl,
     kb_dir: rig.kb.seedClone,
     execution: withExecution,

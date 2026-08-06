@@ -39,6 +39,11 @@ import { neutralize } from "./changelog.js";
 import type { CoreConfig } from "./config.js";
 import { executeRequest } from "./execute.js";
 import { createProvider } from "./gitkb.js";
+// B-1 / D-114.2: freshness and doc-status are computed once, in the
+// module the dashboard's KB Health read also calls. Two surfaces that
+// could disagree about whether a source is stale would make neither
+// citable as evidence.
+import { docStatusCounts, freshnessRows } from "./kbhealth.js";
 import type { KbReader, KbState } from "./kbread.js";
 import {
   ENRICHMENT_REQUEST,
@@ -49,6 +54,7 @@ import {
   registryKind,
 } from "./ledger.js";
 import type { Identity, OidcClient } from "./oidc.js";
+import { policyFromDoc, type SyncPolicy } from "./policy.js";
 import { parseProfile, profilePermitted, toolAllowed, type Profile } from "./profiles.js";
 import { publishReport } from "./publish.js";
 import { categoryForTool, type RateLimiter } from "./ratelimit.js";
@@ -723,38 +729,33 @@ async function toolPublishReport(ctx: CallContext, args: Record<string, unknown>
 }
 
 async function toolReportFreshness(ctx: CallContext, _args: Record<string, unknown>): Promise<ToolOutcome> {
-  const { rows: warningRows } = await ctx.deps.pool.query<{
-    system: string;
-    raised_at: Date;
-    age_s: string;
-    threshold_s: string;
-  }>(`SELECT system, raised_at, age_s, threshold_s FROM freshness_warnings ORDER BY system`);
-  const warnings = new Map(warningRows.map((w) => [w.system, w]));
-  const policySystems =
-    ((ctx.ws.syncPolicy?.systems as Record<string, Record<string, unknown>> | undefined) ?? {});
-  const systems = [...ctx.ws.systems.values()].map((state) => {
-    const policy = policySystems[state.system] ?? {};
-    const warning = warnings.get(state.system);
-    return {
-      system: state.system,
-      last_snapshot_at: state.capturedAt,
-      accepted_at: state.acceptedAt,
-      trigger: policy.triggers ?? null,
-      freshness_threshold: policy.freshness_threshold ?? null,
-      age_warning: warning
-        ? { raised_at: warning.raised_at, age_s: Number(warning.age_s), threshold_s: Number(warning.threshold_s) }
-        : null,
-    };
-  });
-  const statusCounts: Record<string, number> = {};
-  for (const doc of ctx.ws.docs.values()) {
-    if (!doc.docClass || !["human-object", "human-group", "entity", "metric", "lineage-note"].includes(doc.docClass)) {
-      continue;
-    }
-    if (!pathVisible(ctx.scopes, doc.path)) continue;
-    const status = typeof doc.fm?.status === "string" ? doc.fm.status : "draft";
-    statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+  // D-114.2: the same two computations the dashboard's KB Health read
+  // renders, imported rather than repeated. The wire shape below is
+  // this tool's own and is unchanged — what moved is where the numbers
+  // come from, so a session and a browser cannot report different
+  // staleness for the same source.
+  let policy: SyncPolicy | null = null;
+  try {
+    policy = ctx.ws.syncPolicy === null ? null : policyFromDoc(ctx.ws.syncPolicy);
+  } catch {
+    // An unparseable policy means no thresholds are known; the rows
+    // below then carry nulls, which is what "unknown" looks like here.
+    policy = null;
   }
+  const rows = await freshnessRows(ctx.deps.pool, ctx.ws, policy);
+  const systems = rows
+    .filter((row) => ctx.ws.systems.has(row.system))
+    .map((row) => ({
+      system: row.system,
+      last_snapshot_at: row.last_snapshot_at,
+      accepted_at: row.accepted_at,
+      trigger: row.trigger_mode,
+      freshness_threshold: row.threshold_s,
+      age_warning: row.stale
+        ? { raised_at: row.warning_raised_at, age_s: row.age_s, threshold_s: row.threshold_s }
+        : null,
+    }));
+  const statusCounts = docStatusCounts(ctx.ws, ctx.scopes);
   let openSyncPrs: { number: number; url: string }[] = [];
   if (ctx.deps.cfg.sync.enabled) {
     try {

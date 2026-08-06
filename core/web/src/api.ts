@@ -146,6 +146,220 @@ export interface ConnectionList {
   connections: Connection[];
 }
 
+// -- KB Health (B-1) ---------------------------------------------------------
+
+export interface SourceRow {
+  system: string;
+  in_policy: boolean;
+  last_snapshot_at: string | null;
+  accepted_at: string | null;
+  age_s: number | null;
+  threshold_s: number | null;
+  trigger_mode: string | null;
+  schedule_interval_s: number | null;
+  stale: boolean;
+  warning_raised_at: string | null;
+  render_lag: boolean;
+}
+
+export interface ContaminationRow {
+  doc: string;
+  title: string;
+  object: string | null;
+  source_object: string | null;
+  change: string | null;
+  detail: string | null;
+  path: string[] | null;
+  path_source: "recorded" | "declared" | "derived" | "self" | "unknown";
+}
+
+export interface KbHealth {
+  kb: { ref: string; remote: string | null; render_failed: boolean };
+  sync: {
+    enabled: boolean;
+    configured_systems: number;
+    policy_readable: boolean;
+    policy_error?: string;
+    configured_but_disabled: boolean;
+  };
+  sources: SourceRow[];
+  docs: { counts: Record<string, number>; total: number; scope_note: string };
+  contamination: ContaminationRow[];
+  drift_prs: {
+    available: boolean;
+    reason: string | null;
+    prs: { number: number; title: string; url: string; branch: string }[];
+  };
+}
+
+export interface Lineage {
+  available: boolean;
+  reason: string | null;
+  kb_ref?: string;
+  nodes: {
+    id: string;
+    node_kind: string | null;
+    resolved: boolean;
+    machine_doc: string | null;
+    human_doc: string | null;
+    status: string | null;
+  }[];
+  edges: { source: string; target: string; operation: string | null; trust: string | null }[];
+}
+
+// -- Ledger: triage, requests, inbox (B-1) -----------------------------------
+
+export interface Issue {
+  issue_id: string;
+  kind: string;
+  title: string;
+  object_fqn?: string;
+  system: string | null;
+  status: string;
+  occurrences: number;
+  distinct_subjects: number;
+  reopen_count: number;
+  first_seen: string;
+  last_seen: string;
+  links: Record<string, unknown>;
+  verdict: { by: string | null; at: string | null; reason: string | null } | null;
+  batch_id: string | null;
+  resolution: Record<string, unknown> | null;
+  returned: { at: string; note: string | null } | null;
+}
+
+export interface IssueList {
+  scope: { filed_by: string | null; role_scope: "self" | "all" };
+  issues: Issue[];
+  page: { limit: number; order: string; next_cursor: string | null };
+}
+
+export interface LedgerEvent {
+  event_id: string;
+  ts: string;
+  detector_class: number;
+  kind: string;
+  system: string | null;
+  object_fqn: string | null;
+  subject?: string | null;
+  profile: string | null;
+  description: string | null;
+  detail: Record<string, unknown>;
+  routed_to: string;
+}
+
+export interface IssueDetail {
+  issue: Issue;
+  events: LedgerEvent[];
+}
+
+export interface Batch {
+  batch_id: string;
+  count: number;
+  issues: Issue[];
+  note: string;
+}
+
+export interface InboxItem {
+  issue_id: string;
+  kind: string;
+  title: string;
+  object_fqn?: string;
+  status: string;
+  unread: boolean;
+  reopen_count: number;
+  rejection: { by: string | null; at: string | null; reason: string | null } | null;
+  resolution: { at: string | null; kind: string | null; pr_url: string | null } | null;
+}
+
+export interface Inbox {
+  unread: number;
+  items: InboxItem[];
+}
+
+// -- Publish + Ops (B-1) -----------------------------------------------------
+
+export interface Delivery {
+  artifact_id: string;
+  target: string;
+  subject: string | null;
+  delivery: {
+    revision: number;
+    content_hash: string;
+    workspace_id: string;
+    dataset_id: string;
+    delivered_at: string;
+  };
+  dangling: boolean;
+  attestations: {
+    revision: number;
+    report_id: string;
+    definition_hash: string;
+    verified_at: string;
+    attested_at: string;
+  }[];
+}
+
+export interface DeliveryList {
+  scope: { subject: string | null; role_scope: "self" | "all" };
+  rows: Delivery[];
+  page: { limit: number; order: string; next_cursor: string | null };
+}
+
+export interface Run {
+  run_id: string;
+  systems: string[];
+  kb_ref: string | null;
+  outcome: string;
+  pr_url: string | null;
+  classification_counts: Record<string, unknown>;
+  contaminated_count: number;
+  triggers: Record<string, unknown>[];
+  started_at: string;
+  finished_at: string | null;
+  duration_ms: number | null;
+}
+
+export interface Job {
+  job_id: string;
+  type: string;
+  system: string;
+  state: string;
+  attempt: number;
+  max_attempts: number;
+  deferrals: number;
+  error: { code: string; message: string; retryable: boolean } | null;
+  triggers: Record<string, unknown>[];
+  created_at: string;
+  finished_at: string | null;
+}
+
+export interface JobList {
+  counts: Record<string, number>;
+  jobs: Job[];
+}
+
+export interface Hook {
+  system: string;
+  configured: boolean;
+  created_at: string | null;
+  rotated_at: string | null;
+  path: string;
+}
+
+export interface HookList {
+  role_scope: "read" | "write";
+  hooks: Hook[];
+}
+
+export interface RotatedSecret {
+  system: string;
+  outcome: string;
+  secret: string;
+  shown_once: string;
+  hook_path: string;
+}
+
 export interface TestCheck {
   capability: string;
   status: string;

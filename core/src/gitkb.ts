@@ -138,6 +138,14 @@ export interface PrInfo {
   number: number;
   url: string;
   branch: string;
+  /**
+   * Present on listings, absent on the just-opened handle (the caller
+   * there already knows the title — it passed it). Optional rather than
+   * empty-stringed so the drift-PR queue can tell "no title from this
+   * provider" from "a PR titled nothing", and provider-echoed, therefore
+   * user-influenceable: it renders inert (dashboard spec §6).
+   */
+  title?: string;
 }
 
 export interface MergedPr {
@@ -217,9 +225,14 @@ class GithubProvider implements PrProvider {
     if (status !== 200) {
       throw new ProviderError(`list PRs failed (${status}): ${JSON.stringify(json)}`);
     }
-    return (json as { number: number; html_url: string; head: { ref: string } }[])
+    return (json as { number: number; html_url: string; title?: string; head: { ref: string } }[])
       .filter((pr) => pr.head.ref.startsWith("sync/"))
-      .map((pr) => ({ number: pr.number, url: pr.html_url, branch: pr.head.ref }));
+      .map((pr) => ({
+        number: pr.number,
+        url: pr.html_url,
+        branch: pr.head.ref,
+        ...(typeof pr.title === "string" ? { title: pr.title } : {}),
+      }));
   }
 
   async closePr(pr: PrInfo, comment: string): Promise<void> {
@@ -312,7 +325,7 @@ class LocalProvider implements PrProvider {
     const data = await this.load();
     return data.prs
       .filter((pr) => pr.state === "open" && pr.branch.startsWith("sync/"))
-      .map((pr) => ({ number: pr.number, url: pr.url, branch: pr.branch }));
+      .map((pr) => ({ number: pr.number, url: pr.url, branch: pr.branch, title: pr.title }));
   }
 
   async closePr(pr: PrInfo, comment: string): Promise<void> {

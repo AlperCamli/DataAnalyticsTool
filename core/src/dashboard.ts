@@ -33,6 +33,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import pg from "pg";
+import { writeGovernanceAudit } from "./audit.js";
 import { neutralize } from "./changelog.js";
 import type { CoreConfig } from "./config.js";
 import type { KbReader, KbState } from "./kbread.js";
@@ -46,6 +47,7 @@ import {
   normalizeQueryTerms,
   recordEvent,
   recordVerdict,
+  returnToQueue,
   type LedgerEventRow,
   type TriageIssue,
 } from "./ledger.js";
@@ -217,6 +219,36 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
       profiles,
       isSteward: profiles.has("steward"),
     };
+  }
+
+  /**
+   * Record a governance act (D-114.1, closing spec §5.1).
+   *
+   * The profile string is the caller's resolved profile set, the same
+   * one the ledger inlets stamp on an event — so an audit row and a
+   * ledger event about the same act agree about who did it.
+   */
+  async function governanceAudit(
+    viewer: Viewer,
+    tool: string,
+    args: Record<string, unknown>,
+    opts: { decision: "allowed" | "denied"; reason?: string; resultMeta?: Record<string, unknown> },
+  ): Promise<void> {
+    await writeGovernanceAudit(
+      deps.pool,
+      {
+        subject: viewer.identity.subject,
+        roles: viewer.identity.roles,
+        profile: [...viewer.profiles].sort().join(",") || null,
+        tool,
+        args,
+        kbRef: viewer.ws.headSha,
+        decision: opts.decision,
+        decisionReason: opts.reason ?? null,
+        ...(opts.resultMeta ? { resultMeta: opts.resultMeta } : {}),
+      },
+      deps.log,
+    );
   }
 
   /** Uniform 400 for the argument/cursor failures thrown above. */
@@ -502,6 +534,11 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
       : null,
     batch_id: issue.batch_id,
     resolution: issue.resolution,
+    // Why a request came back rather than being drafted (§4). Present
+    // only on one that did — an absent note is not an empty one.
+    returned: issue.returned_at
+      ? { at: issue.returned_at, note: issue.return_note === null ? null : neutralize(issue.return_note) }
+      : null,
   });
 
   app.get("/v1/dashboard/ledger", async (req, reply) => {
@@ -768,13 +805,20 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
   app.post("/v1/dashboard/ledger/issues/:issueId/verdict", async (req, reply) => {
     const viewer = await viewerFor(req, reply, { write: true });
     if (!viewer) return reply;
+    const { issueId } = req.params as { issueId: string };
     if (!viewer.isSteward) {
+      // D-114.1: the refusal is a governance act and is recorded as one.
+      // A reporter's attempted verdict is exactly the row an auditor
+      // came for, and a success-only log would not have it.
+      await governanceAudit(viewer, "dashboard.ledger.verdict", { issue_id: issueId }, {
+        decision: "denied",
+        reason: "verdicts on knowledge requests are steward-gated (UI-11)",
+      });
       return reply.code(403).send({
         error: "forbidden",
         detail: "verdicts on knowledge requests are steward-gated (dashboard spec UI-11)",
       });
     }
-    const { issueId } = req.params as { issueId: string };
     const body = (req.body ?? {}) as Record<string, unknown>;
     const verdict = body.verdict;
     if (verdict !== "approve" && verdict !== "reject") {
@@ -796,6 +840,64 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
       const status = outcome.code === "not_found" ? 404 : outcome.code === "wrong_kind" ? 400 : 409;
       return reply.code(status).send({ error: outcome.code, detail: outcome.detail });
     }
+    await governanceAudit(
+      viewer,
+      "dashboard.ledger.verdict",
+      // The verdict and the issue, never the reason text: the reason is
+      // ledger content with its own scrub and its own reader (the
+      // filer), and copying it here would put user-authored text into
+      // the restricted store for no gain the ledger row does not give.
+      { issue_id: issueId, verdict },
+      { decision: "allowed", resultMeta: { status: outcome.issue.status } },
+    );
+    return reply.send({ api_version: API_VERSION, issue: renderIssue(outcome.issue) });
+  });
+
+
+  /**
+   * Hand a batched request back (§4's `batched → approved` transition).
+   *
+   * The enrich skill's honest exit: a request it cannot draft without
+   * guessing goes back to the queue with a note saying what evidence
+   * would unblock it, rather than into a document nobody can source.
+   * Steward-gated like every other ledger workflow write — the skill
+   * runs under the steward's own identity, so this is the same gate,
+   * not a new one.
+   */
+  app.post("/v1/dashboard/ledger/issues/:issueId/return", async (req, reply) => {
+    const viewer = await viewerFor(req, reply, { write: true });
+    if (!viewer) return reply;
+    const { issueId } = req.params as { issueId: string };
+    if (!viewer.isSteward) {
+      await governanceAudit(viewer, "dashboard.ledger.return", { issue_id: issueId }, {
+        decision: "denied",
+        reason: "returning a batched request is steward-gated (fault-ledger spec §4)",
+      });
+      return reply.code(403).send({
+        error: "forbidden",
+        detail: "returning a batched request to the queue is steward-gated (fault-ledger spec §4)",
+      });
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const note = typeof body.note === "string" ? body.note : "";
+    // A return with no note is a silent drop wearing a state change: the
+    // next steward reads `approved` and learns nothing about why it came
+    // back or what would fix it.
+    if (!note.trim()) {
+      return reply.code(400).send({
+        error: "invalid_argument",
+        detail: "note (string) required — say what evidence would unblock this request",
+      });
+    }
+    const outcome = await returnToQueue(deps.pool, { issueId, note });
+    if (!outcome.ok) {
+      const status = outcome.code === "not_found" ? 404 : outcome.code === "wrong_kind" ? 400 : 409;
+      return reply.code(status).send({ error: outcome.code, detail: outcome.detail });
+    }
+    await governanceAudit(viewer, "dashboard.ledger.return", { issue_id: issueId }, {
+      decision: "allowed",
+      resultMeta: { status: outcome.issue.status },
+    });
     return reply.send({ api_version: API_VERSION, issue: renderIssue(outcome.issue) });
   });
 
@@ -805,6 +907,10 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
     const viewer = await viewerFor(req, reply, { write: true });
     if (!viewer) return reply;
     if (!viewer.isSteward) {
+      await governanceAudit(viewer, "dashboard.ledger.batch", {}, {
+        decision: "denied",
+        reason: "cutting a batch is steward-gated (fault-ledger spec §8)",
+      });
       return reply.code(403).send({
         error: "forbidden",
         detail: "cutting a batch is steward-gated (fault-ledger spec §8)",
@@ -817,11 +923,162 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
     }
     const max = Math.min(requested, deps.cfg.dashboard.batchMax);
     const { batchId, issues } = await deliverBatch(deps.pool, { max, by: viewer.identity.subject });
+    await governanceAudit(
+      viewer,
+      "dashboard.ledger.batch",
+      { max },
+      { decision: "allowed", resultMeta: { batch_id: batchId, count: issues.length } },
+    );
     return reply.code(201).send({
       api_version: API_VERSION,
       batch_id: batchId,
       count: issues.length,
       issues: issues.map(renderIssue),
+      // The batch is a work list, not a draft. Said in the response
+      // because the trigger's name invites the other reading.
+      note:
+        "These requests are stamped for drafting. Nothing has been written to the knowledge base " +
+        "and no pull request exists yet — the enrich skill drafts from this list, and a human " +
+        "merges the diff it produces.",
     });
+  });
+
+  // -- (d) the F-10 reply path: the filer's inbox (UI-D, DT-10) --------------
+
+  /**
+   * What happened to the things this caller filed.
+   *
+   * D-103.2 closed UI-D on the badge: resolutions and rejection reasons
+   * reach the filer on their next dashboard session. This is that read.
+   * `unread` is the badge's number, and it is the *server's* number —
+   * the filer scope is the session's subject (the same rule the ledger
+   * queue applies), and asking for somebody else's inbox is the DT-1
+   * refusal rather than a filter the client was trusted to apply.
+   *
+   * A steward reading their own inbox sees their own filings, not the
+   * estate's: this endpoint has no `all` scope, because "what happened
+   * to what I asked for" is a personal question whatever role asks it.
+   */
+  app.get("/v1/dashboard/inbox", async (req, reply) => {
+    const viewer = await viewerFor(req, reply);
+    if (!viewer) return reply;
+    const subject = viewer.identity.subject;
+    const requested = str((req.query as Record<string, unknown>)?.subject);
+    if (requested !== undefined && requested !== subject) {
+      return reply.code(403).send({
+        error: "forbidden",
+        detail: "an inbox is its owner's; the filer is taken from the session",
+      });
+    }
+
+    const { rows } = await deps.pool.query<{
+      issue_id: string;
+      kind: string;
+      title: string;
+      status: string;
+      object_fqn: string | null;
+      verdict_by: string | null;
+      verdict_at: string | null;
+      verdict_reason: string | null;
+      resolution: Record<string, unknown> | null;
+      resolved_at: string | null;
+      reopen_count: number;
+      acked_verdict_at: string | null;
+      acked_at: string | null;
+    }>(
+      `SELECT i.issue_id, i.kind, i.title, i.status, i.object_fqn,
+              i.verdict_by,
+              to_jsonb(i.verdict_at)  #>> '{}' AS verdict_at,
+              i.verdict_reason, i.resolution,
+              to_jsonb(i.resolved_at) #>> '{}' AS resolved_at,
+              i.reopen_count,
+              to_jsonb(a.acked_verdict_at) #>> '{}' AS acked_verdict_at,
+              to_jsonb(a.acked_at)         #>> '{}' AS acked_at
+         FROM ledger_issues i
+         LEFT JOIN dashboard_inbox_acks a
+                ON a.issue_id = i.issue_id AND a.subject = $1
+        WHERE i.status IN ('rejected', 'resolved')
+          AND EXISTS (SELECT 1 FROM ledger_events e
+                       WHERE e.issue_id = i.issue_id AND e.subject = $1)
+        ORDER BY coalesce(i.resolved_at, i.verdict_at) DESC NULLS LAST, i.issue_id DESC
+        LIMIT $2`,
+      [subject, deps.cfg.dashboard.pageMax],
+    );
+
+    const items = rows
+      .filter((row) => issueVisible(viewer, row))
+      .map((row) => {
+        // News is unread until acknowledged, and a *re*-verdict is news
+        // again: comparing the acknowledged verdict time against the
+        // current one is what makes a re-rejection after a refiling fire
+        // the badge a second time rather than staying silently seen.
+        const stamp = row.resolved_at ?? row.verdict_at;
+        const unread =
+          row.acked_at === null ||
+          (stamp !== null && row.acked_verdict_at !== null && stamp > row.acked_verdict_at) ||
+          (stamp !== null && row.acked_verdict_at === null);
+        return {
+          issue_id: row.issue_id,
+          kind: row.kind,
+          title: neutralize(row.title),
+          ...(row.object_fqn ? { object_fqn: neutralize(row.object_fqn) } : {}),
+          status: row.status,
+          unread,
+          reopen_count: row.reopen_count,
+          // The two terminal shapes, each carrying what the filer needs
+          // to act: a reason they can argue with, or a diff they can read.
+          rejection:
+            row.status === "rejected"
+              ? {
+                  by: row.verdict_by,
+                  at: row.verdict_at,
+                  reason: row.verdict_reason === null ? null : neutralize(row.verdict_reason),
+                }
+              : null,
+          resolution:
+            row.status === "resolved"
+              ? {
+                  at: row.resolved_at,
+                  kind: (row.resolution?.kind as string | undefined) ?? null,
+                  pr_url: (row.resolution?.pr_url as string | undefined) ?? null,
+                }
+              : null,
+        };
+      });
+
+    return reply.send({
+      api_version: API_VERSION,
+      scope: { subject, role_scope: "self" },
+      unread: items.filter((i) => i.unread).length,
+      items,
+    });
+  });
+
+  /** Mark inbox items seen, for this caller only. The subject is the
+   * session's; there is no line here that reads one from the body. */
+  app.post("/v1/dashboard/inbox/ack", async (req, reply) => {
+    const viewer = await viewerFor(req, reply, { write: true });
+    if (!viewer) return reply;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const ids = Array.isArray(body.issue_ids)
+      ? body.issue_ids.filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id))
+      : [];
+    if (ids.length === 0) {
+      return reply.code(400).send({ error: "invalid_argument", detail: "issue_ids (uuid array) required" });
+    }
+    // Only issues this caller actually filed can be acknowledged by
+    // them — otherwise an ack is a write against somebody else's row.
+    const { rowCount } = await deps.pool.query(
+      `INSERT INTO dashboard_inbox_acks (subject, issue_id, acked_verdict_at, acked_at)
+       SELECT $1, i.issue_id, coalesce(i.resolved_at, i.verdict_at), now()
+         FROM ledger_issues i
+        WHERE i.issue_id = ANY($2::uuid[])
+          AND EXISTS (SELECT 1 FROM ledger_events e
+                       WHERE e.issue_id = i.issue_id AND e.subject = $1)
+       ON CONFLICT (subject, issue_id) DO UPDATE
+          SET acked_verdict_at = excluded.acked_verdict_at, acked_at = now()`,
+      [viewer.identity.subject, ids],
+    );
+    return reply.send({ api_version: API_VERSION, acknowledged: rowCount ?? 0 });
   });
 }

@@ -173,3 +173,177 @@ ul.checks { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; fle
 .spinner-mark { width: 0.7rem; height: 0.7rem; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner-mark { animation: none; } }
+
+/* -- B-1 screens ---------------------------------------------------------
+   Same rule as above: colour never carries a state alone. Every dot,
+   pill and badge sits beside the word it means. */
+
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 0.5rem;
+  padding: 1rem 1.1rem; margin-bottom: 1.1rem;
+}
+.panel h3 { margin: 0 0 0.6rem; font-size: 1.05rem; display: flex; align-items: baseline; gap: 0.5rem; }
+.small { font-size: 0.86rem; }
+
+table.grid { width: 100%; border-collapse: collapse; margin-top: 0.4rem; }
+table.grid th {
+  text-align: left; font-weight: 600; font-size: 0.82rem; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--muted); border-bottom: 1px solid var(--line);
+  padding: 0.35rem 0.6rem 0.35rem 0;
+}
+table.grid td { padding: 0.5rem 0.6rem 0.5rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.grid tr:last-child td { border-bottom: 0; }
+
+.notice.warn { border-color: var(--amber); }
+
+/* doc-status tiles: a count and its word, never a bare numeral */
+.tiles { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 0.3rem 0 0.6rem; }
+.tile {
+  border: 1px solid var(--line); border-radius: 0.45rem; padding: 0.6rem 0.9rem;
+  min-width: 6.5rem; display: flex; flex-direction: column; gap: 0.1rem;
+}
+.tile-n { font-size: 1.6rem; font-weight: 640; letter-spacing: -0.02em; line-height: 1.1; }
+.tile-label { color: var(--muted); font-size: 0.85rem; }
+.tile-verified { border-left: 3px solid var(--green); }
+.tile-contaminated { border-left: 3px solid var(--red); }
+.tile-stale { border-left: 3px solid var(--amber); }
+.tile-draft { border-left: 3px solid var(--grey); }
+
+.count-badge {
+  display: inline-block; min-width: 1.25rem; padding: 0 0.35rem; margin-left: 0.35rem;
+  border-radius: 0.7rem; background: var(--bg); border: 1px solid var(--line);
+  font-size: 0.8rem; text-align: center; color: var(--muted);
+}
+
+/* contamination + lineage */
+.contam-why, .contam-path { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: baseline; margin-top: 0.3rem; }
+.contam-why .label, .contam-path .label, .config-row .label, .attestations .label {
+  color: var(--muted); min-width: 4.5rem; font-size: 0.86rem;
+}
+.hops { display: inline-flex; gap: 0.4rem; flex-wrap: wrap; align-items: baseline; }
+.arrow { color: var(--muted); }
+
+ul.pr-list, ul.edge-list, ul.job-list, ul.hook-list, ul.inbox-list, ul.issue-list {
+  list-style: none; margin: 0.3rem 0 0; padding: 0;
+}
+ul.pr-list li { padding: 0.3rem 0; }
+ul.edge-list li { padding: 0.2rem 0; display: flex; gap: 0.45rem; flex-wrap: wrap; align-items: baseline; }
+.filter { display: flex; flex-direction: column; gap: 0.25rem; max-width: 22rem; margin-bottom: 0.5rem; }
+.filter input {
+  font: inherit; padding: 0.35rem 0.5rem; border: 1px solid var(--line);
+  border-radius: 0.35rem; background: var(--bg); color: var(--ink);
+}
+
+/* -- gap triage ----------------------------------------------------------- */
+
+.tabs { display: flex; gap: 0.4rem; margin-bottom: 0.9rem; flex-wrap: wrap; }
+.tabs button.active { border-color: var(--accent); font-weight: 620; }
+
+.issue {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 0.5rem;
+  padding: 0.85rem 1rem; margin-bottom: 0.75rem;
+}
+.issue-head { display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
+.issue-meta { margin-top: 0.25rem; }
+
+.pill {
+  display: inline-block; padding: 0.05rem 0.5rem; border-radius: 0.7rem;
+  font-size: 0.78rem; border: 1px solid var(--line); color: var(--muted);
+}
+.pill-open { border-color: var(--amber); color: var(--amber); }
+.pill-approved { border-color: var(--green); color: var(--green); }
+.pill-rejected { border-color: var(--red); color: var(--red); }
+.pill-batched { border-color: var(--accent); color: var(--accent); }
+.pill-resolved { border-color: var(--green); color: var(--green); }
+
+.reopened { margin-top: 0.4rem; border-left: 3px solid var(--amber); padding: 0.4rem 0.75rem; background: var(--bg); border-radius: 0 0.35rem 0.35rem 0; }
+.resolved-line { margin-top: 0.35rem; }
+
+.proposal { margin: 0.5rem 0 0; border: 1px dashed var(--line); border-radius: 0.4rem; padding: 0.55rem 0.8rem; }
+.proposal-label { color: var(--muted); font-size: 0.84rem; }
+.proposal blockquote, .inbox-body blockquote {
+  margin: 0.4rem 0 0; padding-left: 0.75rem; border-left: 3px solid var(--line);
+  white-space: pre-wrap; font-style: italic;
+}
+
+.event-stream { margin: 0.5rem 0 0; padding-left: 1.2rem; }
+.event-stream li { margin-bottom: 0.6rem; }
+.event-head { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: baseline; font-size: 0.88rem; }
+.event-desc { margin: 0.2rem 0 0; }
+
+.verdict { margin-top: 0.7rem; border-top: 1px solid var(--line); padding-top: 0.6rem; }
+.reject-form { margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.4rem; max-width: 34rem; }
+.reject-form label { display: flex; flex-direction: column; gap: 0.25rem; }
+.reject-form textarea, .add-form textarea, .add-form input {
+  font: inherit; padding: 0.4rem 0.55rem; border: 1px solid var(--line);
+  border-radius: 0.35rem; background: var(--bg); color: var(--ink);
+}
+.reject-form button { align-self: flex-start; }
+.kind-choice { display: flex; flex-direction: column; gap: 0.4rem; }
+.kind-choice label { display: flex; gap: 0.5rem; align-items: flex-start; }
+
+/* -- publish -------------------------------------------------------------- */
+
+.deliver-card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 0.5rem;
+  padding: 1rem 1.1rem; margin-bottom: 1rem;
+}
+.deliver-card.dangling { border-left: 3px solid var(--amber); }
+.deliver-card header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.deliver-card h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+.attestations { margin-top: 0.8rem; }
+
+/* -- ops (class is `ops-module`, never `ops`: DT-2 greps the shipped
+   bundle for role names, and a CSS class colliding with one would make
+   that assertion unreadable rather than wrong) ------------------------------------------------------------------ */
+
+.job { padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
+.job:last-child { border-bottom: 0; }
+.job-head { display: flex; gap: 0.55rem; align-items: baseline; flex-wrap: wrap; }
+.job-error { margin-top: 0.25rem; color: var(--red); }
+.hook { padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
+.hook:last-child { border-bottom: 0; }
+.hook-head { display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
+
+.secret-once {
+  margin-top: 0.55rem; border: 2px solid var(--amber); border-radius: 0.4rem;
+  padding: 0.7rem 0.9rem; background: var(--bg);
+}
+.secret-value { display: block; margin: 0.45rem 0; word-break: break-all; font-size: 1rem; }
+.secret-once p { margin: 0; color: var(--muted); font-size: 0.88rem; }
+
+.config-row { margin-top: 0.6rem; display: flex; gap: 0.75rem; align-items: flex-start; flex-wrap: wrap; }
+pre.config {
+  margin: 0; padding: 0.5rem 0.7rem; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 0.35rem; overflow-x: auto; font-size: 0.85rem; flex: 1; min-width: 16rem;
+}
+
+/* -- inbox (F-10 / UI-D) --------------------------------------------------- */
+
+.nav-inbox { margin-top: 0.6rem; border-top: 1px solid var(--line); padding-top: 0.7rem; display: flex; justify-content: space-between; align-items: center; }
+.badge {
+  min-width: 1.3rem; padding: 0 0.4rem; border-radius: 0.7rem;
+  background: var(--accent); color: var(--panel); font-size: 0.78rem;
+  font-weight: 640; text-align: center;
+}
+.inbox-bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.7rem; }
+.inbox-item {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 0.5rem;
+  padding: 0.8rem 1rem; margin-bottom: 0.7rem;
+}
+.inbox-item.unread { border-left: 3px solid var(--accent); }
+.inbox-head { display: flex; gap: 0.5rem; align-items: baseline; }
+.unread-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--accent); display: inline-block; }
+.inbox-body { margin-top: 0.4rem; }
+.inbox-body .label { color: var(--muted); font-size: 0.86rem; }
+.inbox-body.rejected { border-left: 3px solid var(--amber); padding-left: 0.7rem; }
+.inbox-body.resolved { border-left: 3px solid var(--green); padding-left: 0.7rem; }
+
+.returned-note {
+  margin-top: 0.45rem; border-left: 3px solid var(--accent); padding: 0.45rem 0.75rem;
+  background: var(--bg); border-radius: 0 0.35rem 0.35rem 0;
+}
+.returned-note blockquote {
+  margin: 0.35rem 0; padding-left: 0.7rem; border-left: 2px solid var(--line);
+  font-style: italic; white-space: pre-wrap;
+}

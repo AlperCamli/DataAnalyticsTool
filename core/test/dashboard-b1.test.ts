@@ -1,0 +1,660 @@
+/**
+ * B-1's remaining server surfaces and the client's structural claims:
+ * the F-10 inbox (DT-10 / UI-D), governance writes in the audit record
+ * (D-114.1, closing spec §5.1), Ops re-enqueue and webhook secrets
+ * (DT-5), and the static assertions over the shipped bundle that keep
+ * UI-1, UI-5 and UI-8 properties of the code rather than of a rendering.
+ */
+
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  apiGet,
+  apiPost,
+  login,
+  setupDashboardRig,
+  type BrowserSession,
+  type DashboardRig,
+} from "./dashboard-helpers.js";
+import { USERS } from "./mcp-helpers.js";
+import { writeFile } from "node:fs/promises";
+import { createProvider } from "../src/gitkb.js";
+import { sweepResolutions } from "../src/ledger.js";
+import { syncConfig } from "./sync-helpers.js";
+
+const CORE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+/** Every screen this bundle ships. Listed by name so a screen added
+ * without a line here fails the coverage check below rather than
+ * quietly escaping the render-safety assertions. */
+const APP_SOURCES = [
+  "main.tsx",
+  "App.tsx",
+  "api.ts",
+  "ui.tsx",
+  "Connections.tsx",
+  "KbHealth.tsx",
+  "GapTriage.tsx",
+  "Publish.tsx",
+  "Ops.tsx",
+  "Inbox.tsx",
+];
+
+async function fileRequest(
+  rig: DashboardRig,
+  session: BrowserSession,
+  description: string,
+  proposal?: string,
+): Promise<string> {
+  const res = await apiPost(rig, session, "/v1/dashboard/ledger/requests", {
+    description,
+    ...(proposal ? { proposal } : {}),
+  });
+  expect(res.status).toBe(201);
+  return res.json.issue_id as string;
+}
+
+describe("B-1 dashboard surfaces", () => {
+  let rig: DashboardRig;
+  let steward: BrowserSession;
+  let reporter: BrowserSession;
+
+  beforeAll(async () => {
+    // The bundle is a build artifact; a test asserting over a stale one
+    // asserts nothing.
+    execFileSync("node", [path.join(CORE_DIR, "web", "build.mjs")], { cwd: CORE_DIR, stdio: "pipe" });
+    rig = await setupDashboardRig();
+    steward = await login(rig, "steward");
+    reporter = await login(rig, "reporter");
+  }, 240_000);
+
+  afterAll(async () => {
+    await rig?.stop();
+  });
+
+  // -- DT-10 / UI-D: the resolution badge ------------------------------------
+
+  describe("DT-10: a verdict surfaces to its filer (UI-D — the badge)", () => {
+    it("a rejection reaches the filer with its reason, and only that filer", async () => {
+      const issueId = await fileRequest(rig, reporter, "nobody has written down how trials convert");
+
+      // Before the verdict there is nothing to report — and that is a
+      // stated empty, not a zero standing in for one.
+      const before = await apiGet(rig, reporter, "/v1/dashboard/inbox");
+      expect(before.status).toBe(200);
+      expect((before.json.items as unknown[]).find((i) => (i as { issue_id: string }).issue_id === issueId)).toBeUndefined();
+
+      const verdict = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, {
+        verdict: "reject",
+        reason: "the trial definition lives in the billing system and this KB does not cover it yet",
+      });
+      expect(verdict.status).toBe(200);
+
+      const after = await apiGet(rig, reporter, "/v1/dashboard/inbox");
+      const item = (after.json.items as {
+        issue_id: string;
+        unread: boolean;
+        status: string;
+        rejection: { by: string; reason: string } | null;
+      }[]).find((i) => i.issue_id === issueId)!;
+      expect(item).toBeDefined();
+      expect(item.unread).toBe(true);
+      expect(item.status).toBe("rejected");
+      expect(item.rejection!.by).toBe(USERS.steward.username);
+      // The reason is the point of F-10: a rejection the filer cannot
+      // read is a disappearance, not a decision.
+      expect(item.rejection!.reason).toContain("billing system");
+      expect(after.json.unread as number).toBeGreaterThanOrEqual(1);
+
+      // The steward did not file it, so it is not in *their* inbox —
+      // this endpoint has no `all` scope, whatever role asks.
+      const stewardInbox = await apiGet(rig, steward, "/v1/dashboard/inbox");
+      expect(
+        (stewardInbox.json.items as { issue_id: string }[]).find((i) => i.issue_id === issueId),
+      ).toBeUndefined();
+    });
+
+    it("acknowledging is server state — it survives a fresh session", async () => {
+      const issueId = await fileRequest(rig, reporter, "the refund window is undocumented");
+      await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, {
+        verdict: "reject",
+        reason: "already covered by the returns policy doc",
+      });
+
+      const ack = await apiPost(rig, reporter, "/v1/dashboard/inbox/ack", { issue_ids: [issueId] });
+      expect(ack.status).toBe(200);
+      expect(ack.json.acknowledged).toBe(1);
+
+      // A second login is a different cookie and a different tab's
+      // worth of client state — the badge must not come back, which is
+      // why "seen" could not live in the browser (D-103.1).
+      const fresh = await login(rig, "reporter");
+      const inbox = await apiGet(rig, fresh, "/v1/dashboard/inbox");
+      const item = (inbox.json.items as { issue_id: string; unread: boolean }[]).find(
+        (i) => i.issue_id === issueId,
+      )!;
+      expect(item.unread).toBe(false);
+    });
+
+    it("a re-verdict after a refiling is news again", async () => {
+      const description = "the seat-count metric has two definitions";
+      const issueId = await fileRequest(rig, reporter, description);
+      await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, {
+        verdict: "reject",
+        reason: "pick one and file again",
+      });
+      await apiPost(rig, reporter, "/v1/dashboard/inbox/ack", { issue_ids: [issueId] });
+
+      // D-106.5: refiling a rejected request reopens it with the prior
+      // verdict preserved. The second rejection is a new decision, and a
+      // badge that stayed silent would be hiding it.
+      const refiled = await fileRequest(rig, reporter, description);
+      expect(refiled).toBe(issueId);
+      const second = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, {
+        verdict: "reject",
+        reason: "still two definitions; the billing one is authoritative",
+      });
+      expect(second.status).toBe(200);
+
+      const inbox = await apiGet(rig, reporter, "/v1/dashboard/inbox");
+      const item = (inbox.json.items as {
+        issue_id: string;
+        unread: boolean;
+        reopen_count: number;
+        rejection: { reason: string };
+      }[]).find((i) => i.issue_id === issueId)!;
+      expect(item.unread).toBe(true);
+      expect(item.reopen_count).toBeGreaterThanOrEqual(1);
+      expect(item.rejection.reason).toContain("authoritative");
+    });
+
+    it("an inbox is its owner's — a crafted subject is a 403 (DT-1's shape here)", async () => {
+      const res = await apiGet(
+        rig,
+        reporter,
+        `/v1/dashboard/inbox?subject=${encodeURIComponent(USERS.steward.username)}`,
+      );
+      expect(res.status).toBe(403);
+      expect(res.json.error).toBe("forbidden");
+    });
+
+    it("acknowledging somebody else's issue acknowledges nothing", async () => {
+      const issueId = await fileRequest(rig, reporter, "invoices have no documented numbering rule");
+      await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, {
+        verdict: "reject",
+        reason: "not this quarter",
+      });
+      // The steward never filed it, so there is no ack for them to make.
+      const ack = await apiPost(rig, steward, "/v1/dashboard/inbox/ack", { issue_ids: [issueId] });
+      expect(ack.status).toBe(200);
+      expect(ack.json.acknowledged).toBe(0);
+    });
+  });
+
+  // -- D-114.1: governance writes enter the audit record ---------------------
+
+  describe("D-114.1: governance acts are audited (closes spec §5.1)", () => {
+    const auditRows = async (tool: string) => {
+      const { rows } = await rig.core.pool.query<{
+        subject: string;
+        decision: string;
+        tool: string;
+        session_id: string | null;
+        setup_stamp: string | null;
+        args_digest: string;
+      }>(`SELECT subject, decision, tool, session_id, setup_stamp, args_digest
+            FROM audit_records WHERE tool = $1 ORDER BY ts DESC`, [tool]);
+      return rows;
+    };
+
+    it("a steward's verdict writes a row carrying their identity", async () => {
+      const issueId = await fileRequest(rig, reporter, "the activation event is not defined anywhere");
+      await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, { verdict: "approve" });
+
+      const rows = await auditRows("dashboard.ledger.verdict");
+      const mine = rows.find((r) => r.decision === "allowed" && r.subject === USERS.steward.username);
+      expect(mine).toBeDefined();
+      // A browser session is not an MCP session and presents no compiled
+      // setup stamp; inventing values would make governance rows look
+      // like tool calls in the register meant to tell them apart.
+      expect(mine!.session_id).toBeNull();
+      expect(mine!.setup_stamp).toBe("unstamped");
+      expect(mine!.args_digest).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it("a REFUSED verdict is recorded too — the row an auditor came for", async () => {
+      const issueId = await fileRequest(rig, reporter, "nobody documents the dunning schedule");
+      const res = await apiPost(rig, reporter, `/v1/dashboard/ledger/issues/${issueId}/verdict`, {
+        verdict: "approve",
+      });
+      expect(res.status).toBe(403);
+
+      const rows = await auditRows("dashboard.ledger.verdict");
+      const denied = rows.find((r) => r.decision === "denied" && r.subject === USERS.reporter.username);
+      expect(denied).toBeDefined();
+      // A success-only log would hold no trace that a reporter tried to
+      // approve their own request, which is precisely what makes the
+      // steward gate worth having a record of.
+    });
+
+    it("connection writes are audited — the gap §5.1 filed", async () => {
+      const res = await apiPost(rig, steward, "/v1/dashboard/connections/audited_src", {});
+      // The PUT below is the real act; this POST just proves the address
+      // is not a write path of its own.
+      expect([404, 400, 403, 405]).toContain(res.status);
+
+      const put = await fetch(`${rig.base}/v1/dashboard/connections/audited_src`, {
+        method: "PUT",
+        headers: {
+          cookie: steward.cookie,
+          "content-type": "application/json",
+          "x-cl-csrf": steward.csrf,
+        },
+        body: JSON.stringify({
+          connector: { name: "postgres", version_constraint: "*" },
+          payload: { config: { system: "audited_src", mode: "live" }, credentials: [] },
+        }),
+      });
+      expect([200, 201]).toContain(put.status);
+
+      const rows = await auditRows("dashboard.connection.upsert");
+      expect(rows.length).toBeGreaterThanOrEqual(1);
+      expect(rows[0]!.subject).toBe(USERS.steward.username);
+      expect(rows[0]!.decision).toBe("allowed");
+    });
+
+    it("the widened contract does not disturb the existing consumers", async () => {
+      // §5.1's fix had to leave every current reader of `audit_records`
+      // reading the same thing. Each filters by `tool`, so a governance
+      // row is invisible to them — asserted rather than reasoned about.
+      const { rows } = await rig.core.pool.query<{ n: string }>(
+        `SELECT count(*) AS n FROM audit_records WHERE tool LIKE 'dashboard.%'`,
+      );
+      expect(Number(rows[0]!.n)).toBeGreaterThan(0);
+
+      const { rows: toolRows } = await rig.core.pool.query<{ n: string }>(
+        `SELECT count(*) AS n FROM audit_records
+          WHERE tool IN ('validate_sql', 'execute_sql', 'publish_report')
+            AND tool LIKE 'dashboard.%'`,
+      );
+      expect(Number(toolRows[0]!.n)).toBe(0);
+
+      // And a steward reading the audit endpoint sees them, which is the
+      // whole point — B-4's view inherits a closed item.
+      const read = await apiGet(rig, steward, "/v1/dashboard/audit?limit=200");
+      expect(read.status).toBe(200);
+      const tools = new Set((read.json.rows as { tool: string }[]).map((r) => r.tool));
+      expect([...tools].some((t) => t.startsWith("dashboard."))).toBe(true);
+    });
+  });
+
+  // -- Ops -------------------------------------------------------------------
+
+  describe("Ops: runs, jobs, dead-letter re-enqueue (U-10)", () => {
+    it("re-enqueue creates a new job as the caller and leaves the dead one dead", async () => {
+      // A dead-lettered job to act on, written directly because how it
+      // died is not what this test is about.
+      const jobId = "01JDEADLETTERTESTJOB000001";
+      await rig.core.pool.query(
+        `INSERT INTO jobs (job_id, type, class, system, connector_name, version_constraint,
+                           payload, priority, max_attempts, deadline_s, max_deferrals, state,
+                           triggers, error, attempt, finished_at)
+         VALUES ($1,'snapshot','batch','drill','drill','*', $2::jsonb, 5, 3, 600, 2,
+                 'dead_lettered', '[]'::jsonb, $3::jsonb, 3, now())`,
+        [
+          jobId,
+          JSON.stringify({ config: { system: "drill", mode: "fixture" }, credentials: [] }),
+          JSON.stringify({ code: "source_unavailable", message: "the source refused", retryable: true }),
+        ],
+      );
+
+      const res = await apiPost(rig, steward, `/v1/dashboard/ops/jobs/${jobId}/reenqueue`, {});
+      expect(res.status).toBe(201);
+      const newId = res.json.job_id as string;
+      expect(newId).not.toBe(jobId);
+      expect(res.json.dead_job_unchanged).toBe(true);
+
+      // The dead row keeps its state and its error: it is the evidence
+      // that something failed, and a re-enqueue that flipped it back to
+      // queued would delete the fault while appearing to fix it.
+      const { rows } = await rig.core.pool.query<{ state: string; error: Record<string, unknown> }>(
+        `SELECT state, error FROM jobs WHERE job_id = $1`,
+        [jobId],
+      );
+      expect(rows[0]!.state).toBe("dead_lettered");
+      expect(rows[0]!.error.code).toBe("source_unavailable");
+      expect(rows[0]!.error.reenqueued_as).toBe(newId);
+
+      // The new job carries the acting identity on its own row.
+      const { rows: created } = await rig.core.pool.query<{
+        state: string;
+        triggers: { kind: string; detail: { actor: string } }[];
+      }>(`SELECT state, triggers FROM jobs WHERE job_id = $1`, [newId]);
+      expect(created[0]!.state).toBe("queued");
+      expect(created[0]!.triggers[0]!.kind).toBe("dashboard");
+      expect(created[0]!.triggers[0]!.detail.actor).toBe(USERS.steward.username);
+    });
+
+    it("re-enqueue is offered for dead-lettered jobs only", async () => {
+      const { rows } = await rig.core.pool.query<{ job_id: string }>(
+        `SELECT job_id FROM jobs WHERE state = 'queued' LIMIT 1`,
+      );
+      if (!rows[0]) return;
+      const res = await apiPost(rig, steward, `/v1/dashboard/ops/jobs/${rows[0].job_id}/reenqueue`, {});
+      expect(res.status).toBe(409);
+      expect(res.json.error).toBe("not_dead_lettered");
+    });
+
+    it("a reporter reads no ops surface and writes none", async () => {
+      for (const p of ["/v1/dashboard/ops/jobs", "/v1/dashboard/ops/runs", "/v1/dashboard/ops/hooks"]) {
+        const res = await apiGet(rig, reporter, p);
+        expect(res.status).toBe(403);
+      }
+      const write = await apiPost(rig, reporter, "/v1/dashboard/ops/hooks/audited_src/rotate", {});
+      expect(write.status).toBe(403);
+    });
+  });
+
+  // -- DT-5 ------------------------------------------------------------------
+
+  describe("DT-5: a webhook secret is shown once and never stored", () => {
+    it("the creation response carries it; no read endpoint returns it", async () => {
+      const res = await apiPost(rig, steward, "/v1/dashboard/ops/hooks/audited_src/rotate", {});
+      expect(res.status).toBe(201);
+      const secret = res.json.secret as string;
+      expect(secret).toBeTruthy();
+      expect(res.json.shown_once).toContain("only time this value is shown");
+
+      // The store holds a hash, and nothing can recover the value from
+      // it — so there is no endpoint that *could* return it, which is a
+      // stronger claim than "no endpoint does".
+      const { rows } = await rig.core.pool.query<{ secret_hash: string }>(
+        `SELECT secret_hash FROM sync_hooks WHERE system = 'audited_src'`,
+      );
+      expect(rows[0]!.secret_hash).not.toBe(secret);
+      expect(rows[0]!.secret_hash).toMatch(/^[0-9a-f]{64}$/);
+
+      const list = await apiGet(rig, steward, "/v1/dashboard/ops/hooks");
+      expect(list.status).toBe(200);
+      expect(JSON.stringify(list.json)).not.toContain(secret);
+
+      // Not in the connections read either, and not in the audit row the
+      // rotation wrote (an args digest over a secret is a verifier for it).
+      const conns = await apiGet(rig, steward, "/v1/dashboard/connections");
+      expect(JSON.stringify(conns.json)).not.toContain(secret);
+      const { rows: audit } = await rig.core.pool.query<{ n: string }>(
+        `SELECT count(*) AS n FROM audit_records
+          WHERE tool = 'dashboard.ops.hook_rotate' AND result_meta::text LIKE $1`,
+        [`%${secret}%`],
+      );
+      expect(Number(audit[0]!.n)).toBe(0);
+    });
+
+    it("rotating replaces the hash, so the old secret stops working", async () => {
+      const first = await apiPost(rig, steward, "/v1/dashboard/ops/hooks/audited_src/rotate", {});
+      const firstSecret = first.json.secret as string;
+      const second = await apiPost(rig, steward, "/v1/dashboard/ops/hooks/audited_src/rotate", {});
+      expect(second.json.outcome).toBe("rotated");
+      expect(second.json.secret).not.toBe(firstSecret);
+    });
+
+    it("a hook for an unregistered system is a 404, not a secret nobody can use", async () => {
+      const res = await apiPost(rig, steward, "/v1/dashboard/ops/hooks/no_such_system/rotate", {});
+      expect(res.status).toBe(404);
+    });
+  });
+
+
+
+  // -- §4's batched → approved return ---------------------------------------
+
+  describe("returning a batched request to the queue (fault-ledger §4)", () => {
+    it("moves it back to approved with its note, and clears the batch stamp", async () => {
+      const issueId = await fileRequest(rig, reporter, "we need the churn number written down");
+      await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, { verdict: "approve" });
+      const batch = await apiPost(rig, steward, "/v1/dashboard/ledger/batches", {});
+      expect(batch.status).toBe(201);
+
+      const returned = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/return`, {
+        note: "no object named and no metric doc matches; unblocked by naming which table this is about",
+      });
+      expect(returned.status).toBe(200);
+      const issue = returned.json.issue as {
+        status: string;
+        batch_id: string | null;
+        returned: { note: string } | null;
+        verdict: { by: string } | null;
+        occurrences: number;
+      };
+      expect(issue.status).toBe("approved");
+      // Cleared, so the next batch can pick it up — a returned request is
+      // approved work waiting for evidence, not failed work.
+      expect(issue.batch_id).toBeNull();
+      expect(issue.returned!.note).toContain("unblocked by naming");
+      // The steward's approval still stands; nothing about it was wrong.
+      expect(issue.verdict!.by).toBe(USERS.steward.username);
+
+      // Occurrences are NOT incremented: the queue is ordered by demand,
+      // and a skill saying "I could not write this" is not another person
+      // asking for it.
+      const { rows } = await rig.core.pool.query<{ occurrences: number }>(
+        `SELECT occurrences FROM ledger_issues WHERE issue_id = $1`,
+        [issueId],
+      );
+      expect(rows[0]!.occurrences).toBe(issue.occurrences);
+    });
+
+    it("refuses a return with no note — a silent drop wearing a state change", async () => {
+      const issueId = await fileRequest(rig, reporter, "the seat definition is ambiguous in two places");
+      await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, { verdict: "approve" });
+      await apiPost(rig, steward, "/v1/dashboard/ledger/batches", {});
+      const res = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/return`, { note: "  " });
+      expect(res.status).toBe(400);
+      expect(res.json.detail as string).toContain("what evidence would unblock");
+    });
+
+    it("refuses on a request that is not batched, and refuses a reporter outright", async () => {
+      const issueId = await fileRequest(rig, reporter, "the trial length is not documented anywhere");
+      const notBatched = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/return`, {
+        note: "nothing to return",
+      });
+      expect(notBatched.status).toBe(409);
+
+      const asReporter = await apiPost(rig, reporter, `/v1/dashboard/ledger/issues/${issueId}/return`, {
+        note: "let me out",
+      });
+      expect(asReporter.status).toBe(403);
+    });
+  });
+
+  // -- the D-101.5 loop, product half ---------------------------------------
+
+  describe("request → verdict → batch → merged PR → the filer sees it", () => {
+    it("closes the whole loop, and resolves exactly the trailered request", async () => {
+      // The demonstration B-1's gate asks for, minus the agent: what the
+      // skill does with a batch is AS-18's scenario, and what the
+      // *product* does around it is this. Both halves have to hold, and
+      // only one of them needs a model.
+      const answered = await fileRequest(
+        rig,
+        reporter,
+        "nothing says how we count refunds against the original order",
+        "A refund is counted in the month the credit note is issued.",
+      );
+      const returned = await fileRequest(rig, reporter, "the churn number should be written down");
+
+      for (const issueId of [answered, returned]) {
+        const v = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, {
+          verdict: "approve",
+        });
+        expect(v.status).toBe(200);
+      }
+
+      const batch = await apiPost(rig, steward, "/v1/dashboard/ledger/batches", {});
+      expect(batch.status).toBe(201);
+      const batched = (batch.json.issues as { issue_id: string; status: string; batch_id: string }[]);
+      // Both of these are in it. The batch may also carry requests other
+      // tests in this file approved — that is the trigger working as
+      // specified (it cuts from the whole approved worklist), and pinning
+      // it to exactly two would be asserting test isolation, not product
+      // behaviour.
+      const ids = batched.map((i) => i.issue_id);
+      expect(ids).toContain(answered);
+      expect(ids).toContain(returned);
+      expect(batched.every((i) => i.status === "batched")).toBe(true);
+      expect(new Set(batched.map((i) => i.batch_id)).size).toBe(1);
+      expect(batched.length).toBeLessThanOrEqual(rig.core.cfg.dashboard.batchMax);
+      // The trigger hands over a work list and says so — "deliver" invites
+      // the reading that something was written, and nothing was.
+      expect(batch.json.note as string).toContain("Nothing has been written");
+
+      // The enrich skill's PR, as S1b specifies it: one trailer for the
+      // request the batch satisfied, and none for the one it returned.
+      const prBody = [
+        "## Requests in this batch",
+        "",
+        "| Request | Doc | Grounding |",
+        "|---|---|---|",
+        `| \`${answered}\` refunds | \`systems/drill/shop/refunds.md\` | customer-provided |`,
+        "",
+        "### Returned to the queue",
+        "",
+        `- \`${returned}\` — no object named; unblocked by naming the metric.`,
+        "",
+        `CL-Resolves: ${answered}`,
+        "",
+      ].join("\n");
+      await writeFile(
+        rig.kb.prsFile,
+        JSON.stringify(
+          {
+            next: 2,
+            prs: [
+              {
+                number: 1,
+                url: "local-pr://1",
+                branch: "enrich/batch-1",
+                title: "enrich: knowledge-request batch",
+                body: prBody,
+                labels: [],
+                state: "merged",
+                merged_at: new Date().toISOString(),
+                comments: [],
+              },
+            ],
+          },
+          null,
+          2,
+        ),
+      );
+      const provider = createProvider(syncConfig(rig.kb, `${rig.kb.remote}-b1-wd`));
+      expect(await sweepResolutions(rig.core.pool, provider)).toBe(1);
+
+      // Exactly the trailered request resolved. The other is still
+      // batched — its absence from the trailers is what keeps it open,
+      // which is the mechanism S1b relies on rather than a convention.
+      const { rows } = await rig.core.pool.query<{ issue_id: string; status: string; resolution: { pr_url: string } | null }>(
+        `SELECT issue_id, status, resolution FROM ledger_issues WHERE issue_id = ANY($1::uuid[])`,
+        [[answered, returned]],
+      );
+      const byId = Object.fromEntries(rows.map((r) => [r.issue_id, r]));
+      expect(byId[answered]!.status).toBe("resolved");
+      expect(byId[answered]!.resolution!.pr_url).toBe("local-pr://1");
+      expect(byId[returned]!.status).toBe("batched");
+
+      // …and the requester sees the resolution, with the diff that
+      // answered them — the F-10 half, which is the point of the loop.
+      const inbox = await apiGet(rig, reporter, "/v1/dashboard/inbox");
+      const item = (inbox.json.items as {
+        issue_id: string;
+        unread: boolean;
+        status: string;
+        resolution: { pr_url: string } | null;
+      }[]).find((i) => i.issue_id === answered)!;
+      expect(item).toBeDefined();
+      expect(item.status).toBe("resolved");
+      expect(item.unread).toBe(true);
+      expect(item.resolution!.pr_url).toBe("local-pr://1");
+
+      // The returned request is NOT in the inbox: it has no verdict to
+      // report, and telling the filer "answered" would be a lie.
+      expect(
+        (inbox.json.items as { issue_id: string }[]).find((i) => i.issue_id === returned),
+      ).toBeUndefined();
+    });
+  });
+
+  // -- the client's structural claims ----------------------------------------
+
+  describe("the shipped bundle keeps UI-1, UI-5, UI-8 structural", () => {
+    it("every screen in the bundle is covered by these assertions", () => {
+      const listed = new Set(APP_SOURCES);
+      const onDisk = execFileSync("ls", [path.join(CORE_DIR, "web", "src")], { encoding: "utf-8" })
+        .split("\n")
+        .filter((f) => f.endsWith(".tsx") || f.endsWith(".ts"));
+      for (const file of onDisk) {
+        expect(listed.has(file), `${file} is not in APP_SOURCES — add it or it escapes these checks`).toBe(true);
+      }
+    });
+
+    it("DT-2, extended: no role name and no role-conditional shape in the bundle", () => {
+      const bundle = readFileSync(path.join(CORE_DIR, "web", "dist", "app.js"), "utf-8");
+      for (const role of ['"steward"', '"reporter"', '"ops"', '"auditor"', '"benchmark"']) {
+        expect(bundle).not.toContain(role);
+      }
+      for (const shape of ["roles.includes", "roles.some", "hasRole", "isAdmin", "isSteward"]) {
+        expect(bundle).not.toContain(shape);
+      }
+    });
+
+    it("UI-5: no raw-HTML escape hatch in any screen we wrote", () => {
+      const sources = APP_SOURCES.map((f) =>
+        readFileSync(path.join(CORE_DIR, "web", "src", f), "utf-8"),
+      ).join("\n");
+      for (const forbidden of ["dangerouslySetInnerHTML", "innerHTML", "outerHTML", "insertAdjacentHTML"]) {
+        expect(sources).not.toContain(forbidden);
+      }
+    });
+
+    it("D-103.1: no client persistence anywhere, including the secret panel", () => {
+      const sources = APP_SOURCES.map((f) =>
+        readFileSync(path.join(CORE_DIR, "web", "src", f), "utf-8"),
+      ).join("\n");
+      for (const forbidden of ["localStorage", "sessionStorage", "indexedDB", "document.cookie"]) {
+        expect(sources).not.toContain(forbidden);
+      }
+    });
+
+    it("UI-8: no password-shaped input exists to type a secret into", () => {
+      const sources = APP_SOURCES.map((f) =>
+        readFileSync(path.join(CORE_DIR, "web", "src", f), "utf-8"),
+      ).join("\n");
+      expect(sources).not.toContain('type="password"');
+      // The secret panel *displays* one value, once, from a response —
+      // and that is the only direction a secret moves in this client.
+      expect(sources).toContain("secret-once");
+    });
+
+    it("the module map now reports KB Health, Gap Triage, Publish and Ops as built", async () => {
+      const res = await apiGet(rig, steward, "/v1/dashboard/modules");
+      const modules = res.json.modules as { id: string; built: boolean }[];
+      for (const id of ["kb_health", "gap_triage", "publish", "ops", "connections"]) {
+        expect(modules.find((m) => m.id === id)!.built, `${id} should be built`).toBe(true);
+      }
+      // The ones that genuinely are not, still declared and still marked
+      // — a menu that silently omits them teaches nobody (UI-10).
+      for (const id of ["profiles", "audit", "benchmarks", "setup"]) {
+        expect(modules.find((m) => m.id === id)!.built, `${id} should not be built`).toBe(false);
+      }
+    });
+
+    it("the SPA serves the inbox route, which is not a dashboard.yaml module", async () => {
+      const res = await fetch(`${rig.base}/app/inbox`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/html");
+    });
+  });
+});

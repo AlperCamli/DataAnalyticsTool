@@ -1,0 +1,401 @@
+/**
+ * The Ops module's server half (dashboard spec §3, checkpoint B-1):
+ * run and job health with dead-letter re-enqueue (U-10), and webhook
+ * secret lifecycle (U-11, write-only per UI-8).
+ *
+ * These facts already had an HTTP surface — `/v1/runs`, `/v1/jobs`,
+ * `/v1/health-events` — but that surface is the **ops-token** one: a
+ * shared bearer credential, not a person. Reading it from a browser
+ * would mean either handing the SPA a service token (UI-2's exact
+ * prohibition) or letting the dashboard act as somebody it is not. So
+ * the module gets its own addresses on the session layer, and every act
+ * carries the acting identity to the row it writes.
+ *
+ * Two rules are load-bearing here.
+ *
+ * **Re-enqueue does not repair (D-114.9).** A dead-lettered job stays
+ * dead-lettered, with its error and its attempt count intact, because it
+ * is the evidence that something failed — rewriting its state would
+ * erase the fault the operator is looking at. The act enqueues a *new*
+ * job carrying the dead one's payload, under the caller's identity, and
+ * answers with the new job's id. The dead row gains a pointer to it and
+ * nothing else.
+ *
+ * **A secret is shown once, from the creation response (UI-8/DT-5).**
+ * The rotate route generates, stores only a sha256, and returns the
+ * plaintext in that one reply. There is no route here that reads a
+ * secret back, and there could not be — the store holds a hash.
+ */
+
+import { createHash, randomBytes } from "node:crypto";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import pg from "pg";
+import { writeGovernanceAudit } from "./audit.js";
+import { neutralize } from "./changelog.js";
+import type { CoreConfig } from "./config.js";
+import type { KbState } from "./kbread.js";
+import type { Identity } from "./oidc.js";
+import { profilesForRoles } from "./dashboard.js";
+import { enqueue, EnqueueError, listJobs } from "./queue.js";
+import { authenticate, type SessionDeps } from "./session.js";
+import { getSyncSystem, setHookSecret } from "./triggers.js";
+
+export const API_VERSION = "1";
+
+export interface OpsDeps extends SessionDeps {
+  cfg: CoreConfig;
+  pool: pg.Pool;
+  kb: { current(): Promise<KbState> };
+  log: (msg: string, err?: unknown) => void;
+}
+
+interface OpsViewer {
+  identity: Identity;
+  ws: KbState | null;
+  canWrite: boolean;
+  profile: string | null;
+}
+
+export function registerOps(app: FastifyInstance, deps: OpsDeps): void {
+  /**
+   * Same gate shape as Connections, and deliberately the same roles: an
+   * ops identity writes, a steward reads. Re-enqueueing a job and
+   * rotating a webhook secret are provisioning acts (UI-7), and the
+   * steward's job is to see the estate, not to run it.
+   */
+  async function viewerFor(
+    req: FastifyRequest,
+    reply: FastifyReply,
+    need: "read" | "write",
+  ): Promise<OpsViewer | null> {
+    const auth = await authenticate(deps, req, { write: need === "write" });
+    if (!auth.ok) {
+      await reply.code(auth.status).send({ error: auth.code, detail: auth.detail });
+      return null;
+    }
+    const canWrite = auth.identity.roles.some((role) => deps.cfg.dashboard.adminRoles.includes(role));
+    let ws: KbState | null = null;
+    let profiles = new Set<string>();
+    try {
+      ws = await deps.kb.current();
+      profiles = profilesForRoles(ws, auth.identity.roles);
+    } catch (err) {
+      deps.log("KB workspace unavailable while resolving ops access", err);
+    }
+    const profile = [...profiles].sort().join(",") || null;
+    const refuse = async (detail: string): Promise<null> => {
+      // The refusal is audited before it is sent (D-114.1): a denied
+      // governance act is exactly the row an auditor came for.
+      await writeGovernanceAudit(
+        deps.pool,
+        {
+          subject: auth.identity.subject,
+          roles: auth.identity.roles,
+          profile,
+          tool: `dashboard.ops.${need}`,
+          args: { path: req.url, method: req.method },
+          kbRef: ws?.headSha ?? null,
+          decision: "denied",
+          decisionReason: detail,
+        },
+        deps.log,
+      );
+      await reply.code(403).send({ error: "forbidden", detail });
+      return null;
+    };
+    if (need === "write" && !canWrite) {
+      return refuse(
+        "re-enqueueing a job and rotating a webhook secret are ops acts; " +
+          "this identity holds no ops role (dashboard spec §4, UI-7)",
+      );
+    }
+    if (!canWrite && !profiles.has("steward")) {
+      return refuse("run and job health is visible to ops and steward identities (dashboard spec §4)");
+    }
+    return { identity: auth.identity, ws, canWrite, profile };
+  }
+
+  const limitOf = (raw: unknown, fallback: number): number => {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 1) return fallback;
+    return Math.min(parsed, deps.cfg.dashboard.pageMax);
+  };
+
+  // -- runs (U-10) -----------------------------------------------------------
+
+  app.get("/v1/dashboard/ops/runs", async (req, reply) => {
+    const viewer = await viewerFor(req, reply, "read");
+    if (!viewer) return reply;
+    const query = (req.query ?? {}) as Record<string, unknown>;
+    const { rows } = await deps.pool.query<{
+      run_id: string;
+      triggers: unknown;
+      systems: string[];
+      kb_ref: string | null;
+      outcome: string;
+      pr_url: string | null;
+      classification_counts: Record<string, unknown> | null;
+      contaminated_docs: unknown[] | null;
+      started_at: string;
+      finished_at: string | null;
+      duration_ms: number | null;
+    }>(
+      `SELECT run_id, triggers, systems, kb_ref, outcome, pr_url,
+              classification_counts, contaminated_docs,
+              to_jsonb(started_at)  #>> '{}' AS started_at,
+              to_jsonb(finished_at) #>> '{}' AS finished_at, duration_ms
+         FROM runs ORDER BY started_at DESC LIMIT $1`,
+      [limitOf(query.limit, 25)],
+    );
+    return reply.send({
+      api_version: API_VERSION,
+      runs: rows.map((row) => ({
+        run_id: row.run_id,
+        systems: (row.systems ?? []).map((s) => neutralize(s)),
+        kb_ref: row.kb_ref,
+        outcome: neutralize(row.outcome),
+        pr_url: row.pr_url,
+        classification_counts: row.classification_counts ?? {},
+        // A count, not the list: the contaminated set has its own screen
+        // in KB Health, read from the KB rather than from a run record
+        // that may be several merges out of date.
+        contaminated_count: Array.isArray(row.contaminated_docs) ? row.contaminated_docs.length : 0,
+        triggers: row.triggers ?? [],
+        started_at: row.started_at,
+        finished_at: row.finished_at,
+        duration_ms: row.duration_ms,
+      })),
+    });
+  });
+
+  // -- jobs + dead letter (U-10) ---------------------------------------------
+
+  app.get("/v1/dashboard/ops/jobs", async (req, reply) => {
+    const viewer = await viewerFor(req, reply, "read");
+    if (!viewer) return reply;
+    const query = (req.query ?? {}) as Record<string, unknown>;
+    const state = typeof query.state === "string" && query.state ? query.state : undefined;
+    const system = typeof query.system === "string" && query.system ? query.system : undefined;
+    const rows = await listJobs(deps.pool, {
+      ...(state ? { state } : {}),
+      ...(system ? { system } : {}),
+      limit: limitOf(query.limit, 50),
+    });
+    const { rows: counts } = await deps.pool.query<{ state: string; n: string }>(
+      `SELECT state, count(*) AS n FROM jobs GROUP BY state`,
+    );
+    return reply.send({
+      api_version: API_VERSION,
+      counts: Object.fromEntries(counts.map((c) => [c.state, Number(c.n)])),
+      jobs: rows.map((job) => ({
+        job_id: job.job_id,
+        type: neutralize(job.type),
+        system: neutralize(job.system),
+        state: job.state,
+        attempt: job.attempt,
+        max_attempts: job.max_attempts,
+        deferrals: job.deferrals,
+        // Error text comes from a connector, which reads a source the
+        // customer controls: user-influenceable, therefore inert (§6).
+        error: job.error
+          ? {
+              code: neutralize((job.error as { code?: unknown }).code ?? "unknown"),
+              message: neutralize((job.error as { message?: unknown }).message ?? ""),
+              retryable: Boolean((job.error as { retryable?: unknown }).retryable),
+            }
+          : null,
+        triggers: job.triggers ?? [],
+        created_at: job.created_at,
+        finished_at: job.finished_at,
+      })),
+    });
+  });
+
+  /**
+   * Re-enqueue a dead-lettered job **as the caller** (§3: "Re-enqueue is
+   * `POST /v1/jobs` as the user").
+   *
+   * The dead row is not touched beyond a pointer to its replacement.
+   * That is the whole design: an operator looking at this screen is
+   * looking at a fault, and a re-enqueue that flipped the old row back to
+   * `queued` would delete the fault while appearing to fix it — the
+   * silent-failure family this checkpoint exists to make visible.
+   */
+  app.post("/v1/dashboard/ops/jobs/:jobId/reenqueue", async (req, reply) => {
+    const viewer = await viewerFor(req, reply, "write");
+    if (!viewer) return reply;
+    const { jobId } = req.params as { jobId: string };
+    const { rows } = await deps.pool.query<{
+      job_id: string;
+      type: string;
+      system: string;
+      connector_name: string;
+      version_constraint: string;
+      payload: Record<string, unknown>;
+      state: string;
+    }>(
+      `SELECT job_id, type, system, connector_name, version_constraint, payload, state
+         FROM jobs WHERE job_id = $1`,
+      [jobId],
+    );
+    const dead = rows[0];
+    if (!dead) return reply.code(404).send({ error: "not_found" });
+    if (dead.state !== "dead_lettered") {
+      return reply.code(409).send({
+        error: "not_dead_lettered",
+        detail: `job ${jobId} is ${dead.state}; re-enqueue is offered for dead-lettered jobs only`,
+      });
+    }
+
+    let created: { jobId: string; merged: boolean };
+    try {
+      created = await enqueue(deps.pool, deps.cfg, {
+        type: dead.type,
+        system: dead.system,
+        connector: { name: dead.connector_name, version_constraint: dead.version_constraint },
+        payload: dead.payload,
+        trigger: {
+          kind: "dashboard",
+          // The acting identity, on the row itself — which is what the
+          // job's `triggers` array was always for, and the reason a
+          // re-enqueue is attributable without reading a log.
+          detail: { actor: viewer.identity.subject, via: "dashboard", reenqueue_of: dead.job_id },
+        },
+      });
+    } catch (err) {
+      if (err instanceof EnqueueError) {
+        // The stored payload no longer validates — a connector contract
+        // moved under it. Said plainly rather than retried into a loop.
+        return reply.code(400).send({
+          error: "invalid_enqueue",
+          detail: "the dead job's payload no longer validates against this core's job contract",
+          fields: err.problems,
+        });
+      }
+      throw err;
+    }
+
+    await deps.pool.query(
+      `UPDATE jobs SET error = coalesce(error, '{}'::jsonb) || jsonb_build_object('reenqueued_as', $2::text)
+        WHERE job_id = $1`,
+      [dead.job_id, created.jobId],
+    );
+    await writeGovernanceAudit(
+      deps.pool,
+      {
+        subject: viewer.identity.subject,
+        roles: viewer.identity.roles,
+        profile: viewer.profile,
+        tool: "dashboard.ops.reenqueue",
+        args: { job_id: dead.job_id, type: dead.type, system: dead.system },
+        kbRef: viewer.ws?.headSha ?? null,
+        decision: "allowed",
+        decisionReason: null,
+        resultMeta: { new_job_id: created.jobId, merged: created.merged },
+      },
+      deps.log,
+    );
+
+    return reply.code(201).send({
+      api_version: API_VERSION,
+      job_id: created.jobId,
+      merged: created.merged,
+      reenqueue_of: dead.job_id,
+      // Stated because it is the design, not an omission.
+      dead_job_unchanged: true,
+    });
+  });
+
+  // -- webhook secrets (U-11, write-only per UI-8) ---------------------------
+
+  /**
+   * What a webhook secret's *row* looks like — never what it is. The
+   * store holds a sha256; there is nothing here that could return a
+   * secret even if a future caller asked for one.
+   */
+  app.get("/v1/dashboard/ops/hooks", async (req, reply) => {
+    const viewer = await viewerFor(req, reply, "read");
+    if (!viewer) return reply;
+    const { rows } = await deps.pool.query<{
+      system: string;
+      created_at: string;
+      rotated_at: string | null;
+    }>(
+      `SELECT s.system,
+              to_jsonb(h.created_at) #>> '{}' AS created_at,
+              to_jsonb(h.rotated_at) #>> '{}' AS rotated_at
+         FROM sync_systems s
+         LEFT JOIN sync_hooks h ON h.system = s.system
+        ORDER BY s.system`,
+    );
+    return reply.send({
+      api_version: API_VERSION,
+      role_scope: viewer.canWrite ? "write" : "read",
+      hooks: rows.map((row) => ({
+        system: neutralize(row.system),
+        configured: row.created_at !== null,
+        created_at: row.created_at,
+        rotated_at: row.rotated_at,
+        // The address a CI job posts to. Not a secret, and useless
+        // without one.
+        path: `/v1/hooks/${encodeURIComponent(row.system)}`,
+      })),
+    });
+  });
+
+  /**
+   * Create or rotate, and **show the secret exactly once** (UI-8).
+   *
+   * The plaintext exists in this handler and in this one reply. It is
+   * never stored, never logged, and never re-derivable: what the row
+   * holds is a sha256 of it, which is also all the hook endpoint needs
+   * to verify a later delivery.
+   */
+  app.post("/v1/dashboard/ops/hooks/:system/rotate", async (req, reply) => {
+    const viewer = await viewerFor(req, reply, "write");
+    if (!viewer) return reply;
+    const { system } = req.params as { system: string };
+    const registered = await getSyncSystem(deps.pool, system);
+    if (!registered) {
+      return reply.code(404).send({
+        error: "not_found",
+        detail: "no connection is registered under this system, so nothing would post to its hook",
+      });
+    }
+    const secret = randomBytes(32).toString("base64url");
+    const outcome = await setHookSecret(
+      deps.pool,
+      system,
+      createHash("sha256").update(secret).digest("hex"),
+    );
+    await writeGovernanceAudit(
+      deps.pool,
+      {
+        subject: viewer.identity.subject,
+        roles: viewer.identity.roles,
+        profile: viewer.profile,
+        tool: "dashboard.ops.hook_rotate",
+        // The system, never the secret and never a digest of it: an
+        // args digest over the secret would be a verifier for it.
+        args: { system },
+        kbRef: viewer.ws?.headSha ?? null,
+        decision: "allowed",
+        decisionReason: null,
+        resultMeta: { outcome },
+      },
+      deps.log,
+    );
+    return reply.code(201).send({
+      api_version: API_VERSION,
+      system: neutralize(system),
+      outcome,
+      secret,
+      // The UI renders this sentence rather than composing its own, so
+      // the warning and the fact it describes ship together.
+      shown_once:
+        "This is the only time this value is shown. The server stored a hash of it and cannot " +
+        "return it again; if it is lost, rotate for a new one.",
+      hook_path: `/v1/hooks/${encodeURIComponent(system)}`,
+    });
+  });
+}

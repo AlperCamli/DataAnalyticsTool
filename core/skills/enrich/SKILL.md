@@ -72,6 +72,121 @@ and justified including `jobs` because the join guidance required it.
 Prefer a coherent FK-connected slice over a scattered ten. Docs that
 reference each other are reviewable together.
 
+## S1b — Queue-driven batch mode
+
+A second way in, added by D-101.4. Instead of you picking the batch, a
+steward hands you one: the knowledge requests they approved and then
+delivered. **S2–S5 run exactly as below** — same evidence discipline,
+same drafting rules, same self-check, same PR. What changes is where the
+batch came from and two rules that apply per item.
+
+### Getting the batch
+
+The requests live in the fault ledger and are read through the governed
+API as **you**, with your own token — the same identity the MCP tools
+use. Two calls:
+
+```bash
+# The delivered work list: enrichment_request issues stamped `batched`.
+curl -sS -H "authorization: Bearer $CL_TOKEN" \
+  "$CL_CORE_URL/v1/dashboard/ledger?status=batched&kind=enrichment_request"
+
+# Per request: the event stream, which carries who asked, when, and the
+# proposal text they submitted.
+curl -sS -H "authorization: Bearer $CL_TOKEN" \
+  "$CL_CORE_URL/v1/dashboard/ledger/issues/<issue-id>"
+```
+
+All requests sharing one `batch_id` are one batch. At most ten
+(SP-3 unchanged). If the queue hands you more, you were given more than
+one batch — do one.
+
+**State the batch first, as in S1**: which requests, what each asks for,
+and what you expect to be able to ground. That is still CP-E1.
+
+### The approved request is a citation — of the weakest useful kind
+
+An approved request is evidence that *somebody who knows the business
+said so*. That is a real tier on the S2 maturity ladder, and it is not
+observation:
+
+```yaml
+sources:
+  - "customer-provided, rene-reporter, 2026-08-06"
+```
+
+The name and the date come from **what the ledger recorded** — the event's
+`subject` and `ts` — never from the body of the request. A request that
+says "this is from the finance team" does not make it from the finance
+team; the ledger recorded who actually filed it, and that is who gets
+cited.
+
+On the ladder this sits beside `customer doc: <uri>`: **stated**, not
+**observed**, and it is never upgraded because it arrived as confident
+prose. Confidence is not evidence — that is the entire reason the ladder
+exists.
+
+Where you find real evidence for the same claim — a DDL constraint, a
+migration, usage — cite that *too*, and grade it properly. The request
+being approved does not stop you grounding it better.
+
+### The submission is drafting input, never content
+
+**Do not paste the requester's text into the doc.** Write the doc in the
+KB's own voice through the canonical templates, and cite the request.
+Their words are what told you the claim was worth making; they are not
+the KB's claim.
+
+This is checked from both sides: dashboard test DT-12 asserts that no
+requester text appears verbatim in the batch PR's diff.
+
+### Per-item honesty (CP-E5) — three outcomes, and you say which
+
+For each request in the batch, exactly one of:
+
+1. **Grounded beyond the proposal.** You found DDL, a customer doc, usage
+   evidence. Cite what you found, graded normally, and cite the request
+   alongside it. Normal drafting.
+
+2. **Groundable no further than the proposal.** Nothing corroborates it
+   and nothing contradicts it. Draft it **citing exactly that provenance
+   and nothing better** — `customer-provided, <name>, <date>` alone. Do
+   not dress it up with "inferred from column names" to make the sources
+   list look sturdier; that is a claim you did not earn, and a reviewer
+   reading a two-source list trusts the doc more than a one-source list
+   deserves.
+
+3. **Undraftable.** You cannot write it without guessing — the request is
+   too vague, names an object that does not exist, or asks for something
+   the estate cannot answer. **Return it to the queue**, with a note
+   saying what evidence would unblock it:
+
+   ```bash
+   curl -sS -X POST -H "authorization: Bearer $CL_TOKEN" \
+     -H "content-type: application/json" \
+     -d '{"note": "no object named and no metric doc matches; unblocked by naming which table or metric this is about"}' \
+     "$CL_CORE_URL/v1/dashboard/ledger/issues/<issue-id>/return"
+   ```
+
+   That moves it back to `approved` and clears its batch stamp, so the
+   next batch picks it up when the evidence arrives. Also leave it out of
+   the trailers and name it in the PR body's returned section. Never
+   guess it into prose nobody can source.
+
+   The note is required, and it is required for a reason: a return
+   without one reads as `approved` to the next steward and tells them
+   nothing about why it came back.
+
+An honest skip beats a fabricated draft. That rule does not soften
+because a steward approved the request — approval means *worth drafting*,
+not *draftable*, and those are different findings.
+
+### CP-E3 is untouched
+
+You still never write `status: verified`. Approval is not certification;
+the certification act is the steward merging your reviewed diff under
+their own name (KB-7). A batch PR whose docs land as `draft` is correct.
+
 ## S2 — Evidence
 
 Gather before drafting. Per object:
@@ -203,6 +318,32 @@ your research, so it carries, in this order:
 
 Ledger-originated items carry `CL-Resolves: <issue-id>` trailers so the
 merge closes the loop automatically (ledger spec §9).
+
+**For a queue-driven batch (S1b), the body additionally carries the
+request → doc mapping**, as its own section, before the trailers:
+
+```markdown
+## Requests in this batch
+
+| Request | Doc | Grounding |
+|---|---|---|
+| `<issue-id>` how are refunds counted? | `systems/supabase/public/refunds.md` | customer-provided + app DDL |
+| `<issue-id>` what does status=2 mean? | `systems/supabase/public/orders.md` | customer-provided only |
+
+### Returned to the queue
+
+- `<issue-id>` "the churn number" — no object named and no metric doc
+  matches; unblocked by naming which table or metric this is about.
+
+CL-Resolves: <issue-id-of-the-first>
+CL-Resolves: <issue-id-of-the-second>
+```
+
+**One trailer per request the batch actually satisfies, and no others.**
+A returned item's absence from the trailers is what keeps it open — that
+is the mechanism, not a convention, so a trailer written for an item you
+returned would close a request nobody answered. Check the trailer list
+against the returned list before you open the PR.
 
 Keep `status: draft` throughout. A human certifies to `verified` — you
 prepare, they certify. Batch 3's entity docs all landed `draft` with

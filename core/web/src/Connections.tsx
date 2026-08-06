@@ -14,6 +14,17 @@
  * The add form takes credential **references**, and says so in the form
  * itself rather than in documentation somebody will not read. There is
  * no password field on this screen, by design and by test.
+ *
+ * **A4-F1, closed here (D-114.6).** A-4's migration found that this
+ * module rendered no config and offered no edit, so changing a
+ * credential reference through the UI meant retyping the whole
+ * registration from memory — which is why that migration had to be a
+ * script instead of a screen. The card now shows the stored config and
+ * the references, and Edit opens them prefilled. Two things keep that
+ * inside UI-8: what is edited is a **reference**, never a value, and the
+ * server refuses a payload carrying material regardless of what this
+ * form sends. What comes back after a save is the store's read-back, not
+ * the submitted form.
  */
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -180,16 +191,57 @@ const BLANK_FORM = {
   connector: "",
   version_constraint: "*",
   config: '{\n  "system": "",\n  "mode": "live"\n}',
-  credentials: '[\n  { "key": "dsn", "ref": "env://MY_SOURCE_DSN", "required_for": ["live"] }\n]',
+  credentials:
+    '[\n  { "key": "dsn", "ref": "vault://secret/contextlayer/connections/my_source#dsn", "required_for": ["live"] }\n]',
 };
 
-function AddForm({ csrf, onDone }: { csrf: string | null; onDone: () => void }) {
-  const [form, setForm] = useState({ ...BLANK_FORM });
+type FormState = typeof BLANK_FORM;
+
+/** The stored row, as form text (A4-F1). Prefilled from what the API
+ * rendered — so an edit that changes nothing round-trips to an identical
+ * row, and nobody has to retype a reference from memory. */
+function formFor(conn: Connection): FormState {
+  return {
+    system: conn.system,
+    connector: conn.connector.name,
+    version_constraint: conn.connector.version_constraint,
+    config: JSON.stringify(conn.config ?? {}, null, 2),
+    credentials: JSON.stringify(
+      conn.credentials.map((c) => ({
+        key: c.key,
+        ref: c.ref,
+        ...(c.required_for ? { required_for: c.required_for } : {}),
+      })),
+      null,
+      2,
+    ),
+  };
+}
+
+/**
+ * One form, two entries: registration and edit. They are the same act —
+ * a connection is named by its system, so there is one address for it
+ * and PUTting twice is changing it — and one form keeps them that way.
+ */
+function ConnectionForm({
+  csrf,
+  onDone,
+  initial,
+  mode,
+  onCancel,
+}: {
+  csrf: string | null;
+  onDone: () => void;
+  initial?: FormState;
+  mode: "register" | "edit";
+  onCancel?: () => void;
+}) {
+  const [form, setForm] = useState<FormState>(initial ?? { ...BLANK_FORM });
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<Connection | null>(null);
 
-  const set = (key: keyof typeof BLANK_FORM) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+  const set = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
   const submit = async (e: React.FormEvent) => {
@@ -227,23 +279,32 @@ function AddForm({ csrf, onDone }: { csrf: string | null; onDone: () => void }) 
     // What is shown back is the server's rendering of the stored row —
     // the read-back, not the form.
     setSaved(result.data.connection);
-    setForm({ ...BLANK_FORM });
+    if (mode === "register") setForm({ ...BLANK_FORM });
     onDone();
   };
 
   return (
     <form className="add-form" onSubmit={submit}>
-      <h3>Register a connection</h3>
+      <h3>{mode === "edit" ? `Edit ${form.system}` : "Register a connection"}</h3>
       <p className="form-rule">
-        Credential <strong>references only</strong> — <code>env://NAME</code> now,{" "}
-        <code>vault://PATH</code> when the vault lands. This product stores the reference; the
-        value stays where the resolver reads it. A payload carrying an actual secret is refused by
-        the server, and there is no field on this form to type one into.
+        Credential <strong>references only</strong> — <code>vault://mount/path#field</code>, or{" "}
+        <code>env://NAME</code> where a pilot still runs on one. This product stores the reference;
+        the value stays where the resolver reads it. A payload carrying an actual secret is refused
+        by the server, and there is no field on this form to type one into. Changing a reference
+        here changes <em>which</em> secret is used, never <em>what</em> it is.
       </p>
 
       <label>
         System
-        <input value={form.system} onChange={set("system")} placeholder="supabase" required />
+        <input
+          value={form.system}
+          onChange={set("system")}
+          placeholder="supabase"
+          required
+          // The system names the row; editing it here would silently
+          // register a second connection rather than change this one.
+          readOnly={mode === "edit"}
+        />
       </label>
       <label>
         Connector
@@ -255,22 +316,29 @@ function AddForm({ csrf, onDone }: { csrf: string | null; onDone: () => void }) 
       </label>
       <label>
         Config (JSON — validated against the connector&apos;s own schema when a job runs)
-        <textarea value={form.config} onChange={set("config")} rows={6} spellCheck={false} />
+        <textarea value={form.config} onChange={set("config")} rows={8} spellCheck={false} />
       </label>
       <label>
         Credential references (JSON array)
-        <textarea value={form.credentials} onChange={set("credentials")} rows={4} spellCheck={false} />
+        <textarea value={form.credentials} onChange={set("credentials")} rows={6} spellCheck={false} />
       </label>
 
-      <button type="submit" disabled={busy}>
-        {busy ? <Spinner label="registering…" /> : "Register"}
-      </button>
+      <div className="actions">
+        <button type="submit" disabled={busy}>
+          {busy ? <Spinner label="saving…" /> : mode === "edit" ? "Save changes" : "Register"}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+      </div>
 
       {error && <ServerSays error={error} />}
       {saved && (
         <div className="saved">
-          Registered <strong><Text value={saved.system} /></strong> — this is the row the store
-          returned when it was read back, not the form that was submitted.
+          {mode === "edit" ? "Saved" : "Registered"} <strong><Text value={saved.system} /></strong> —
+          this is the row the store returned when it was read back, not the form that was submitted.
         </div>
       )}
     </form>
@@ -290,6 +358,7 @@ function ConnectionCard({
   const [result, setResult] = useState<TestResult | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const runTest = async () => {
     setTesting(true);
@@ -348,10 +417,26 @@ function ConnectionCard({
         )}
       </div>
 
+      {/* A4-F1: the config, rendered. It was absent before, which is why
+          changing a reference meant reconstructing the whole
+          registration from memory. These are settings, not secrets —
+          the values live where the references above point. */}
+      <div className="config-row">
+        <span className="label">config</span>
+        {Object.keys(conn.config ?? {}).length === 0 ? (
+          <span className="muted">none — this connector is configured entirely by its credential</span>
+        ) : (
+          <pre className="config">
+            <Text value={JSON.stringify(conn.config, null, 2)} />
+          </pre>
+        )}
+      </div>
+
       <div className="actions">
         <button onClick={runTest} disabled={testing}>
           {testing ? <Spinner label="probing…" /> : "Test connection"}
         </button>
+        <button onClick={() => setEditing((v) => !v)}>{editing ? "Close editor" : "Edit…"}</button>
         {confirmRemove ? (
           <>
             <button className="danger" onClick={remove}>
@@ -363,6 +448,16 @@ function ConnectionCard({
           <button onClick={() => setConfirmRemove(true)}>Remove…</button>
         )}
       </div>
+
+      {editing && (
+        <ConnectionForm
+          csrf={csrf}
+          mode="edit"
+          initial={formFor(conn)}
+          onCancel={() => setEditing(false)}
+          onDone={onChanged}
+        />
+      )}
 
       {error && <ServerSays error={error} />}
       {result && <TestPanel result={result} />}
@@ -417,7 +512,7 @@ export function Connections({ csrf }: { csrf: string | null }) {
         ))
       )}
 
-      <AddForm csrf={csrf} onDone={load} />
+      <ConnectionForm csrf={csrf} mode="register" onDone={load} />
     </div>
   );
 }

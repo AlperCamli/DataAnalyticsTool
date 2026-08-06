@@ -35,6 +35,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import pg from "pg";
+import { writeGovernanceAudit } from "./audit.js";
 import { neutralize } from "./changelog.js";
 import type { CoreConfig } from "./config.js";
 import type { KbReader, KbState } from "./kbread.js";
@@ -501,23 +502,63 @@ export function registerConnections(app: FastifyInstance, deps: ConnectionsDeps)
       // steward's read is refused rather than guessed at.
       deps.log("KB workspace unavailable while resolving connection access", err);
     }
-    if (need === "write" && !canWrite) {
-      await reply.code(403).send({
-        error: "forbidden",
-        detail:
-          "registering, changing, deleting or testing a connection is an ops act; " +
-          "this identity holds no ops role (dashboard spec §4, UI-7)",
-      });
+    const refuse = async (detail: string): Promise<null> => {
+      // D-114.1: a denied governance act is recorded, not only an
+      // allowed one — the refused attempt is the row an auditor came for.
+      await writeGovernanceAudit(
+        deps.pool,
+        {
+          subject: auth.identity.subject,
+          roles: auth.identity.roles,
+          profile: isSteward ? "steward" : null,
+          tool: "dashboard.connection.access",
+          args: { path: req.url, method: req.method },
+          kbRef: ws?.headSha ?? null,
+          decision: "denied",
+          decisionReason: detail,
+        },
+        deps.log,
+      );
+      await reply.code(403).send({ error: "forbidden", detail });
       return null;
+    };
+    if (need === "write" && !canWrite) {
+      return refuse(
+        "registering, changing, deleting or testing a connection is an ops act; " +
+          "this identity holds no ops role (dashboard spec §4, UI-7)",
+      );
     }
     if (!canWrite && !isSteward) {
-      await reply.code(403).send({
-        error: "forbidden",
-        detail: "connections are visible to ops and steward identities (dashboard spec §4)",
-      });
-      return null;
+      return refuse("connections are visible to ops and steward identities (dashboard spec §4)");
     }
     return { identity: auth.identity, ws, canWrite };
+  }
+
+  /** One governed act, recorded (D-114.1). Never carries a payload —
+   * `config` is customer configuration and `credentials` are references,
+   * and neither belongs copied into the restricted store when the
+   * connection row already holds both. */
+  async function auditAct(
+    viewer: { identity: Identity; ws: KbState | null },
+    tool: string,
+    args: Record<string, unknown>,
+    resultMeta?: Record<string, unknown>,
+  ): Promise<void> {
+    await writeGovernanceAudit(
+      deps.pool,
+      {
+        subject: viewer.identity.subject,
+        roles: viewer.identity.roles,
+        profile: null,
+        tool,
+        args,
+        kbRef: viewer.ws?.headSha ?? null,
+        decision: "allowed",
+        decisionReason: null,
+        ...(resultMeta ? { resultMeta } : {}),
+      },
+      deps.log,
+    );
   }
 
   /** sync-policy.yaml at KB HEAD, or null when the KB cannot be read.
@@ -603,6 +644,7 @@ export function registerConnections(app: FastifyInstance, deps: ConnectionsDeps)
     } catch (err) {
       return rejected(reply, err);
     }
+    await auditAct(viewer, "dashboard.connection.upsert", { system, existed });
     const policy = await policyOrNull();
     return reply.code(existed ? 200 : 201).send({
       api_version: API_VERSION,
@@ -625,6 +667,7 @@ export function registerConnections(app: FastifyInstance, deps: ConnectionsDeps)
       return rejected(reply, err);
     }
     if (!deleted) return reply.code(404).send({ error: "not_found" });
+    await auditAct(viewer, "dashboard.connection.delete", { system });
     return reply.send({ api_version: API_VERSION, system, deleted: true, read_back: true });
   });
 
@@ -671,6 +714,10 @@ export function registerConnections(app: FastifyInstance, deps: ConnectionsDeps)
       }
       throw err;
     }
+    // Audited at the act, not at the verdict: the probe *ran* under this
+    // identity whether or not a runner answers in time, and a row written
+    // only on success would omit exactly the probes worth investigating.
+    await auditAct(viewer, "dashboard.connection.test", { system }, { job_id: jobId });
 
     const awaited = await awaitJobResult(
       deps.pool,

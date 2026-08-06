@@ -73,15 +73,16 @@ export const MODULES: ModuleDef[] = [
     id: "kb_health",
     title: "KB Health",
     path: "/kb-health",
-    built: false,
-    description: "Freshness and trust map, doc-status counts, the drift-PR queue. Arrives at checkpoint B-1.",
+    built: true,
+    description:
+      "Freshness and trust map, doc-status counts, the contaminated set with its lineage paths, and the drift-PR queue.",
   },
   {
     id: "gap_triage",
     title: "Gap Triage",
     path: "/gap-triage",
-    built: false,
-    description: "The fault-ledger queue and the knowledge-request verdicts. Arrives at checkpoint B-1.",
+    built: true,
+    description: "The fault-ledger queue, knowledge requests, and the steward's verdicts.",
   },
   {
     id: "setup",
@@ -101,15 +102,15 @@ export const MODULES: ModuleDef[] = [
     id: "ops",
     title: "Ops",
     path: "/ops",
-    built: false,
-    description: "Runs, jobs, webhook secrets, detector rules. Arrives at checkpoint B-1.",
+    built: true,
+    description: "Runs, jobs and the dead-letter queue; webhook secrets, shown once and never stored.",
   },
   {
     id: "publish",
     title: "Publish",
     path: "/publish",
-    built: false,
-    description: "Deliveries and attestation history. The API ships (B-0); the view arrives at B-1.",
+    built: true,
+    description: "Deliveries, attestation history, and the delivered-but-unattested state.",
   },
   {
     id: "audit",
@@ -274,6 +275,10 @@ export function registerSpa(app: FastifyInstance, deps: SpaDeps): void {
   app.get(APP_BASE, shell);
   app.get(`${APP_BASE}/`, shell);
   for (const module of MODULES) app.get(`${APP_BASE}${module.path}`, shell);
+  // The F-10 reply path (UI-D). Not a `dashboard.yaml` module: every
+  // identity that can file something has an inbox, whatever modules
+  // their roles show them, so it is not a thing a deployment turns off.
+  app.get(`${APP_BASE}/inbox`, shell);
 
   // A person handed the bare address should land somewhere, not on a
   // 401 from the ops surface.

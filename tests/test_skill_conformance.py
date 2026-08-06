@@ -14,7 +14,10 @@ from __future__ import annotations
 
 from tools.skill_conformance import (
     check_artifact_trust,
+    check_batch_pr_body,
+    check_customer_provided_sources,
     check_gap_not_guessed,
+    check_no_verbatim_submission,
     check_purpose_frontmatter,
 )
 
@@ -348,3 +351,157 @@ class TestReviewSyncTriage:
     def test_triage_is_deterministic(self, tmp_path):
         kb = self._staged_kb(tmp_path)
         assert self._triage(kb) == self._triage(kb)
+
+
+class TestQueueDrivenBatch:
+    """AS-18 / S1b — the queue-driven enrichment batch (D-101.4).
+
+    Staged artifacts again, and the same caveat: these pin the rules and
+    cannot fail when the skill misbehaves. AS-18's gate evidence is the
+    behavioral scenario against the fixture deployment.
+    """
+
+    ISSUE_A = "11111111-1111-4111-8111-111111111111"
+    ISSUE_B = "22222222-2222-4222-8222-222222222222"
+
+    # -- the citation ------------------------------------------------------
+
+    def test_customer_provided_citation_in_the_recorded_shape_is_valid(self):
+        findings = check_customer_provided_sources(
+            ["customer-provided, rene-reporter, 2026-08-06"],
+            grounded_beyond_proposal=False,
+        )
+        assert findings == []
+
+    def test_a_draft_with_no_customer_provided_citation_is_flagged(self):
+        findings = check_customer_provided_sources(
+            ["inferred from column names"], grounded_beyond_proposal=False
+        )
+        assert "AS-18" in _codes(findings)
+
+    def test_a_retyped_date_is_flagged(self):
+        # "last week" cannot have come from the ledger, which records a
+        # timestamp — so it came from the request body, which is exactly
+        # what S1b says never to cite.
+        findings = check_customer_provided_sources(
+            ["customer-provided, the finance team, last week"], grounded_beyond_proposal=False
+        )
+        assert any("<name>, <date>" in f.detail for f in findings)
+
+    def test_inference_dressing_beside_a_proposal_only_citation_is_flagged(self):
+        # The headline CP-E5 violation: a one-source list padded to two so
+        # the doc looks sturdier than the evidence makes it.
+        findings = check_customer_provided_sources(
+            [
+                "customer-provided, rene-reporter, 2026-08-06",
+                "inferred from column names",
+            ],
+            grounded_beyond_proposal=False,
+        )
+        assert "CP-E5" in _codes(findings)
+
+    def test_claimed_observation_beside_a_proposal_only_citation_is_flagged(self):
+        findings = check_customer_provided_sources(
+            [
+                "customer-provided, rene-reporter, 2026-08-06",
+                "observed in 14 queries",
+            ],
+            grounded_beyond_proposal=False,
+        )
+        assert any("never upgraded to observed" in f.detail for f in findings)
+
+    def test_real_grounding_alongside_the_request_is_fine(self):
+        # Outcome 1: the request was approved *and* the claim was properly
+        # grounded. Citing both is correct, not padding.
+        findings = check_customer_provided_sources(
+            [
+                "customer-provided, rene-reporter, 2026-08-06",
+                "app DDL: migrations/20260418_refunds.sql",
+            ],
+            grounded_beyond_proposal=True,
+        )
+        assert findings == []
+
+    # -- DT-12's other half ------------------------------------------------
+
+    def test_a_doc_citing_the_request_without_quoting_it_is_valid(self):
+        proposal = (
+            "A refund is counted in the month the credit note is issued, not the "
+            "month of the original order, because finance closes on the note."
+        )
+        diff = (
+            "+purpose: \"One row per issued credit note; the refund fact table.\"\n"
+            "+sources:\n+  - \"customer-provided, rene-reporter, 2026-08-06\"\n"
+        )
+        assert check_no_verbatim_submission(diff, [proposal]) == []
+
+    def test_pasted_requester_prose_is_flagged(self):
+        proposal = (
+            "A refund is counted in the month the credit note is issued, not the "
+            "month of the original order, because finance closes on the note."
+        )
+        diff = "+## Notes\n+\n+" + proposal + "\n"
+        findings = check_no_verbatim_submission(diff, [proposal])
+        assert "DT-12" in _codes(findings)
+
+    def test_shared_vocabulary_is_not_a_violation(self):
+        # A proposal about refunds and a doc about refunds share words by
+        # necessity; a rule that flagged that would be unusable.
+        proposal = "Refunds. Orders. Credit notes."
+        diff = "+purpose: \"Refunds against orders, keyed by credit note.\"\n"
+        assert check_no_verbatim_submission(diff, [proposal]) == []
+
+    # -- the PR body -------------------------------------------------------
+
+    GOOD_BODY = f"""## Requests in this batch
+
+| Request | Doc | Grounding |
+|---|---|---|
+| `{ISSUE_A}` how are refunds counted? | `systems/drill/shop/refunds.md` | customer-provided + app DDL |
+
+### Returned to the queue
+
+- `{ISSUE_B}` "the churn number" — no object named and no metric doc matches;
+  unblocked by naming which table or metric this is about.
+
+CL-Resolves: {ISSUE_A}
+"""
+
+    def test_a_well_formed_batch_body_passes(self):
+        assert (
+            check_batch_pr_body(self.GOOD_BODY, satisfied=[self.ISSUE_A], returned=[self.ISSUE_B]) == []
+        )
+
+    def test_a_trailer_for_a_returned_request_is_flagged(self):
+        # The failure that matters most: merging would close a request the
+        # batch never answered, and nobody would ever know it was open.
+        body = self.GOOD_BODY + f"CL-Resolves: {self.ISSUE_B}\n"
+        findings = check_batch_pr_body(body, satisfied=[self.ISSUE_A], returned=[self.ISSUE_B])
+        assert any("returned to the queue" in f.detail for f in findings)
+
+    def test_a_missing_trailer_for_a_satisfied_request_is_flagged(self):
+        body = self.GOOD_BODY.replace(f"CL-Resolves: {self.ISSUE_A}\n", "")
+        findings = check_batch_pr_body(body, satisfied=[self.ISSUE_A], returned=[self.ISSUE_B])
+        assert any("merge would leave it open" in f.detail for f in findings)
+
+    def test_a_returned_request_absent_from_the_body_is_a_silent_drop(self):
+        body = f"""## Requests in this batch
+
+| Request | Doc | Grounding |
+|---|---|---|
+| `{self.ISSUE_A}` refunds | `systems/drill/shop/refunds.md` | customer-provided |
+
+CL-Resolves: {self.ISSUE_A}
+"""
+        findings = check_batch_pr_body(body, satisfied=[self.ISSUE_A], returned=[self.ISSUE_B])
+        assert any("silent drop" in f.detail for f in findings)
+
+    def test_a_body_without_the_mapping_is_flagged(self):
+        body = f"Some docs were written.\n\nCL-Resolves: {self.ISSUE_A}\n"
+        findings = check_batch_pr_body(body, satisfied=[self.ISSUE_A], returned=[])
+        assert any("request → doc mapping" in f.detail for f in findings)
+
+    def test_a_trailer_for_an_unrelated_issue_is_flagged(self):
+        body = self.GOOD_BODY + "CL-Resolves: 33333333-3333-4333-8333-333333333333\n"
+        findings = check_batch_pr_body(body, satisfied=[self.ISSUE_A], returned=[self.ISSUE_B])
+        assert any("not in this batch" in f.detail for f in findings)
