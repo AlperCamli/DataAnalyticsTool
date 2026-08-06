@@ -5452,7 +5452,8 @@ D-113's fence and **authorized**; closed here rather than at B-4.
 governed act."** No schema change — `audit_records` was already
 tool-agnostic. `writeGovernanceAudit` is a thin caller over the existing
 `writeAudit`, and the acts that now write a row are: connection upsert,
-delete and test; ledger verdicts; and the deliver-batch trigger. Each
+delete and test; ledger verdicts; the deliver-batch trigger; and the
+`batched → approved` return D-114.12 adds. Each
 carries the acting subject and roles from the resolved session, a `tool`
 naming the act (`dashboard.connection.upsert`, `dashboard.ledger.verdict`,
 …), `session_id: null` because a browser session is not an MCP session,
@@ -5599,7 +5600,7 @@ the acting subject, and the response names the new job id.
 
 ### D-114.10 — webhook secrets are shown once, from the creation response, and never stored
 
-UI-8's last surface. The rotate control PUTs and the **response body
+UI-8's last surface. The rotate control POSTs and the **response body
 carries the new secret exactly once**; the UI renders it in a panel that
 says it will not be shown again, and holds it in a React state variable
 that dies with the tab. There is no GET that returns a secret — the store
