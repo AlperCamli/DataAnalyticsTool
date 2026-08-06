@@ -6,7 +6,7 @@ and the operator's gate runbook. Task 0 rode along: D-113 recorded,
 D-108's two bracketed clauses resolved on the operator's attestation, and
 playbook §4's exit condition made true for the install shape A4-F5 found.
 
-**Suites:** core **345 passed / 4 skipped / 30 files** (was 306/4/28 at
+**Suites:** core **349 passed / 4 skipped / 30 files** (was 306/4/28 at
 A-4). Python **792 passed / 14 skipped / 1 failed** — the contamination
 triage, 34 docs, estate state, untouched by this work.
 
@@ -142,6 +142,7 @@ this session's fence.
 | Governance audit rows, allowed and denied | `dashboard-b1.test.ts` |
 | D-101.5's loop without an agent: verdict → batch → merged PR → resolution → badge | `dashboard-b1.test.ts` |
 | `batched → approved` return, its required note, its refusals | `dashboard-b1.test.ts` |
+| **B1-F1**: payload rebuilt from the registration; second-press 409; no-registration and `execute` refusals | `dashboard-b1.test.ts` (5, added after the gate demo's act 3) |
 | S1b citation / trailer / no-verbatim rules (CI regression, **not** AS-18's evidence) | `tests/test_skill_conformance.py` (15 new) |
 | AS-18 behavioral scenario (D-78 layer b) | `tools/skill_scenarios.py --only enrich-batch` — **ships, not run** |
 
@@ -165,7 +166,12 @@ is the same silent-failure family this checkpoint exists to surface.
 
 ## What this build does not claim
 
-- **The gate demo has not been run.** `results/phase2/b1/GATE-RUNBOOK.md`
+- **The gate demo has not been run to completion.** Act 3 has, and it
+  found **B1-F1** (`results/phase2/b1/FINDINGS.md`): re-enqueue replayed
+  a captured payload, so a snapshot job queued before A-4 carried
+  `env://SUPABASE_DSN` and could never succeed — one press, one new dead
+  job, forever. Fixed by rebuilding from the connection's current
+  registration. `results/phase2/b1/GATE-RUNBOOK.md`
   is the operator's morning: KB Health showing the true backlog → Ops →
   drift review → contamination triage → the knowledge-request loop end to
   end, stopping at act 10 for the R2 merge. A PR merged by this session

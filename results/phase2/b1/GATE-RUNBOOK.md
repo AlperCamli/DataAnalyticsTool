@@ -38,7 +38,7 @@ usable by a person on the real estate.
   counts per caller's visibility, contamination paths, DT-3, the no-merge
   property asserted over the server sources *and* the shipped bundle, the
   lineage read view's node-by-node filtering.
-- `core/test/dashboard-b1.test.ts` (26) — DT-10 (the badge, its ack, and
+- `core/test/dashboard-b1.test.ts` (30) — DT-10 (the badge, its ack, and
   a re-verdict firing it again), the governance-audit rows, Ops
   re-enqueue leaving the dead job dead, DT-5, the `batched → approved`
   return, and the **whole D-101.5 loop end to end without an agent**:
@@ -72,7 +72,7 @@ behavioral half** (act 9's alternative), which needs a model call.
 
 | Prerequisite | How to check |
 |---|---|
-| Suites green at this commit | `cd core && npx vitest run` (expect **345 passed / 4 skipped / 30 files**) and `.venv/bin/python -m pytest -q` (expect **792 passed / 14 skipped / 1 failed**) — that one failure is `test_no_contamination_in_current_kb`, which is **estate state** (34 docs awaiting triage), not this code, and act 5 is where you start working it down |
+| Suites green at this commit | `cd core && npx vitest run` (expect **349 passed / 4 skipped / 30 files**) and `.venv/bin/python -m pytest -q` (expect **792 passed / 14 skipped / 1 failed**) — that one failure is `test_no_contamination_in_current_kb`, which is **estate state** (34 docs awaiting triage), not this code, and act 5 is where you start working it down |
 | Stack running the build that contains B-1 | act 0 |
 | Vault unsealed | `curl -s localhost:8100/healthz \| grep -o '"sealed":[a-z]*'` → `"sealed":false` |
 | Your identity carries `steward` | the pilot steward account carries `["steward","ops"]` |
@@ -96,8 +96,10 @@ A core started without the right env answers `ok` here and 404 at
 `/app/` — that pair is what cost two days once, which is why the packet
 states the whole toggle set.
 
-Migrations `0012` and `0013` are new in this build (the inbox acks and
-the return-to-queue columns). `make stack-pilot` applies them at boot;
+Migrations `0012`, `0013` and `0014` are new in this build (the inbox
+acks, the return-to-queue columns, and the re-enqueue pointer — `0014`
+also moves the handful of existing pointers out of the `error` object,
+where the first cut wrongly put them). `make stack-pilot` applies them at boot;
 if the core exits at startup complaining about a column, it did not.
 
 ---
@@ -163,20 +165,48 @@ gate does not depend on doing it by hand.
 
 Open **Ops**.
 
-**Jobs** opens on the dead-letter tab. Expect **8 dead-lettered jobs**.
-Pick one and read its error. Press **Re-enqueue as me** on one of them.
+**Jobs** opens on the dead-letter tab. Expect around **11 dead-lettered
+jobs** — the queue has a tail going back before A-4.
 
-Look at what happens: a *new* job id, and a line saying the dead job is
-unchanged. Confirm on the same screen — the dead row is still
-dead-lettered with its error. That is deliberate: the dead row is the
-evidence that something failed, and a re-enqueue that flipped it back to
-`queued` would erase the fault while looking like a fix.
+**Read the errors before pressing anything.** Several of these jobs were
+queued *before* the vault migration and carry `env://SUPABASE_DSN` in
+their payload; the runner has had no `env` resolver since A-4, so those
+jobs failed with `auth_error: no resolver for its scheme`. That tail is
+finding **B1-F1** (`results/phase2/b1/FINDINGS.md`) and it is the reason
+this act is worth doing on the real estate rather than a fixture.
 
-Now go to **Connections** and press **Sync now** on ga4 and on gsc — the
+Press **Re-enqueue as me** on the supabase snapshot job.
+
+**What to look at, in order:**
+
+1. If the job's captured references differ from the connection's current
+   ones, a panel says so and shows both. That is the fix: the new job is
+   built from the connection's registration, **not** from what the dead
+   job captured — so a job queued before A-4 now runs against
+   `vault://…` and can actually succeed.
+2. The screen then **follows the new job** and reports its outcome in
+   place: succeeded, or dead-lettered with the new error. Wait for it.
+   If it dead-letters again, read the error — the second failure is a
+   different fact from the first, and pressing again would replay the
+   same configuration.
+3. The dead row is still dead-lettered, with its error, now carrying
+   "already re-enqueued as …". It is the evidence that something failed,
+   and nothing here rewrites it. Its button is gone: the chain continues
+   from the newest job, not from a job two attempts old.
+
+Then go to **Connections** and press **Sync now** on ga4 and on gsc — the
 two stale sources act 2 showed you. (Sync lives on the connection because
 that is the thing being synced.)
 
-*Record:* the new job id and the unchanged dead row.
+*Record:* the captured-vs-current panel if it appears, the new job's
+outcome, and the unchanged dead row with its successor named.
+
+**A note on jobs you cannot re-enqueue.** `execute` and `publish` jobs
+refuse, and say why: their payload is somebody's statement, identity and
+granted guardrails, not a connection's configuration. Re-running one
+would re-run a stranger's request with nobody waiting for the answer.
+Two of the dead rows are `execute` jobs from the benchmark harness —
+press one to see the refusal, and read it.
 
 ### Act 4 — the drift-PR queue
 

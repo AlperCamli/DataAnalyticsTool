@@ -5698,9 +5698,66 @@ The split is the D-78 rule applied honestly rather than mechanically:
 each half is tested by the instrument that can actually falsify it, and
 neither is reported as covering the other.
 
+## B1-F1 — the gate demo's first finding (2026-08-06, operator)
+
+Found on act 3 of the runbook, the first time anyone pressed *Re-enqueue
+as me* against the pilot's real dead-letter queue. Full account in
+`results/phase2/b1/FINDINGS.md`; the ruling-shaped part is here.
+
+**Re-enqueue replayed the dead job's captured payload.** A job payload is
+a *capture* of the connection registry taken at enqueue time, so a
+snapshot job queued before the A-4 vault migration carried
+`env://SUPABASE_DSN`; the runner has had no `env` resolver since; and
+each press produced a fresh dead job with the same impossible reference.
+The operator pressed three times and grew the queue by three.
+
+**Two rules meet here and both say the same thing.** The **fan-out rule**:
+the registry is the one source for what a connection uses, and a captured
+copy that disagrees with it is a stale duplicate, not evidence. And
+**A-4's removal rule from the other side** — `env://` was removed as a
+resolver, and the job queue turned out to be a place the old reference
+survived. A4-F6 was this shape in the execution preflight; this is its
+sibling, and it survived A-4 because nothing re-reads old job payloads
+and no surface exposed them until B-1 built the button.
+
+**Fixed by rebuilding, not by replaying** (D-114.9 amended in place):
+re-enqueue now builds the new job from the connection's current
+registration — config, credentials, connector and constraint — and
+reports captured-vs-current references when they differ, because the
+operator is about to see a different outcome from the same button. No
+registration is a refusal, not a replay.
+
+**And a line drawn that was not there before:** `execute` and `publish`
+jobs are **not re-enqueueable**. Their payloads are not the registry's to
+rebuild — they carry a person's statement, their identity and the
+guardrails they were granted. Re-running one means re-running somebody
+else's request under their recorded identity with nobody waiting for the
+answer; for publish it would re-deliver a report to a BI tool because an
+operator was clearing a queue. The discriminator is *whose request the
+payload holds*, not the job's class: a `test_connection` probe is
+interactive and perfectly safe to re-run.
+
+**Two smaller defects the same report contained**, both real:
+
+- `error.reenqueued_as` put a success pointer inside the field that says
+  why a job died. Its own column now (migration 0014), with the existing
+  rows moved rather than left behind.
+- The UI answered "queued" and stopped, so a retry's *outcome* had to be
+  found by noticing a new row in a list the operator had just left. It
+  now follows the new job to a terminal state and reports it in place,
+  including "it failed too — read this before pressing anything else",
+  and a dead row that already has a successor offers no button.
+
+**What this says about the checkpoint.** The gate demo found in one act
+what the suites could not: every automated test staged its own payload,
+so none of them could have carried a *stale* one. The estate's history is
+the thing a fixture does not have, and it is why the demo is run on the
+real one.
+
 ## What this build does not claim
 
-- **The gate demo has not been run.** Every clause below is machine-proven
+- **The gate demo has not been run to completion.** Act 3 has (it found
+  B1-F1, above). Every clause below is machine-proven
   on fixtures and against the live pilot's own data where it reads; the
   end-to-end demonstration D-101.5 requires — request with a proposal →
   steward verdict → batch → enrich PR merged as R2 → requester sees the

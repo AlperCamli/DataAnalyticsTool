@@ -330,8 +330,17 @@ export interface Job {
   deferrals: number;
   error: { code: string; message: string; retryable: boolean } | null;
   triggers: Record<string, unknown>[];
+  reenqueued_as: string | null;
   created_at: string;
   finished_at: string | null;
+}
+
+export interface Reenqueued {
+  job_id: string;
+  reenqueue_of: string;
+  dead_job_unchanged: boolean;
+  rebuilt_from_registration: boolean;
+  references: { captured: string[]; current: string[]; changed: boolean; note?: string };
 }
 
 export interface JobList {

@@ -294,22 +294,56 @@ describe("B-1 dashboard surfaces", () => {
   // -- Ops -------------------------------------------------------------------
 
   describe("Ops: runs, jobs, dead-letter re-enqueue (U-10)", () => {
-    it("re-enqueue creates a new job as the caller and leaves the dead one dead", async () => {
-      // A dead-lettered job to act on, written directly because how it
-      // died is not what this test is about.
-      const jobId = "01JDEADLETTERTESTJOB000001";
+    /** A dead-lettered job to act on. How it died is not what these
+     * tests are about, so it is written directly. */
+    const stageDead = async (
+      jobId: string,
+      opts: { type?: string; system?: string; payload?: unknown } = {},
+    ) => {
       await rig.core.pool.query(
         `INSERT INTO jobs (job_id, type, class, system, connector_name, version_constraint,
                            payload, priority, max_attempts, deadline_s, max_deferrals, state,
                            triggers, error, attempt, finished_at)
-         VALUES ($1,'snapshot','batch','drill','drill','*', $2::jsonb, 5, 3, 600, 2,
+         VALUES ($1, $4, 'batch', $5, 'drill','*', $2::jsonb, 5, 3, 600, 2,
                  'dead_lettered', '[]'::jsonb, $3::jsonb, 3, now())`,
         [
           jobId,
-          JSON.stringify({ config: { system: "drill", mode: "fixture" }, credentials: [] }),
-          JSON.stringify({ code: "source_unavailable", message: "the source refused", retryable: true }),
+          JSON.stringify(
+            opts.payload ?? {
+              config: { system: "drill", mode: "fixture" },
+              // The stale capture B1-F1 is about: this reference was
+              // right when the job was queued and is not right now.
+              credentials: [{ key: "dsn", ref: "env://GONE_SINCE_THE_MIGRATION" }],
+            },
+          ),
+          JSON.stringify({ code: "auth_error", message: "no resolver for its scheme", retryable: false }),
+          opts.type ?? "snapshot",
+          opts.system ?? "drill",
         ],
       );
+    };
+
+    /** The registration re-enqueue must rebuild from. */
+    const registerDrill = async (refs: { key: string; ref: string }[]) => {
+      const res = await fetch(`${rig.base}/v1/dashboard/connections/drill`, {
+        method: "PUT",
+        headers: {
+          cookie: steward.cookie,
+          "content-type": "application/json",
+          "x-cl-csrf": steward.csrf,
+        },
+        body: JSON.stringify({
+          connector: { name: "drill", version_constraint: "*" },
+          payload: { config: { system: "drill", mode: "fixture" }, credentials: refs },
+        }),
+      });
+      expect([200, 201]).toContain(res.status);
+    };
+
+    it("re-enqueue creates a new job as the caller and leaves the dead one dead", async () => {
+      await registerDrill([{ key: "dsn", ref: "vault://secret/contextlayer/connections/drill#dsn" }]);
+      const jobId = "01JDEADLETTERTESTJOB000001";
+      await stageDead(jobId);
 
       const res = await apiPost(rig, steward, `/v1/dashboard/ops/jobs/${jobId}/reenqueue`, {});
       expect(res.status).toBe(201);
@@ -320,13 +354,18 @@ describe("B-1 dashboard surfaces", () => {
       // The dead row keeps its state and its error: it is the evidence
       // that something failed, and a re-enqueue that flipped it back to
       // queued would delete the fault while appearing to fix it.
-      const { rows } = await rig.core.pool.query<{ state: string; error: Record<string, unknown> }>(
-        `SELECT state, error FROM jobs WHERE job_id = $1`,
-        [jobId],
-      );
+      const { rows } = await rig.core.pool.query<{
+        state: string;
+        error: Record<string, unknown>;
+        reenqueued_as: string | null;
+      }>(`SELECT state, error, reenqueued_as FROM jobs WHERE job_id = $1`, [jobId]);
       expect(rows[0]!.state).toBe("dead_lettered");
-      expect(rows[0]!.error.code).toBe("source_unavailable");
-      expect(rows[0]!.error.reenqueued_as).toBe(newId);
+      expect(rows[0]!.error.code).toBe("auth_error");
+      // B1-F1: the pointer is its own column. A pointer to a replacement
+      // is not part of why this job died, and burying it in `error` put
+      // a success fact inside the failure record.
+      expect(rows[0]!.reenqueued_as).toBe(newId);
+      expect(rows[0]!.error.reenqueued_as).toBeUndefined();
 
       // The new job carries the acting identity on its own row.
       const { rows: created } = await rig.core.pool.query<{
@@ -336,6 +375,90 @@ describe("B-1 dashboard surfaces", () => {
       expect(created[0]!.state).toBe("queued");
       expect(created[0]!.triggers[0]!.kind).toBe("dashboard");
       expect(created[0]!.triggers[0]!.detail.actor).toBe(USERS.steward.username);
+    });
+
+    it("B1-F1: the payload is rebuilt from the registration, not replayed", async () => {
+      // The pilot's shape exactly: a job captured before A-4 carrying
+      // `env://…`, a connection since flipped to `vault://…`, and a
+      // runner with no env resolver. Replaying the capture re-runs a
+      // configuration the estate abandoned — forever, once per press.
+      await registerDrill([
+        { key: "dsn", ref: "vault://secret/contextlayer/connections/drill#dsn" },
+      ]);
+      const jobId = "01JDEADLETTERTESTJOB000002";
+      await stageDead(jobId);
+
+      const res = await apiPost(rig, steward, `/v1/dashboard/ops/jobs/${jobId}/reenqueue`, {});
+      expect(res.status).toBe(201);
+      expect(res.json.rebuilt_from_registration).toBe(true);
+
+      const refs = res.json.references as { captured: string[]; current: string[]; changed: boolean };
+      expect(refs.captured).toEqual(["env://GONE_SINCE_THE_MIGRATION"]);
+      expect(refs.current).toEqual(["vault://secret/contextlayer/connections/drill#dsn"]);
+      expect(refs.changed).toBe(true);
+
+      // The new job runs the CURRENT reference. Without this it would
+      // carry the dead one's and fail identically, which is what the
+      // operator saw three times in a row.
+      const { rows } = await rig.core.pool.query<{ payload: { credentials: { ref: string }[] } }>(
+        `SELECT payload FROM jobs WHERE job_id = $1`,
+        [res.json.job_id as string],
+      );
+      expect(rows[0]!.payload.credentials[0]!.ref).toBe(
+        "vault://secret/contextlayer/connections/drill#dsn",
+      );
+      expect(JSON.stringify(rows[0]!.payload)).not.toContain("env://");
+    });
+
+    it("B1-F1: a second press on the same dead row is refused, and names the successor", async () => {
+      await registerDrill([{ key: "dsn", ref: "vault://secret/contextlayer/connections/drill#dsn" }]);
+      const jobId = "01JDEADLETTERTESTJOB000003";
+      await stageDead(jobId);
+
+      const first = await apiPost(rig, steward, `/v1/dashboard/ops/jobs/${jobId}/reenqueue`, {});
+      expect(first.status).toBe(201);
+      const second = await apiPost(rig, steward, `/v1/dashboard/ops/jobs/${jobId}/reenqueue`, {});
+      // Three presses produced three parallel dead jobs on the pilot,
+      // all forked from the same stale point. The chain continues from
+      // the newest job or not at all.
+      expect(second.status).toBe(409);
+      expect(second.json.error).toBe("already_reenqueued");
+      expect(second.json.job_id).toBe(first.json.job_id);
+    });
+
+    it("B1-F1: a job whose system has no registration is refused, not replayed", async () => {
+      const jobId = "01JDEADLETTERTESTJOB000004";
+      await stageDead(jobId, { system: "long_gone" });
+      const res = await apiPost(rig, steward, `/v1/dashboard/ops/jobs/${jobId}/reenqueue`, {});
+      expect(res.status).toBe(409);
+      expect(res.json.error).toBe("no_registration");
+      expect(res.json.detail as string).toContain("no longer has");
+    });
+
+    it("B1-F1: an execute job is refused — it carries somebody else's request", async () => {
+      const jobId = "01JDEADLETTERTESTJOB000005";
+      await rig.core.pool.query(
+        `INSERT INTO jobs (job_id, type, class, system, connector_name, version_constraint,
+                           payload, priority, max_attempts, deadline_s, max_deferrals, state,
+                           triggers, error, attempt, finished_at)
+         VALUES ($1,'execute','interactive','drill','drill','*', $2::jsonb, 5, 3, 600, 2,
+                 'dead_lettered', '[]'::jsonb, $3::jsonb, 3, now())`,
+        [
+          jobId,
+          JSON.stringify({
+            config: { system: "drill" },
+            request: { dialect: "sql", statement: "SELECT 1" },
+            identity: { subject: "somebody-else", roles: ["reporter"] },
+          }),
+          JSON.stringify({ code: "internal", message: "boom", retryable: false }),
+        ],
+      );
+      const res = await apiPost(rig, steward, `/v1/dashboard/ops/jobs/${jobId}/reenqueue`, {});
+      expect(res.status).toBe(409);
+      expect(res.json.error).toBe("not_reenqueueable");
+      // The reason, not just the refusal: re-running it would execute a
+      // stranger's statement under their recorded identity for nobody.
+      expect(res.json.detail as string).toContain("somebody else");
     });
 
     it("re-enqueue is offered for dead-lettered jobs only", async () => {

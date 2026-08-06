@@ -347,3 +347,9 @@ pre.config {
   margin: 0.35rem 0; padding-left: 0.7rem; border-left: 2px solid var(--line);
   font-style: italic; white-space: pre-wrap;
 }
+
+.outcome { margin-top: 0.4rem; padding: 0.5rem 0.75rem; border-left: 3px solid var(--line); background: var(--bg); border-radius: 0 0.35rem 0.35rem 0; }
+.outcome-succeeded { border-left-color: var(--green); }
+.outcome-dead_lettered { border-left-color: var(--red); }
+.rebuilt { margin: 0 0 0.5rem; padding: 0.5rem 0.75rem; border: 1px solid var(--amber); border-radius: 0.35rem; }
+.rebuilt code { word-break: break-all; }

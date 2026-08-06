@@ -53,6 +53,11 @@ export interface JobRow {
   triggers: Record<string, unknown>[];
   progress: Record<string, unknown> | null;
   error: Record<string, unknown> | null;
+  /** The job that replaced this one when an operator re-enqueued it
+   * from the Ops screen (B-1). Deliberately its own column and not a
+   * key inside `error`: a pointer to a replacement is not part of why
+   * this job died (finding B1-F1). */
+  reenqueued_as: string | null;
   result: unknown;
   result_meta: Record<string, unknown> | null;
   created_at: Date;

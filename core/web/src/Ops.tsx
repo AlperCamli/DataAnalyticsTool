@@ -29,6 +29,7 @@ import {
   type HookList,
   type Job,
   type JobList,
+  type Reenqueued,
   type RotatedSecret,
   type Run,
 } from "./api";
@@ -51,15 +52,107 @@ function ago(iso: string | null): string {
   return `${duration((Date.now() - t) / 1000)} ago`;
 }
 
+/**
+ * Following a re-enqueued job to its end (finding B1-F1).
+ *
+ * The first cut answered "queued" and stopped, so an operator watched a
+ * job appear and vanish with no way to learn what happened to it — they
+ * had to notice a new row in a list they had just left. This polls the
+ * new job until it stops moving and reports the outcome in place.
+ *
+ * Bounded, and honest when the bound is reached: a job that is still
+ * running after the window says so rather than being reported as
+ * anything. Polling is the right shape here despite being unfashionable
+ * — the alternative is a socket, and one operator watching one job for a
+ * minute does not justify a second transport.
+ */
+const TERMINAL = new Set(["succeeded", "dead_lettered", "cancelled"]);
+
+function useJobOutcome(jobId: string | null): { job: Job | null; waiting: boolean } {
+  const [job, setJob] = useState<Job | null>(null);
+  const [waiting, setWaiting] = useState(false);
+
+  useEffect(() => {
+    if (!jobId) return;
+    let stop = false;
+    setWaiting(true);
+    setJob(null);
+    const started = Date.now();
+    const tick = async () => {
+      if (stop) return;
+      const res = await api.get<JobList>(`/v1/dashboard/ops/jobs?state=all&limit=200`);
+      if (stop) return;
+      const found = res.ok ? res.data.jobs.find((j) => j.job_id === jobId) ?? null : null;
+      if (found) setJob(found);
+      if (found && TERMINAL.has(found.state)) {
+        setWaiting(false);
+        return;
+      }
+      if (Date.now() - started > 90_000) {
+        setWaiting(false);
+        return;
+      }
+      window.setTimeout(() => void tick(), 2000);
+    };
+    void tick();
+    return () => {
+      stop = true;
+    };
+  }, [jobId]);
+
+  return { job, waiting };
+}
+
+function Outcome({ jobId }: { jobId: string }) {
+  const { job, waiting } = useJobOutcome(jobId);
+
+  if (!job && waiting) return <Spinner label="watching the new job…" />;
+  if (!job) {
+    return (
+      <p className="muted small">
+        New job <code><Text value={jobId} /></code> queued. It has not been picked up yet — no
+        runner has claimed it, which usually means none hosts this connector.
+      </p>
+    );
+  }
+  if (!TERMINAL.has(job.state)) {
+    return (
+      <p className="muted small">
+        New job <code><Text value={job.job_id} /></code> is <Text value={job.state} /> and still
+        going after 90s. Its outcome will show in this list; nothing here is stuck.
+      </p>
+    );
+  }
+  return (
+    <div className={`outcome outcome-${job.state}`}>
+      <div>
+        <StatusDot status={DOT[job.state] ?? "unknown"} />
+        New job <code><Text value={job.job_id} /></code> — <strong><Text value={job.state} /></strong>
+      </div>
+      {job.error && (
+        <div className="job-error">
+          <code><Text value={job.error.code} /></code> <Text value={job.error.message} />
+        </div>
+      )}
+      {job.state === "dead_lettered" && (
+        <p className="muted small">
+          It failed too. Read the error above before pressing anything else — re-enqueueing again
+          replays the same configuration and will fail the same way.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function JobRow({ job, csrf, onChanged }: { job: Job; csrf: string | null; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [created, setCreated] = useState<string | null>(null);
+  const [created, setCreated] = useState<Reenqueued | null>(null);
 
   const reenqueue = async () => {
     setBusy(true);
     setError(null);
-    const res = await api.post<{ job_id: string }>(
+    const res = await api.post<Reenqueued>(
       `/v1/dashboard/ops/jobs/${encodeURIComponent(job.job_id)}/reenqueue`,
       {},
       csrf,
@@ -69,7 +162,7 @@ function JobRow({ job, csrf, onChanged }: { job: Job; csrf: string | null; onCha
       setError(res.error);
       return;
     }
-    setCreated(res.data.job_id);
+    setCreated(res.data);
     onChanged();
   };
 
@@ -94,20 +187,43 @@ function JobRow({ job, csrf, onChanged }: { job: Job; csrf: string | null; onCha
           {job.error.retryable && <span className="muted"> · the connector called this retryable</span>}
         </div>
       )}
-      {job.state === "dead_lettered" && (
+      {/* B1-F1: the chain, so repeated failures read as one story. A row
+          that already has a successor offers no button — pressing it
+          again would fork the chain from a job two attempts old. */}
+      {job.reenqueued_as && (
+        <div className="muted small">
+          Already re-enqueued as <code><Text value={job.reenqueued_as} /></code>. If that one failed
+          too, continue from it — not from here.
+        </div>
+      )}
+
+      {job.state === "dead_lettered" && !job.reenqueued_as && (
         <div className="actions">
           <button onClick={reenqueue} disabled={busy || created !== null}>
             {busy ? <Spinner label="enqueueing…" /> : "Re-enqueue as me"}
           </button>
           <span className="muted small">
-            Enqueues a new job with this one&apos;s payload, recorded under your identity. This row
-            stays dead-lettered — it is the evidence of the failure, and nothing here rewrites it.
+            Runs this work again under your identity, against the connection&apos;s{" "}
+            <strong>current</strong> configuration — not the one this job captured when it was
+            first queued. This row stays dead-lettered: it is the evidence of the failure, and
+            nothing here rewrites it.
           </span>
         </div>
       )}
+
       {created && (
         <div className="saved">
-          New job <code><Text value={created} /></code> queued. The dead job above is unchanged.
+          {created.references.changed && (
+            <p className="rebuilt">
+              <strong>This job was captured before the connection changed.</strong> It ran against{" "}
+              <code><Text value={created.references.captured.join(", ") || "no references"} /></code>{" "}
+              and the connection now holds{" "}
+              <code><Text value={created.references.current.join(", ") || "no references"} /></code>.
+              The new job uses the current ones — which is why it may behave differently.
+            </p>
+          )}
+          <Outcome jobId={created.job_id} />
+          <p className="muted small">The dead job above is unchanged.</p>
         </div>
       )}
       {error && <ServerSays error={error} />}

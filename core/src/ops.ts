@@ -42,6 +42,22 @@ import { getSyncSystem, setHookSecret } from "./triggers.js";
 
 export const API_VERSION = "1";
 
+/**
+ * The job types re-enqueue is offered for: the ones whose payload is a
+ * capture of the **connection registry** and can therefore be rebuilt
+ * from it.
+ *
+ * The line is not "batch vs interactive" — a `test_connection` probe is
+ * interactive and is perfectly safe to re-run. It is *whose request the
+ * payload holds*. A snapshot or a probe asks the registry "read this
+ * source"; an `execute` or a `publish` carries a person's statement,
+ * their identity and the guardrails they were granted, and re-running
+ * that means re-running somebody else's request with nobody waiting for
+ * the answer — or, for publish, re-delivering a report to a BI tool
+ * because an operator was clearing a queue.
+ */
+const REBUILDABLE_TYPES = new Set(["snapshot", "test_connection"]);
+
 export interface OpsDeps extends SessionDeps {
   cfg: CoreConfig;
   pool: pg.Pool;
@@ -205,6 +221,9 @@ export function registerOps(app: FastifyInstance, deps: OpsDeps): void {
             }
           : null,
         triggers: job.triggers ?? [],
+        // The chain (B1-F1): which job replaced this one, so a queue of
+        // repeated failures reads as one story rather than several.
+        reenqueued_as: job.reenqueued_as ?? null,
         created_at: job.created_at,
         finished_at: job.finished_at,
       })),
@@ -215,11 +234,24 @@ export function registerOps(app: FastifyInstance, deps: OpsDeps): void {
    * Re-enqueue a dead-lettered job **as the caller** (§3: "Re-enqueue is
    * `POST /v1/jobs` as the user").
    *
-   * The dead row is not touched beyond a pointer to its replacement.
-   * That is the whole design: an operator looking at this screen is
-   * looking at a fault, and a re-enqueue that flipped the old row back to
-   * `queued` would delete the fault while appearing to fix it — the
-   * silent-failure family this checkpoint exists to make visible.
+   * Two rules, and the second was bought by finding B1-F1.
+   *
+   * **The dead row is not touched beyond a pointer to its replacement.**
+   * An operator looking at this screen is looking at a fault, and a
+   * re-enqueue that flipped the old row back to `queued` would delete the
+   * fault while appearing to fix it.
+   *
+   * **The payload is REBUILT from the connection registration, never
+   * replayed from the dead job.** A job's payload is a *capture* of the
+   * registry taken at enqueue time, so a job that predates a credential
+   * change carries the reference that used to be right — and replaying it
+   * re-runs a configuration the estate has abandoned. The pilot found
+   * this the hard way after A-4: snapshot jobs captured before the vault
+   * migration carried `env://SUPABASE_DSN`, the runner has had no `env`
+   * resolver since, and each press produced a fresh dead job with the
+   * same impossible reference. Same fan-out rule as everywhere else — the
+   * registry is the one source for what a connection uses, and a captured
+   * copy that disagrees with it is not evidence, it is a stale duplicate.
    */
   app.post("/v1/dashboard/ops/jobs/:jobId/reenqueue", async (req, reply) => {
     const viewer = await viewerFor(req, reply, "write");
@@ -233,8 +265,10 @@ export function registerOps(app: FastifyInstance, deps: OpsDeps): void {
       version_constraint: string;
       payload: Record<string, unknown>;
       state: string;
+      reenqueued_as: string | null;
     }>(
-      `SELECT job_id, type, system, connector_name, version_constraint, payload, state
+      `SELECT job_id, type, system, connector_name, version_constraint, payload, state,
+              reenqueued_as
          FROM jobs WHERE job_id = $1`,
       [jobId],
     );
@@ -246,14 +280,66 @@ export function registerOps(app: FastifyInstance, deps: OpsDeps): void {
         detail: `job ${jobId} is ${dead.state}; re-enqueue is offered for dead-lettered jobs only`,
       });
     }
+    if (dead.reenqueued_as) {
+      // B1-F1: pressing again on the same dead row starts a parallel
+      // branch from a stale point rather than continuing the chain. The
+      // operator wants the newest job in the chain, so say which it is.
+      return reply.code(409).send({
+        error: "already_reenqueued",
+        detail:
+          `job ${jobId} was already re-enqueued as ${dead.reenqueued_as}. ` +
+          "Re-enqueue that one if it also failed — pressing here again would fork the chain " +
+          "from a job that is two attempts old.",
+        job_id: dead.reenqueued_as,
+      });
+    }
+    if (!REBUILDABLE_TYPES.has(dead.type)) {
+      return reply.code(409).send({
+        error: "not_reenqueueable",
+        detail:
+          `a ${dead.type} job carries a captured request — a statement, an identity and the ` +
+          "guardrails it was granted — not a connection's configuration. Replaying it would " +
+          "re-run somebody else's request under their recorded identity with nobody waiting " +
+          "for the result. Re-run it from the session that asked.",
+      });
+    }
+
+    // The registration, which is the authority for what this system uses
+    // *now*. Its `payload` is `{config, credentials}` — the same shape a
+    // snapshot or probe job takes, which is why substitution is clean
+    // rather than a translation.
+    const registration = await getSyncSystem(deps.pool, dead.system);
+    if (!registration) {
+      return reply.code(409).send({
+        error: "no_registration",
+        detail:
+          `no connection is registered for '${dead.system}', so there is no current ` +
+          "configuration to run this job against. The dead job's own payload names a " +
+          "configuration the estate no longer has; running it would prove nothing.",
+      });
+    }
+
+    const refsOf = (payload: unknown): string[] =>
+      ((payload as { credentials?: { ref?: unknown }[] } | null)?.credentials ?? [])
+        .map((c) => (typeof c.ref === "string" ? c.ref : null))
+        .filter((r): r is string => r !== null)
+        .sort();
+    const capturedRefs = refsOf(dead.payload);
+    const currentRefs = refsOf(registration.payload);
+    const refsChanged = JSON.stringify(capturedRefs) !== JSON.stringify(currentRefs);
 
     let created: { jobId: string; merged: boolean };
     try {
       created = await enqueue(deps.pool, deps.cfg, {
         type: dead.type,
         system: dead.system,
-        connector: { name: dead.connector_name, version_constraint: dead.version_constraint },
-        payload: dead.payload,
+        // The connector too: a registration that moved to another
+        // connector or widened its constraint is the current answer.
+        connector: {
+          name: registration.connector_name,
+          version_constraint: registration.version_constraint,
+        },
+        payload: registration.payload,
         trigger: {
           kind: "dashboard",
           // The acting identity, on the row itself — which is what the
@@ -264,22 +350,23 @@ export function registerOps(app: FastifyInstance, deps: OpsDeps): void {
       });
     } catch (err) {
       if (err instanceof EnqueueError) {
-        // The stored payload no longer validates — a connector contract
-        // moved under it. Said plainly rather than retried into a loop.
+        // The *registration* does not validate — which is a fault in the
+        // connection, not in the dead job, and is said as such.
         return reply.code(400).send({
           error: "invalid_enqueue",
-          detail: "the dead job's payload no longer validates against this core's job contract",
+          detail:
+            `the current registration for '${dead.system}' does not validate against this ` +
+            "core's job contract, so no job could be built from it. Fix the connection first.",
           fields: err.problems,
         });
       }
       throw err;
     }
 
-    await deps.pool.query(
-      `UPDATE jobs SET error = coalesce(error, '{}'::jsonb) || jsonb_build_object('reenqueued_as', $2::text)
-        WHERE job_id = $1`,
-      [dead.job_id, created.jobId],
-    );
+    await deps.pool.query(`UPDATE jobs SET reenqueued_as = $2 WHERE job_id = $1`, [
+      dead.job_id,
+      created.jobId,
+    ]);
     await writeGovernanceAudit(
       deps.pool,
       {
@@ -291,7 +378,12 @@ export function registerOps(app: FastifyInstance, deps: OpsDeps): void {
         kbRef: viewer.ws?.headSha ?? null,
         decision: "allowed",
         decisionReason: null,
-        resultMeta: { new_job_id: created.jobId, merged: created.merged },
+        resultMeta: {
+          new_job_id: created.jobId,
+          merged: created.merged,
+          rebuilt_from_registration: true,
+          references_changed: refsChanged,
+        },
       },
       deps.log,
     );
@@ -303,6 +395,24 @@ export function registerOps(app: FastifyInstance, deps: OpsDeps): void {
       reenqueue_of: dead.job_id,
       // Stated because it is the design, not an omission.
       dead_job_unchanged: true,
+      // B1-F1: when the dead job's captured references differ from the
+      // registration's, the operator is about to see a *different*
+      // outcome from the same button, and the reason belongs in the
+      // answer rather than in a changelog.
+      rebuilt_from_registration: true,
+      references: {
+        captured: capturedRefs,
+        current: currentRefs,
+        changed: refsChanged,
+        ...(refsChanged
+          ? {
+              note:
+                "This job was captured before the connection's credential references changed. " +
+                "The new job runs against the references the connection holds now — which is " +
+                "why it may behave differently from the one that died.",
+            }
+          : {}),
+      },
     });
   });
 
