@@ -136,17 +136,38 @@ docker compose exec vault vault operator init -key-shares=1 -key-threshold=1
 
 So load them into shell variables once, here, in a terminal you will
 close when the migration is done. Every later act uses `"$VK"` and
-`"$VT"` and never shows the values again:
+`"$VT"` and never shows the values again.
+
+**Via the clipboard, one at a time** — copy the value out of your
+password manager, then run its line. `pbpaste` never echoes the value,
+and the length check tells you it worked:
 
 ```bash
-set +o history              # keep them out of ~/.zsh_history
-read -rs VK                 # paste the UNSEAL KEY, press enter
-read -rs VT                 # paste the ROOT TOKEN, press enter
+set +o history                                  # keep them out of ~/.zsh_history
+
+# copy the UNSEAL KEY to the clipboard, then:
+VK=$(pbpaste); echo "VK is ${#VK} chars"        # expect 44
+
+# copy the ROOT TOKEN to the clipboard, then:
+VT=$(pbpaste); echo "VT is ${#VT} chars"        # expect 28
 ```
 
-`read -rs` does not echo, so nothing appears on screen and nothing enters
-history. If you close this terminal before act 8, just re-run these two
-lines from your password manager.
+**Check both lengths before continuing.** If either says `0 chars`, the
+variable is empty and everything downstream will fail in a way that
+does not mention it — act 3 would report `Vault is sealed`, act 4 would
+write empty secrets.
+
+> **Why not `read -rs`.** It was the first thing this page suggested and
+> it failed on first use: `read -rs` prints no prompt and echoes nothing,
+> so a waiting prompt and a finished command look identical — and if you
+> paste several lines at once, `read` consumes the *next line of the
+> paste* as its input. Both variables came out empty and the failure
+> surfaced two acts later as a policy error. If you prefer an
+> interactive read, give it a visible prompt and run it on its own:
+> `printf 'unseal key: '; read -rs VK; echo`
+
+If you close this terminal before act 8, re-run these two lines from
+your password manager. Nothing else breaks.
 
 **Now unseal:**
 
@@ -481,6 +502,7 @@ A-4's field note and it is worth more than a clean checklist.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `vault status` → `connection refused`, right after `up -d` | the listener is a second behind the container | wait and re-run; act 2's `until` loop does this for you |
+| Act 3 → `Vault is sealed`, though you ran `operator unseal` | `$VK` was empty, so the unseal was a no-op — **`operator init` leaves the vault sealed**, so this is the default state, not a regression | `echo "${#VK}"`; if `0`, reload it per act 2 and unseal again. `Unseal Progress 0/1` in `vault status` means no key was ever submitted; a *wrong* key errors instead |
 | `vault status` exits 2 | Vault's exit code for "sealed" | not an error; expected until act 2's unseal |
 | Vault container `(unhealthy)` before act 2 finishes | the healthcheck *is* `vault status` | expected — it flips to healthy seconds after the unseal, and `core`/`runner` wait for it on purpose |
 | `docker compose up` hangs on `core`/`runner` | vault is sealed, so its dependency is unmet | unseal it; the wait is the gate working |
