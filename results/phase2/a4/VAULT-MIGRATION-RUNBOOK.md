@@ -132,8 +132,21 @@ docker compose exec vault vault status          # Sealed false
 
 ## Act 3 — policies and identities
 
+> **The root token and the unseal key are typed at the prompt. They are
+> never saved into this page, into `deploy/vault-dev.env`, or into any
+> other file in this repo.** Substituting them into the code blocks here
+> is the obvious thing to do and it puts live credentials into a
+> **tracked** file — `deploy/vault-dev.env` in particular is committed
+> and ships in the public platform release. Keep them in your password
+> manager and paste from there. Easiest safe pattern: set them once as
+> shell variables in a terminal you will close afterwards.
+
 ```bash
-docker compose exec -e VAULT_TOKEN=<root-token> vault sh /vault/seed.sh
+set +o history              # keep them out of ~/.zsh_history
+read -rs VT                 # paste the ROOT TOKEN, press enter
+read -rs VK                 # paste the UNSEAL KEY, press enter
+
+docker compose exec -e VAULT_TOKEN="$VT" vault sh /vault/seed.sh
 ```
 
 This enables KV v2, writes the `cl-core` and `cl-runner` policies, enables
@@ -156,9 +169,28 @@ VAULT_TOKEN=
 EOF
 ```
 
-`VAULT_TOKEN=` blanks the dev stack's root token, which the base compose
-sets. `VAULT_ADDR` needs no line — `deploy/vault-dev.env` already points
-at the in-network `http://vault:8200`, which is correct here too.
+**`VAULT_TOKEN=` is left blank on purpose, and it matters.** It blanks
+the dev stack's root token, which the base compose sets. Putting the real
+root token there instead would work — and would give both the core and
+the runner unrestricted vault access, making D-111.2's two-policy split
+fiction. The point of the split is that the runner, the process that
+executes customer SQL, cannot read the KB git token. A root token in
+these files means the separation you would attest to at the gate is not
+the separation you have.
+
+`VAULT_ADDR` needs no line — `deploy/vault-dev.env` already points at the
+in-network `http://vault:8200`, which is correct here too.
+
+**Check the AppRole identity actually works before moving on**, because
+a typo here surfaces three acts later as an unexplained `permission
+denied`:
+
+```bash
+docker compose exec vault sh -c '
+  vault write -field=token auth/approle/login \
+    role_id=<cl-runner role_id> secret_id=<cl-runner secret_id> >/dev/null \
+    && echo "cl-runner login OK" || echo "cl-runner login FAILED"'
+```
 
 ## Act 4 — seed the pilot's secrets
 
