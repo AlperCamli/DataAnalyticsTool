@@ -109,6 +109,18 @@ behavioral half** (act 9's alternative), which needs a model call.
 
 ### Act 0 — rebuild and restart
 
+**Already satisfied, and verified rather than assumed (2026-08-06 19:30).**
+The running stack carries B1-F1..F4 in both halves — the API serves the
+per-kind `disposition` with **D-81 quoted in its `why`**, and the bundle
+served at `/app/app.js` carries *"This one needs a person"*, *"A skill
+can close this"*, *"Came back from a batch"* and the re-enqueue chain
+line. Migrations `0012`/`0013`/`0014` are applied (the inbox answers, the
+return state renders, the dead-letter split computes). **You can start at
+act 5.2.**
+
+Run act 0 only if you want a clean start, or if something below does not
+match this page:
+
 ```bash
 cd ~/Desktop/DataProject
 make stack-pilot          # runs check-toggle-env.sh first; heed it
@@ -456,10 +468,14 @@ The end-to-end demonstration. **Six acts, and one of them is not yours.**
 
 ### Act 6 — submit a real request, with a proposal
 
-Sign out. Sign in **as a reporter** — ideally as Eda, whose identity
-already exists from A-2, so a second real human's request goes through
-the loop. If that is not convenient, use any reporter identity that is
-not your steward one; the point is that filer and verdict-giver are
+Sign out. Sign in **as a reporter** — **use `eda`**. Two reasons, and the
+second one is operational: her identity already exists from A-2, so a
+second real human's request goes through the loop; and **her inbox is
+empty** (verified 2026-08-06), whereas the generic `reporter` account
+already carries **2 unread** resolutions from earlier runs. Act 11 asks
+you to read a badge appearing — starting from zero is what makes that
+unambiguous. If neither is convenient, any reporter identity that is not
+your steward one will do; the point is that filer and verdict-giver are
 different people.
 
 Open **Gap Triage**. Note the queue is scoped to *what you filed* — the
