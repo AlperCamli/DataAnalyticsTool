@@ -73,9 +73,10 @@ code, the runbook and DECISIONS.
 
 Deliveries with attestation history and the **dangling** state F-15
 named, loudest on the screen rather than a column to notice. Runs, jobs,
-the dead-letter queue with re-enqueue **as the user** — a new job with
-the dead one's payload; the dead row keeps its error and its terminal
-state, because it is the evidence that something failed. Webhook secrets
+the dead-letter queue with re-enqueue **as the user** — a new job built
+from the connection's *current* registration (see B1-F1 below); the dead
+row keeps its error and its terminal state, because it is the evidence
+that something failed. Webhook secrets
 shown once from the creation response (DT-5), with no endpoint that could
 return one: the store holds a sha256.
 
