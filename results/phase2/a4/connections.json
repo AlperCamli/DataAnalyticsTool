@@ -25,12 +25,12 @@
       ],
       "health": {
         "status": "red",
-        "reason": "the newest accepted snapshot is 1447272s old, past this system's 259200s threshold",
+        "reason": "the newest accepted snapshot is 1450965s old, past this system's 259200s threshold",
         "snapshot": {
           "snapshot_id": "01KXZXXSQ35ZKAVQEGGEXNTHGX",
           "captured_at": "2026-07-20T14:12:21+00:00",
           "accepted_at": "2026-07-20T14:12:22.370565+00:00",
-          "age_s": 1447272,
+          "age_s": 1450965,
           "object_count": 466,
           "source_mode": "api"
         },
@@ -70,12 +70,12 @@
       ],
       "health": {
         "status": "red",
-        "reason": "the newest accepted snapshot is 508043s old, past this system's 259200s threshold",
+        "reason": "the newest accepted snapshot is 511736s old, past this system's 259200s threshold",
         "snapshot": {
           "snapshot_id": "01KYVXMRVXX7EYTSA3YNGV4WSH",
           "captured_at": "2026-07-31T11:06:10+00:00",
           "accepted_at": "2026-07-31T11:06:10.684744+00:00",
-          "age_s": 508043,
+          "age_s": 511736,
           "object_count": 10,
           "source_mode": "api"
         },
@@ -215,12 +215,12 @@
       ],
       "health": {
         "status": "green",
-        "reason": "snapshot 120684s old, inside the 2592000s threshold",
+        "reason": "snapshot 124377s old, inside the 2592000s threshold",
         "snapshot": {
           "snapshot_id": "01KZ7F2168CQHSWXFC4ZV0S6BB",
           "captured_at": "2026-08-04T22:42:09+00:00",
           "accepted_at": "2026-08-04T22:42:09.736044+00:00",
-          "age_s": 120684,
+          "age_s": 124377,
           "object_count": 38,
           "source_mode": "live"
         },
@@ -230,10 +230,10 @@
         },
         "freshness": "fresh",
         "last_job": {
-          "job_id": "01KZB20XQ80NQ64QFM18SAVQ19",
-          "type": "test_connection",
+          "job_id": "01KZB5MP87DJ486VJ3N5X7WPZV",
+          "type": "execute",
           "state": "succeeded",
-          "finished_at": "2026-08-06T08:11:20.837425+00:00",
+          "finished_at": "2026-08-06T09:14:34.442107+00:00",
           "error": null
         }
       }

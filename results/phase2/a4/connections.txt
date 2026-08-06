@@ -1,5 +1,5 @@
-ga4|ga4|red|stale|1447272|466|259200|manual|test_connection|succeeded|-|vault://secret/contextlayer/connections/google#sa_key_json|the newest accepted snapshot is 1447272s old, past this system's 259200s threshold
-gsc|gsc|red|stale|508043|10|259200|manual|test_connection|succeeded|-|vault://secret/contextlayer/connections/google#sa_key_json|the newest accepted snapshot is 508043s old, past this system's 259200s threshold
+ga4|ga4|red|stale|1450965|466|259200|manual|test_connection|succeeded|-|vault://secret/contextlayer/connections/google#sa_key_json|the newest accepted snapshot is 1450965s old, past this system's 259200s threshold
+gsc|gsc|red|stale|511736|10|259200|manual|test_connection|succeeded|-|vault://secret/contextlayer/connections/google#sa_key_json|the newest accepted snapshot is 511736s old, past this system's 259200s threshold
 looker_studio|looker_studio|green|not_a_sync_source|-|-|-|-|test_connection|succeeded|-|-|not a sync source (absent from sync-policy.yaml); its last test_connection job succeeded
 powerbi|powerbi|green|not_a_sync_source|-|-|-|-|test_connection|succeeded|-|vault://secret/contextlayer/connections/powerbi#client_secret|not a sync source (absent from sync-policy.yaml); its last test_connection job succeeded
-supabase|postgres|green|fresh|120684|38|2592000|manual|test_connection|succeeded|-|vault://secret/contextlayer/connections/supabase#introspect_dsn,vault://secret/contextlayer/connections/supabase#exec_dsn|snapshot 120684s old, inside the 2592000s threshold
+supabase|postgres|green|fresh|124377|38|2592000|manual|execute|succeeded|-|vault://secret/contextlayer/connections/supabase#introspect_dsn,vault://secret/contextlayer/connections/supabase#exec_dsn|snapshot 124377s old, inside the 2592000s threshold

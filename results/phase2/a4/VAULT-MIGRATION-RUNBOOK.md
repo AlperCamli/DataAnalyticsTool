@@ -472,6 +472,27 @@ and a governed execute is the thing that proves it end to end.
 DBA — we never run DDL against the customer's database. The moment you
 do, the *old* password is dead.
 
+Get it there via the clipboard, and **do not print it, not even masked**:
+
+```bash
+pbcopy < .secrets/alter-exec-password.sql     # paste into the SQL editor
+```
+
+> Learned on the first run: a regex-masked echo of this file matched
+> across a comment boundary and left the password's tail in the
+> transcript. Masking a secret is not a safe operation — the only safe
+> operation is not printing it. If you need to confirm the file's shape,
+> print its *structure* (`awk` the statement's first three words and its
+> length), never its content. Recovery is cheap only while the password
+> has not yet reached the estate; after step 2 it means rotating twice.
+
+**Before you go on, capture the failure — it is the proof.** With the old
+DSN still in vault, probe `supabase`: it must fail `auth_error`. That is
+what shows the runner reads the execution DSN *from vault*, because the
+value in vault is the one you just killed. A probe that still passes here
+means something else is serving the credential, and the rotation would
+prove nothing.
+
 ```bash
 # 3. Load the new DSN and write it into vault. ONLY into vault.
 set -a; . .secrets/env.sh; set +a
