@@ -143,14 +143,16 @@ password manager, then run its line. `pbpaste` never echoes the value,
 and the length check tells you it worked:
 
 ```bash
-set +o history                                  # keep them out of ~/.zsh_history
-
 # copy the UNSEAL KEY to the clipboard, then:
 VK=$(pbpaste); echo "VK is ${#VK} chars"        # expect 44
 
 # copy the ROOT TOKEN to the clipboard, then:
 VT=$(pbpaste); echo "VT is ${#VT} chars"        # expect 28
 ```
+
+Nothing here needs history suppression: the clipboard never touches the
+command line, and every later command references `"$VK"` / `"$VT"`, which
+is what the shell records — not what they expand to.
 
 **Check both lengths before continuing.** If either says `0 chars`, the
 variable is empty and everything downstream will fail in a way that
@@ -231,40 +233,62 @@ docker compose exec vault sh -c '
 
 ## Act 4 — seed the pilot's secrets
 
-Vault is empty. Put today's values in it — **the values, one time, by
-hand.** Read each one out of the file it is in now; do not retype from
-memory, and do not paste any of them into a terminal that logs history.
+Vault is empty. Put today's values in it — and **do not retype or
+copy-paste a single one of them.** They are already on this machine, in
+the files the runner reads today; sourcing those files into the shell
+moves them with no transcription step, which is the only way that does
+not eventually produce a DSN with a missing character.
 
 ```bash
-# turn off history for this shell, so the values do not land in ~/.zsh_history
-set +o history
+# Load today's values as shell variables. `set -a` exports them so the
+# names match what the files declare.
+set -a; . .secrets/runner.env; . .secrets/sync.env; set +a
+
+# Confirm each one arrived, by LENGTH — never by printing it.
+for v in CL_INTROSPECT_DSN CL_EXEC_DSN GOOGLE_SA_KEY_JSON \
+         POWERBI_CLIENT_SECRET SYNC_GIT_TOKEN; do
+  eval "printf '%-24s %s chars\n' $v \${#$v}"
+done
 ```
 
-The pilot has five secrets across five connections plus one core secret.
-Their current homes are `.secrets/runner.env` and `.secrets/sync.env`.
+Every line must show a non-zero length. A zero means that name is not in
+the file you think it is — check before writing it into vault, because an
+empty secret writes happily and fails at act 6 wearing a different face.
 
 ```bash
 # customer connection credentials → the cl-runner policy's subtree
-docker compose exec -e VAULT_TOKEN="$VT" vault \
+docker compose exec -T -e VAULT_TOKEN="$VT" vault \
   vault kv put secret/contextlayer/connections/supabase \
-    introspect_dsn='<CL_INTROSPECT_DSN from .secrets/runner.env>' \
-    exec_dsn='<CL_EXEC_DSN from .secrets/runner.env>'
+    introspect_dsn="$CL_INTROSPECT_DSN" \
+    exec_dsn="$CL_EXEC_DSN"
 
-docker compose exec -e VAULT_TOKEN="$VT" vault \
+docker compose exec -T -e VAULT_TOKEN="$VT" vault \
   vault kv put secret/contextlayer/connections/google \
-    sa_key_json='<GOOGLE_SA_KEY_JSON from .secrets/runner.env>'
+    sa_key_json="$GOOGLE_SA_KEY_JSON"
 
-docker compose exec -e VAULT_TOKEN="$VT" vault \
+docker compose exec -T -e VAULT_TOKEN="$VT" vault \
   vault kv put secret/contextlayer/connections/powerbi \
-    client_secret='<POWERBI_CLIENT_SECRET from .secrets/runner.env>'
+    client_secret="$POWERBI_CLIENT_SECRET"
 
 # the core's own secret → the cl-core policy's subtree
-docker compose exec -e VAULT_TOKEN="$VT" vault \
+docker compose exec -T -e VAULT_TOKEN="$VT" vault \
   vault kv put secret/contextlayer/core \
-    git_token='<SYNC_GIT_TOKEN from .secrets/sync.env>'
-
-set -o history
+    git_token="$SYNC_GIT_TOKEN"
 ```
+
+**No history suppression is needed and none is used.** The shell records
+the line you typed, not what the variables expanded to — so history holds
+`introspect_dsn="$CL_INTROSPECT_DSN"` and never the DSN. (The earlier
+draft of this page said `set +o history`, which is a bash builtin that
+zsh rejects outright with `set: no such option: history`; it was there
+only because that draft pasted values onto the command line, which this
+one does not.)
+
+The one exposure that remains: an expanded value is briefly an argument
+of the `docker` process, so it is visible to `ps` for the moment the
+command runs. On a single-operator machine that is acceptable and it is
+named here rather than left unsaid; a shared host would use
+`vault kv put key=-` and pipe the value on stdin instead.
 
 > `ga4` and `gsc` share one service-account key today, which is why it is
 > one secret at `connections/google` referenced twice rather than two
@@ -401,20 +425,39 @@ The exec-role password is the right one: it already has a reset script,
 and a governed execute is the thing that proves it end to end.
 
 ```bash
-# 1. Rotate the password at the source, and capture the new DSN.
-#    This script prints the new value; the history guard still applies.
-set +o history
+# 1. Generate the new password. The script writes the new DSN to
+#    .secrets/env.sh and the ALTER statement to
+#    .secrets/alter-exec-password.sql. It prints neither value.
 .secrets/reset-exec-password.sh
-
-# 2. Write the new DSN into vault. ONLY here.
-docker compose exec -e VAULT_TOKEN="$VT" vault \
-  vault kv patch secret/contextlayer/connections/supabase \
-    exec_dsn='<the new DSN>'
-set -o history
 ```
 
-`kv patch` leaves `introspect_dsn` alone. Now, **without restarting
-anything**, run a governed execute in the browser — ask a question
+**2. Apply the ALTER in Supabase.** Run the statement in
+`.secrets/alter-exec-password.sql` against the estate, as the customer
+DBA — we never run DDL against the customer's database. The moment you
+do, the *old* password is dead.
+
+```bash
+# 3. Load the new DSN and write it into vault. ONLY into vault.
+set -a; . .secrets/env.sh; set +a
+echo "CL_EXEC_DSN is ${#CL_EXEC_DSN} chars"     # sanity, never the value
+
+docker compose exec -T -e VAULT_TOKEN="$VT" vault \
+  vault kv patch secret/contextlayer/connections/supabase \
+    exec_dsn="$CL_EXEC_DSN"
+```
+
+`kv patch` leaves `introspect_dsn` alone — only the one field moves.
+
+**Why this proves what the gate asks.** Step 2 killed the old password at
+the source, so any execute that still works must be using the new one.
+The new one exists in exactly two places: vault, and `.secrets/env.sh` —
+and `env.sh` is not in the runner's `env_file` list and never has been,
+so the runner cannot be reading it. No connection row was edited, no
+compose file was touched, nothing was restarted. If the execute below
+succeeds, the runner resolved the new value out of vault. That is the
+whole clause.
+
+Now, **without restarting anything**, run a governed execute in the browser — ask a question
 through the MCP path that reaches a real query, or press **Test** on
 `supabase` in the Connections module.
 
