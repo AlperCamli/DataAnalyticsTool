@@ -221,6 +221,91 @@ function Verdict({
   );
 }
 
+
+/**
+ * The gap actions (fault-ledger §8, finding B1-F3).
+ *
+ * B-1 first shipped this queue read-only — a steward could read a gap
+ * and do nothing with it, which is most of a triage screen missing. Two
+ * acts, and the panel says what each one *buys*, because "triaged" on
+ * its own tells nobody what happens next and the honest answer —
+ * *nothing happens by itself, you run the skill* — is exactly the sort
+ * of thing a product hides by accident.
+ */
+function Triage({ issue, csrf, onDone }: { issue: Issue; csrf: string | null; onDone: () => void }) {
+  const [reason, setReason] = useState("");
+  const [dismissing, setDismissing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const act = async (action: "acknowledge" | "dismiss") => {
+    setBusy(true);
+    setError(null);
+    const res = await api.post<{ note: string }>(
+      `/v1/dashboard/ledger/issues/${encodeURIComponent(issue.issue_id)}/triage`,
+      action === "dismiss" ? { action, reason } : { action },
+      csrf,
+    );
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setNote(res.data.note);
+    setDismissing(false);
+    setReason("");
+    onDone();
+  };
+
+  return (
+    <div className="verdict">
+      <div className="actions">
+        {issue.status === "open" && (
+          <button onClick={() => act("acknowledge")} disabled={busy}>
+            {busy ? <Spinner label="recording…" /> : "Acknowledge — this is real, work it"}
+          </button>
+        )}
+        {dismissing ? (
+          <button onClick={() => setDismissing(false)}>Cancel</button>
+        ) : (
+          <button onClick={() => setDismissing(true)}>Dismiss…</button>
+        )}
+      </div>
+      <p className="muted small">
+        Acknowledging puts this on the enrich skill&apos;s work list — it reads triaged ledger items
+        first. <strong>Nothing drafts by itself:</strong> you run <code>enrich</code> in a session
+        and it picks these up, writes the docs, and opens a pull request for you to review.
+      </p>
+      {dismissing && (
+        <form
+          className="reject-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void act("dismiss");
+          }}
+        >
+          <label>
+            Reason — kept on the issue, and read if this gap comes back
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              required
+              placeholder="Why this is not worth doing. If the same gap recurs it reopens automatically and the next person reads this."
+            />
+          </label>
+          <button type="submit" disabled={busy || !reason.trim()}>
+            Dismiss with this reason
+          </button>
+        </form>
+      )}
+      {error && <ServerSays error={error} />}
+      {note && <div className="saved">{note}</div>}
+    </div>
+  );
+}
+
 function IssueCard({
   issue,
   csrf,
@@ -348,6 +433,21 @@ function IssueCard({
         </div>
       )}
 
+      {issue.resolution && issue.resolution.kind === "dismissed" && (
+        <div className="reopened">
+          Dismissed by <Text value={issue.resolution.by} />
+          {typeof issue.resolution.reason === "string" && issue.resolution.reason ? (
+            <>
+              : &ldquo;
+              <Text value={issue.resolution.reason} />
+              &rdquo;
+            </>
+          ) : null}
+          . The row is kept rather than deleted — if this gap happens again it reopens itself, and
+          the count is the argument for revisiting the decision.
+        </div>
+      )}
+
       {issue.resolution && typeof issue.resolution.pr_url === "string" && (
         <div className="resolved-line">
           resolved by{" "}
@@ -371,6 +471,14 @@ function IssueCard({
 
       {issue.kind === REQUEST_KIND && issue.status === "open" && (
         <Verdict issue={issue} csrf={csrf} onDone={reload} />
+      )}
+
+      {/* B1-F3: gaps get their §8 actions. Different lifecycle from a
+          request's, deliberately — "acknowledge" means *this is real*,
+          "approve" means *worth drafting*, and one control for both
+          would let a request skip its verdict. */}
+      {issue.kind !== REQUEST_KIND && ["open", "triaged"].includes(issue.status) && (
+        <Triage issue={issue} csrf={csrf} onDone={reload} />
       )}
     </li>
   );
@@ -543,6 +651,53 @@ function DeliverBatch({ approved, csrf, onDone }: { approved: number; csrf: stri
   );
 }
 
+
+/**
+ * What a steward does with a triaged queue — stated, because the queue
+ * itself cannot do it and a screen that offers only verbs leaves the
+ * question "and then what?" unanswered (finding B1-F3).
+ *
+ * The boundary being described is the product's, not a limitation: the
+ * dashboard triages and never drafts, the skill drafts and never merges,
+ * and a human merges. Three acts, three actors, and this panel names the
+ * one the person is holding.
+ */
+function WorkList({ triaged }: { triaged: Issue[] }) {
+  return (
+    <section className="panel">
+      <h3>Working the queue</h3>
+      {triaged.length === 0 ? (
+        <p className="muted">
+          Nothing acknowledged yet. Acknowledge a gap above and it appears here — that is how you
+          tell the enrich skill what is worth writing.
+        </p>
+      ) : (
+        <>
+          <p>
+            <Text value={triaged.length} /> acknowledged gap(s) are on the enrich skill&apos;s work
+            list:
+          </p>
+          <ul className="worklist">
+            {triaged.map((i) => (
+              <li key={i.issue_id}>
+                <code><Text value={i.object_fqn ?? i.kind} /></code>{" "}
+                <span className="muted"><Text value={i.title} /></span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <p className="muted small">
+        <strong>The dashboard does not write documents.</strong> Open a Claude Code session with
+        your steward bundle and ask it to run the <code>enrich</code> skill; it reads acknowledged
+        ledger items first, grounds each claim in evidence it can cite, and opens one pull request.
+        You review that diff and merge it — the merge is the act that certifies, and nothing in
+        this product can do it for you.
+      </p>
+    </section>
+  );
+}
+
 export function GapTriage({ csrf }: { csrf: string | null }) {
   const [list, setList] = useState<IssueList | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -575,6 +730,7 @@ export function GapTriage({ csrf }: { csrf: string | null }) {
   const requests = list.issues.filter((i) => i.kind === REQUEST_KIND);
   const gaps = list.issues.filter((i) => i.kind !== REQUEST_KIND);
   const approved = requests.filter((i) => i.status === "approved").length;
+  const triagedGaps = gaps.filter((i) => i.status === "triaged");
   const shown = tab === "requests" ? requests : gaps;
 
   return (
@@ -611,6 +767,8 @@ export function GapTriage({ csrf }: { csrf: string | null }) {
           ))}
         </ul>
       )}
+
+      {tab === "gaps" && gaps.length > 0 && <WorkList triaged={triagedGaps} />}
 
       {tab === "requests" && <DeliverBatch approved={approved} csrf={csrf} onDone={load} />}
 

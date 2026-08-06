@@ -23,8 +23,8 @@ Ops, drift review, triage), **acts 6–11** are the knowledge-request loop
 | 1 | Freshness map consuming `sync_enabled` — the two-silent-days shape now visible | 2, and 2b for the disabled state |
 | 2 | Doc-status counts | 2 |
 | 3 | Drift-PR queue routing to the git provider, **no merge affordance** | 4 |
-| 4 | Triage queue ordered by occurrences / distinct_subjects | 5 |
-| 5 | LED-R5 neutralization asserted on the render path | machine-checked (DT-3), visible at 5b |
+| 4 | Triage queue ordered by occurrences / distinct_subjects, and actionable | 5 |
+| 5 | LED-R5 neutralization asserted on the render path | machine-checked (DT-3); try it yourself at 5.2 by filing a gap containing `<script>` |
 | 6 | Gap resolution surfaces to the filer — the UI-D badge | 11 |
 | 7 | Knowledge Requests queue with DT-11 / DT-12 green | machine-checked; visible at 7–8 |
 | 8 | **The demonstration**: request (with proposal) → verdict → batch → enrich PR merged as R2 → requester sees the resolution | 6–11 |
@@ -38,7 +38,7 @@ usable by a person on the real estate.
   counts per caller's visibility, contamination paths, DT-3, the no-merge
   property asserted over the server sources *and* the shipped bundle, the
   lineage read view's node-by-node filtering.
-- `core/test/dashboard-b1.test.ts` (33) — DT-10 (the badge, its ack, and
+- `core/test/dashboard-b1.test.ts` (39) — DT-10 (the badge, its ack, and
   a re-verdict firing it again), the governance-audit rows, Ops
   re-enqueue leaving the dead job dead, DT-5, the `batched → approved`
   return, and the **whole D-101.5 loop end to end without an agent**:
@@ -72,7 +72,7 @@ behavioral half** (act 9's alternative), which needs a model call.
 
 | Prerequisite | How to check |
 |---|---|
-| Suites green at this commit | `cd core && npx vitest run` (expect **352 passed / 4 skipped / 30 files**) and `.venv/bin/python -m pytest -q` (expect **792 passed / 14 skipped / 1 failed**) — that one failure is `test_no_contamination_in_current_kb`, which is **estate state** (34 docs awaiting triage), not this code, and act 5 is where you start working it down |
+| Suites green at this commit | `cd core && npx vitest run` (expect **358 passed / 4 skipped / 30 files**) and `.venv/bin/python -m pytest -q` (expect **792 passed / 14 skipped / 1 failed**) — that one failure is `test_no_contamination_in_current_kb`, which is **estate state** (34 docs awaiting triage), not this code, and act 5 is where you start working it down |
 | Stack running the build that contains B-1 | act 0 |
 | Vault unsealed | `curl -s localhost:8100/healthz \| grep -o '"sealed":[a-z]*'` → `"sealed":false` |
 | Your identity carries `steward` | the pilot steward account carries `["steward","ops"]` |
@@ -247,38 +247,134 @@ clause does not need it.
 *Record:* either the populated queue with its links and the absence of a
 merge control, or the dark state and the sentence it gives you.
 
-### Act 5 — triage the contamination
+### Act 5 — work the gap queue
 
-This is the morning's real work and the reason the checkpoint exists.
+**What this act is for:** proving that a steward can look at what the
+estate is missing, decide what is worth doing, and hand that decision to
+something that does the work. You will not write a document by hand at
+any point.
 
-Open **Gap Triage → Gap triage** tab. Expect ~10 open issues, ordered by
-occurrences then distinct subjects — the queue's own argument for what
-matters, not a date sort.
+**Three actors, and you are only one of them.** This is the whole shape
+of the product, so it is worth having in your head before you start:
 
-Pick the top issue. Press **History & proposal**: the event stream, each
-event with its detector class and (because you are a steward) its
-subject. Note what is *not* there: the queue itself carries counts only,
-never who.
+| Who | Does | Cannot |
+|---|---|---|
+| **The dashboard** (you, here) | decides *what is worth doing* | write documents, open PRs, merge |
+| **The enrich skill** (a Claude Code session) | writes the documents and opens **one pull request** | decide what is worth doing, merge |
+| **You, in your git provider** | read the diff and **merge** | — |
 
-Then take one contaminated doc from act 2 and repair it properly:
+Nothing crosses those lines. That is why triaging feels like it "only"
+changes a status: changing the status *is* your act, and it is what tells
+the skill where to work.
 
-1. In `~/Desktop/kb`, read the doc and the object that contaminated it.
-2. If the doc is still true, clear the contamination marking and say why
-   in the commit message. If it is wrong, fix the claim.
-3. Open a PR. **Merge it yourself as R2** — that merge is the
-   certification act, and nothing in the product can do it for you.
-4. Reload KB Health. The contaminated count is one lower.
+#### 5.1 — read the queue
 
-One doc is enough for the gate. Thirty-three left is an honest number to
-record.
+Open **Gap Triage → Gap triage** tab. Expect around 10 open issues,
+ordered by how many times each was hit and by how many different people
+hit it — not by date. The top of the list is the estate's own argument
+about what matters.
 
-**Act 5b — LED-R5, if you want to see it.** File a gap (form at the
-bottom of Gap Triage) whose text contains `<script>alert(1)</script>` and
-some `**markdown**`. It renders inert — as characters, not as markup —
-and the stored row was already scrubbed before it got here. The suite
-asserts this (DT-3); this is just the human version.
+Press **History & proposal** on the top one. You get the event stream:
+every time this gap fired, which detector or which person, and when.
+
+#### 5.2 — decide, on two or three of them
+
+Each open gap now offers two buttons.
+
+**Acknowledge — "this is real, work it."** The gap moves to `triaged`,
+which is the enrich skill's work list. Nothing drafts by itself; you have
+told the skill where to go, and you run it in 5.3.
+
+**Dismiss — "not worth doing."** Needs a reason, and the reason is kept.
+The row is not deleted: if the same gap happens again it reopens by
+itself and the next person reads why you declined it. That is on purpose
+— a `wont_fix` that eleven more people hit deserves a second look, and
+the count is the argument.
+
+Acknowledge two or three that look genuinely worth writing. Dismiss one
+with a real reason. Look at the **Working the queue** panel that appears
+below: it lists what you acknowledged. That list is the handoff.
+
+#### 5.3 — hand it to the skill
+
+Open a **Claude Code session with your steward bundle** and say:
+
+```
+Run the enrich skill. Take the acknowledged items from the fault ledger
+as the batch, ground each claim in evidence you can cite, and open one
+pull request.
+```
+
+The skill reads the triaged items (`list_gaps` is in the steward
+profile), gathers evidence for each, drafts the docs with graded
+`sources`, re-renders the machine docs, runs the KB validation locally,
+and opens **one pull request** for the batch. Anything it cannot ground
+it skips and names in the PR body rather than guessing at — that is its
+central rule, and a batch that covers 5 of 8 with the other 3 explained
+is a correct outcome, not a failure.
+
+#### 5.4 — merge it, and that is the certification
+
+Read the pull request. **Read the diff, not the body** — the body is what
+the skill claims, the diff is what will be true of the knowledge base.
+
+Check three things:
+- every drafted doc says `status: draft` (the skill never certifies);
+- the `sources` on each doc are graded honestly — `observed in N queries`
+  means somebody observed it, `inferred from column names` means nobody
+  did;
+- the PR body's "ungrounded gaps" section names what it could not close.
+
+If it is right, **merge it under your own name**. That merge is the act
+that puts knowledge into the estate, and nothing in this product can
+perform it for you. That is the single most important line in the
+dashboard spec, and this is where you feel it.
+
+Reload **KB Health**. The doc-status counts have moved.
+
+*Record:* the queue before, what you acknowledged and dismissed (with the
+reason), the PR the skill opened, and the counts after.
 
 ---
+
+### Act 5b — the contaminated docs (optional, and read this first)
+
+Act 2 showed you 34 contaminated docs. **Repairing them is not a B-1 gate
+clause**, and this runbook originally told you to fix one by hand — which
+was wrong, and contradicted the product's own design. Do not hand-edit
+the KB.
+
+**What a contaminated doc actually is:** a breaking change landed under
+something the doc relies on, so the doc *may* now be wrong. Nothing has
+decided that it is. Repair means re-reading it against what the source
+says today and either confirming it or correcting it — and that is
+grounding work, which is a skill's job, not a text editor's.
+
+**The proven agent path is A-1's** (`results/phase2/a1-drill/`): a
+breaking change produces a sync PR, the steward runs the `review-sync`
+skill on it, and the skill prepares a **repair PR** the steward merges.
+That loop is shipped and was rehearsed live at A-1.
+
+**What is not built:** an entry point for contamination that arrived in a
+*past* sync PR, which is what these 34 are. The enrich skill's work list
+covers ledger items, undocumented hot objects and harvested docs — not
+"docs marked contaminated some time ago". So repairing this backlog today
+means pointing a session at specific docs by hand, which works but is not
+a product surface. **That gap is filed** (`results/phase2/b1/FINDINGS.md`,
+B1-F3's tail) and belongs to A-5, whose gate is precisely "every
+report-path L1 doc human-verified".
+
+If you want to try one anyway, the honest instruction is:
+
+```
+Read systems/supabase/reporting/<doc>.md and the object its front-matter
+names as the contamination source. Re-ground every claim in the doc
+against what the machine doc says now. Correct what is wrong, keep what
+is still true, and open a PR — leave status as draft, do not certify.
+```
+
+Then read the diff and merge it, as in 5.4. One doc is plenty; 33 left is
+an honest number to record.
 
 ## THE KNOWLEDGE-REQUEST LOOP (D-101.5)
 

@@ -513,6 +513,85 @@ export async function recordVerdict(
 }
 
 /**
+ * A steward's triage act on a **non-request** issue (§7's lifecycle,
+ * §8's one-click actions).
+ *
+ * `enrichment_request` runs the §4 verdict lifecycle instead and is
+ * refused here — the two must not be reachable from one another, because
+ * "approve" on a request means *worth drafting* while "acknowledge" on a
+ * gap means *this is real, work it*, and collapsing them would let a
+ * request skip its verdict.
+ *
+ * What the two actions mean, said once so the UI can quote it:
+ *
+ * - **acknowledge** (`open → triaged`): a human has seen this and it is
+ *   worth working. It is not a fix and it claims nothing about one — but
+ *   it *is* the signal the enrich skill's S1 reads, so a triaged gap is
+ *   on somebody's work list rather than in a pile.
+ * - **dismiss** (`open|triaged → dismissed`): not worth doing, with a
+ *   reason. The row is kept, not deleted — the record of what was
+ *   declined is worth as much as the record of what was done, and L-4
+ *   reopens it if the same gap recurs, which is exactly the argument for
+ *   revisiting a `wont_fix` that eleven more people hit.
+ *
+ * The reason is stored on `resolution` beside a resolution's own payload
+ * rather than in a new column: both are "how this issue reached a
+ * terminal state, and who decided", and one shape for that is one place
+ * to read it.
+ */
+export async function recordTriage(
+  pool: pg.Pool,
+  input: { issueId: string; action: "acknowledge" | "dismiss"; reason?: string | null; by: string; at?: Date },
+): Promise<VerdictOutcome> {
+  const existing = await getIssue(pool, input.issueId);
+  if (!existing) return { ok: false, code: "not_found", detail: `no issue ${input.issueId}` };
+  if (existing.kind === ENRICHMENT_REQUEST) {
+    return {
+      ok: false,
+      code: "wrong_kind",
+      detail:
+        `${input.issueId} is a knowledge request; it runs the approve/reject verdict lifecycle ` +
+        "(fault-ledger §4), not gap triage",
+    };
+  }
+  const from = input.action === "acknowledge" ? ["open"] : ["open", "triaged"];
+  if (!from.includes(existing.status)) {
+    return {
+      ok: false,
+      code: "wrong_state",
+      detail: `issue ${input.issueId} is ${existing.status}; ${input.action} applies to ${from.join(" or ")}`,
+    };
+  }
+
+  if (input.action === "acknowledge") {
+    const { rows } = await pool.query<{ issue_id: string }>(
+      `UPDATE ledger_issues SET status = 'triaged'
+        WHERE issue_id = $1::uuid AND status = 'open' RETURNING issue_id`,
+      [input.issueId],
+    );
+    if (!rows[0]) {
+      return { ok: false, code: "wrong_state", detail: `issue ${input.issueId} changed state concurrently` };
+    }
+    return { ok: true, issue: (await getIssue(pool, input.issueId))! };
+  }
+
+  // LED-R2 binds the reason: it is human-authored text a later reader
+  // sees, exactly as a rejection reason is.
+  const reason = scrubText(input.reason ?? "", VERDICT_REASON_MAX);
+  const { rows } = await pool.query<{ issue_id: string }>(
+    `UPDATE ledger_issues
+        SET status = 'dismissed', resolved_at = $3, resolved_by = $2,
+            resolution = jsonb_build_object('kind', 'dismissed', 'reason', $4::text, 'by', $2::text)
+      WHERE issue_id = $1::uuid AND status = ANY($5) RETURNING issue_id`,
+    [input.issueId, input.by, input.at ?? new Date(), reason, from],
+  );
+  if (!rows[0]) {
+    return { ok: false, code: "wrong_state", detail: `issue ${input.issueId} changed state concurrently` };
+  }
+  return { ok: true, issue: (await getIssue(pool, input.issueId))! };
+}
+
+/**
  * Hand a batched request back to the queue (§4: `batched → approved`,
  * "returns with the skill's note").
  *

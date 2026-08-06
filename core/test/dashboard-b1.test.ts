@@ -711,6 +711,124 @@ describe("B-1 dashboard surfaces", () => {
   });
 
 
+
+  // -- B1-F3: the gap half of the module gets its §8 actions ----------------
+
+  describe("B1-F3: gap triage actions (fault-ledger §8)", () => {
+    const fileGap = async (description: string, object?: string): Promise<string> => {
+      const res = await apiPost(rig, reporter, "/v1/dashboard/ledger/gaps", {
+        description,
+        ...(object ? { object } : {}),
+      });
+      expect(res.status).toBe(201);
+      return res.json.issue_id as string;
+    };
+
+    it("acknowledge moves a gap to triaged and says what that buys", async () => {
+      const issueId = await fileGap("the orders table has no human doc at all");
+      const res = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/triage`, {
+        action: "acknowledge",
+      });
+      expect(res.status).toBe(200);
+      expect((res.json.issue as { status: string }).status).toBe("triaged");
+      // The answer to "and then what?" travels with the state change —
+      // a steward reading `triaged` learns nothing on its own.
+      expect(res.json.note as string).toContain("enrich skill's work list");
+      expect(res.json.note as string).toContain("Nothing drafts by itself");
+    });
+
+    it("dismiss requires a reason and keeps the row", async () => {
+      const issueId = await fileGap("someone wants a chart builder in the dashboard");
+      const bare = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/triage`, {
+        action: "dismiss",
+      });
+      expect(bare.status).toBe(400);
+      expect(bare.json.detail as string).toContain("read if this recurs");
+
+      const res = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/triage`, {
+        action: "dismiss",
+        reason: "out of scope: report authoring lives in the customer's own session, ruling RA-1",
+      });
+      expect(res.status).toBe(200);
+      const issue = res.json.issue as { status: string; resolution: Record<string, unknown> };
+      expect(issue.status).toBe("dismissed");
+      expect(issue.resolution.kind).toBe("dismissed");
+      expect(issue.resolution.reason).toContain("report authoring lives in the customer");
+      // LED-R2 binds this text exactly as it binds a rejection reason —
+      // a dismissal is human-authored prose a later reader sees, so the
+      // bare ruling number is scrubbed like any other value-shaped token.
+      expect(issue.resolution.reason).not.toContain("RA-1");
+      // Kept, not deleted: the record of what was declined is worth as
+      // much as the record of what was done.
+      const { rows } = await rig.core.pool.query<{ n: string }>(
+        `SELECT count(*) AS n FROM ledger_issues WHERE issue_id = $1`,
+        [issueId],
+      );
+      expect(Number(rows[0]!.n)).toBe(1);
+    });
+
+    it("a dismissed gap that recurs reopens, with the dismissal preserved (L-4)", async () => {
+      const description = "nothing documents how we count active seats";
+      const issueId = await fileGap(description);
+      await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/triage`, {
+        action: "dismiss",
+        reason: "not this quarter",
+      });
+
+      const again = await fileGap(description);
+      expect(again).toBe(issueId);
+      const { rows } = await rig.core.pool.query<{
+        status: string;
+        reopen_count: number;
+        resolution: Record<string, unknown> | null;
+      }>(`SELECT status, reopen_count, resolution FROM ledger_issues WHERE issue_id = $1`, [issueId]);
+      expect(rows[0]!.status).toBe("open");
+      expect(rows[0]!.reopen_count).toBeGreaterThanOrEqual(1);
+      // The argument for revisiting a wont_fix is the count plus the
+      // reason it was declined, so the reason survives the reopen.
+      expect(rows[0]!.resolution!.reason).toBe("not this quarter");
+    });
+
+    it("the two lifecycles do not cross: a request refuses gap triage", async () => {
+      // "Acknowledge" means *this is real*; "approve" means *worth
+      // drafting*. One control for both would let a request skip its
+      // verdict, which is UI-11's whole concern.
+      const requestId = await fileRequest(rig, reporter, "the refund window should be written down");
+      const res = await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${requestId}/triage`, {
+        action: "acknowledge",
+      });
+      expect(res.status).toBe(400);
+      expect(res.json.error).toBe("wrong_kind");
+      expect(res.json.detail as string).toContain("verdict lifecycle");
+    });
+
+    it("a reporter cannot triage, and the refusal is audited", async () => {
+      const issueId = await fileGap("the exports table is undocumented");
+      const res = await apiPost(rig, reporter, `/v1/dashboard/ledger/issues/${issueId}/triage`, {
+        action: "acknowledge",
+      });
+      expect(res.status).toBe(403);
+      const { rows } = await rig.core.pool.query<{ n: string }>(
+        `SELECT count(*) AS n FROM audit_records
+          WHERE tool = 'dashboard.ledger.triage' AND decision = 'denied' AND subject = $1`,
+        [USERS.reporter.username],
+      );
+      expect(Number(rows[0]!.n)).toBeGreaterThanOrEqual(1);
+    });
+
+    it("triage writes ledger state only — no git call, no KB content", async () => {
+      const gitBefore = rig.gitFingerprint();
+      const headBefore = rig.kb.headSha();
+      const issueId = await fileGap("the refunds view has no doc");
+      await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/triage`, {
+        action: "acknowledge",
+      });
+      // UI-11 governs the whole module, not only the request queue.
+      expect(rig.gitFingerprint()).toBe(gitBefore);
+      expect(rig.kb.headSha()).toBe(headBefore);
+    });
+  });
+
   // -- B1-F2: one queue, whether or not the requester has a browser ---------
 
   describe("B1-F2: a reporter's session files into the same queue as the form", () => {

@@ -46,6 +46,7 @@ import {
   listTriageIssues,
   normalizeQueryTerms,
   recordEvent,
+  recordTriage,
   recordVerdict,
   returnToQueue,
   type LedgerEventRow,
@@ -899,6 +900,79 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
       resultMeta: { status: outcome.issue.status },
     });
     return reply.send({ api_version: API_VERSION, issue: renderIssue(outcome.issue) });
+  });
+
+
+  /**
+   * Gap triage (§8's one-click actions, §7's lifecycle).
+   *
+   * B-1 shipped the Knowledge Requests half of this module with its full
+   * lifecycle and left the *gap* half read-only — a queue a steward could
+   * read and not act on, which is the shortfall finding B1-F3 records.
+   * Two actions, both steward-gated, both ledger state only: nothing here
+   * writes KB content or calls git, for the same reason a verdict does
+   * not (UI-11 governs the whole module, not only the request queue).
+   */
+  app.post("/v1/dashboard/ledger/issues/:issueId/triage", async (req, reply) => {
+    const viewer = await viewerFor(req, reply, { write: true });
+    if (!viewer) return reply;
+    const { issueId } = req.params as { issueId: string };
+    if (!viewer.isSteward) {
+      await governanceAudit(viewer, "dashboard.ledger.triage", { issue_id: issueId }, {
+        decision: "denied",
+        reason: "acknowledging and dismissing ledger issues is steward-gated (fault-ledger §8)",
+      });
+      return reply.code(403).send({
+        error: "forbidden",
+        detail: "acknowledging and dismissing ledger issues is steward-gated (fault-ledger spec §8)",
+      });
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const action = body.action;
+    if (action !== "acknowledge" && action !== "dismiss") {
+      return reply.code(400).send({
+        error: "invalid_argument",
+        detail: "action must be acknowledge or dismiss",
+      });
+    }
+    const reason = typeof body.reason === "string" ? body.reason : "";
+    // Same rule as a rejection: a dismissal nobody can read is a
+    // disappearance. L-4 will reopen this issue if it recurs, and the
+    // next steward needs to know why the last one declined it.
+    if (action === "dismiss" && !reason.trim()) {
+      return reply.code(400).send({
+        error: "invalid_argument",
+        detail: "dismiss requires a reason (it is kept on the issue, and read if this recurs)",
+      });
+    }
+    const outcome = await recordTriage(deps.pool, {
+      issueId,
+      action,
+      reason: action === "dismiss" ? reason : null,
+      by: viewer.identity.subject,
+    });
+    if (!outcome.ok) {
+      const status = outcome.code === "not_found" ? 404 : outcome.code === "wrong_kind" ? 400 : 409;
+      return reply.code(status).send({ error: outcome.code, detail: outcome.detail });
+    }
+    await governanceAudit(viewer, "dashboard.ledger.triage", { issue_id: issueId, action }, {
+      decision: "allowed",
+      resultMeta: { status: outcome.issue.status },
+    });
+    return reply.send({
+      api_version: API_VERSION,
+      issue: renderIssue(outcome.issue),
+      // What the state change actually buys, in the response, because
+      // "triaged" on its own tells a steward nothing about what happens
+      // next — and "nothing happens next automatically" is the answer.
+      note:
+        action === "acknowledge"
+          ? "Acknowledged. This gap is now on the enrich skill's work list — it reads triaged " +
+            "ledger items first (skill spec §6 S1). Nothing drafts by itself: run enrich in a " +
+            "session and it picks this up."
+          : "Dismissed, with the reason kept on the issue. If the same gap recurs it reopens " +
+            "automatically (L-4) and the next steward reads why it was declined.",
+    });
   });
 
   /** The "deliver batch" trigger (§8): stamps approved requests batched

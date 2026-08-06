@@ -5830,6 +5830,71 @@ notice that a capability had no caller; act 4 needed a real estate with
 nothing wrong with it. That is the argument for the demo, and it has now
 paid for itself twice before reaching act 5.
 
+## B1-F3 — a triage queue you could read and not act on (2026-08-06, operator)
+
+Act 5. *"I can see the history and proposal and read it, but what else
+can I do. There are open gaps in the triage and I can't do anything to
+them."* The answer was: nothing.
+
+**The gap half of the module shipped read-only.** Knowledge Requests got
+its full lifecycle — verdicts, batches, returns, resolution. Gaps got a
+list. Fault-ledger §8 specifies the actions plainly ("acknowledge (→
+`triaged`), assign, dismiss-with-reason, export enrichment batch") and
+none existed.
+
+**Why it passed.** B-1's gate clause is *"triage queue ordered by
+occurrences/distinct_subjects"* — the queue was ordered and the test
+asserted the ordering. The clause describes a property of a list and says
+nothing about acting on it, so a read-only list satisfied it literally.
+The spec that says otherwise lives in another document and nothing joined
+the two. **A gate clause is not a substitute for reading the spec the
+clause points at**, and that is the lesson worth keeping.
+
+**Built:** `POST /v1/dashboard/ledger/issues/:id/triage` — acknowledge
+(`open → triaged`, the state the enrich skill's S1 reads first) and
+dismiss (`open|triaged → dismissed`, required reason, LED-R2-bound, row
+kept so L-4 reopens it on recurrence with the dismissal preserved). Both
+steward-gated, both ledger state only, asserted against the KB's refs and
+PR store exactly as DT-11 is: **UI-11 governs the whole module, not only
+the request queue.**
+
+**The two lifecycles refuse each other.** `acknowledge` on an
+`enrichment_request` is a 400. "Acknowledge" means *this is real*;
+"approve" means *worth drafting*; one control for both would let a
+request skip its verdict.
+
+**And the response says what the state change buys**, because "triaged"
+alone tells a steward nothing and the honest answer is one a product
+hides by accident: *nothing drafts by itself; you run the skill*.
+
+*Not built, deliberately:* **`assign`** — no assignee column, one team on
+the pilot, so the control would set state nothing reads and a button that
+does nothing is worse than an absent one. **`export enrichment batch` as
+a separate act** — for gaps the scoped work list *is* `status = triaged`
+(the skill's S1 input via `list_gaps`), so acknowledging already emits
+it; a second mechanism would be two names for one thing. What was missing
+was saying so.
+
+### And the runbook told the operator to do the platform's job by hand
+
+Separately, and worse. Act 5 said: open the KB, edit a contaminated doc,
+open a PR. The operator objected — *"the steward should do these KB
+updates via an AI agent with our skills and mcp"* — and they are right:
+A-1 proved that path live (STOP-2, the steward's session ran
+`review-sync` and prepared repair PR #36). Telling an operator to
+hand-edit is telling them to do by hand the thing the platform exists to
+do. Act 5 is rewritten around **triage → run the skill → review the diff
+→ merge**, opening with the three actors and the two lines between them:
+the dashboard decides what is worth doing and cannot write; the skill
+writes and cannot merge; a human merges.
+
+**A real gap the rewrite exposed, filed not fixed:** the enrich skill's
+S1 work list is ledger items, hot undocumented objects and harvested
+docs. **A doc marked contaminated by a past sync PR is in none of them**,
+so the pilot's 34 have no product entry point. It belongs to **A-5**,
+whose gate is precisely "every report-path L1 doc human-verified"; act 5b
+now says so instead of implying the backlog is one click of work.
+
 ## What this build does not claim
 
 - **The gate demo has not been run to completion.** Act 3 has (it found
