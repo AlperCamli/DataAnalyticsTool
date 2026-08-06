@@ -21,6 +21,35 @@ export VAULT_TOKEN="${VAULT_TOKEN:-dev-root-token}"
 
 echo "vault: $VAULT_ADDR"
 
+# Preflight: refuse to start against a sealed or uninitialised vault.
+#
+# Without this the first command (`secrets enable`, whose `|| true`
+# swallows every error including this one) appears to succeed and the run
+# dies three lines later on `Error uploading policy: ... Vault is sealed`
+# — which reads as a policy problem and is not one. `operator init`
+# re-seals the vault when it finishes, so arriving here sealed is the
+# normal path, not an exotic one: it is what happens to everybody who
+# runs init and then runs this.
+status=$(vault status -format=json 2>/dev/null || true)
+case "$status" in
+  *'"sealed": true'*|*'"sealed":true'*)
+    echo "refusing to seed: vault is SEALED." >&2
+    echo "  Unseal it first, with the key from \`vault operator init\`:" >&2
+    echo "    docker compose exec -T vault vault operator unseal \"\$VK\"" >&2
+    echo "  Then check: \`vault status\` says Sealed false, Unseal Progress 0/1 clears." >&2
+    exit 1 ;;
+  "")
+    echo "refusing to seed: cannot read vault status at $VAULT_ADDR." >&2
+    echo "  Is the container up, and is VAULT_ADDR right?" >&2
+    exit 1 ;;
+esac
+case "$status" in
+  *'"initialized": false'*|*'"initialized":false'*)
+    echo "refusing to seed: vault is NOT INITIALISED." >&2
+    echo "    docker compose exec vault vault operator init -key-shares=1 -key-threshold=1" >&2
+    exit 1 ;;
+esac
+
 # KV v2 at `secret/` — dev mode mounts this already; a fresh server may not.
 vault secrets enable -version=2 -path=secret kv 2>/dev/null || true
 
