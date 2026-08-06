@@ -16,6 +16,33 @@ Ops, drift review, triage), **acts 6–11** are the knowledge-request loop
 
 ---
 
+## 0. Where this run stands
+
+You have already run part of this page — that first hour is what produced
+findings **B1-F1..F4**, and the four fixes are in the build you are about
+to run against. Extracted from the live pilot through the governed read
+APIs, **2026-08-06 19:30**:
+
+| Act | State | Evidence |
+|---|---|---|
+| 1 — sign in | done | — |
+| 2 — KB Health | done | 5 sources; **ga4 stale** (17d against a 3d threshold), **gsc stale** (6.3d); supabase fresh; Looker Studio / Power BI correctly *not sync sources*. Docs **2 verified / 6 draft / 34 contaminated** of 42 |
+| 3 — Ops / dead letter | **done** | `dead_letter: {open: 3, superseded: 8}` — the 11 rows resolved into 3 real problems and 8 pieces of history, which is B1-F2's first half working |
+| 4 — drift queue | done | `drift_prs: {available: true, prs: []}` — the empty-and-says-why state, **which is the pass** |
+| 5.1 — read the queue | done | 10 issues: **6 open, 4 dismissed** (yours, with reasons) |
+| **5.2 — acknowledge** | **not started** | **0 triaged.** Of the 6 open: **4 `capability_gap`**, 1 `missing_doc`, 1 `coverage_gap` |
+| **5.3–11** | **not started** | the knowledge-request queue is **empty** — 0 `enrichment_request` rows. Act 6 creates the demo's data |
+
+So: **restart the stack (act 0), then start at 5.2.** Acts 1–4 are worth
+a glance on the way past — the screens changed under you when B1-F1..F3
+landed — but their clauses are recorded above and do not need re-running.
+
+**One number to have in your head before 5.2:** four of your six open
+issues are `capability_gap`. That is the kind B1-F4 is about, and act 5.2
+asks you to acknowledge one on purpose.
+
+---
+
 ## 1. What this run proves
 
 | # | Gate clause (plan §4, B-1 + D-101.5) | Act |
@@ -28,6 +55,7 @@ Ops, drift review, triage), **acts 6–11** are the knowledge-request loop
 | 6 | Gap resolution surfaces to the filer — the UI-D badge | 11 |
 | 7 | Knowledge Requests queue with DT-11 / DT-12 green | machine-checked; visible at 7–8 |
 | 8 | **The demonstration**: request (with proposal) → verdict → batch → enrich PR merged as R2 → requester sees the resolution | 6–11 |
+| 9 | Skill spec §5's volunteered-knowledge clause (D-114.3c) — a session files the request itself, with the user's words | **6a, and only 6a**: the shipped test is a grep over the skill file and is explicitly not evidence of this (D-78) |
 
 **What is already machine-checked, before this page was written.** Do not
 re-prove these by hand; the run is about whether the shipped screens are
@@ -72,7 +100,8 @@ behavioral half** (act 9's alternative), which needs a model call.
 
 | Prerequisite | How to check |
 |---|---|
-| Suites green at this commit | `cd core && npx vitest run` (expect **360 passed / 4 skipped / 30 files**) and `.venv/bin/python -m pytest -q` (expect **792 passed / 14 skipped / 1 failed**) — that one failure is `test_no_contamination_in_current_kb`, which is **estate state** (34 docs awaiting triage), not this code, and act 5 is where you start working it down |
+| Suites green at this commit | `cd core && npx vitest run` (expect **360 passed / 4 skipped / 30 files**) and `.venv/bin/python -m pytest -q` (expect **792 passed / 14 skipped / 1 failed**) — that one failure is `test_no_contamination_in_current_kb`, which is **estate state** (34 docs awaiting triage), not this code, and act 5 is where you start working it down. **Both were run at `e5f2de3` on 2026-08-06 and match exactly** — you do not need to re-run them |
+| *(if you do re-run the core suite)* | On a loaded machine — the pilot stack up, pytest running alongside — vitest reports `2 failed` **suites** with `Error: [vitest-worker]: Timeout calling "fetch"`. That is the module transformer timing out, not a test failing: `npx vitest run test/conformance.test.ts test/connections.test.ts` on its own passes 40/40 in 30 seconds. Read the error line before treating a red count as a regression |
 | Stack running the build that contains B-1 | act 0 |
 | Vault unsealed | `curl -s localhost:8100/healthz \| grep -o '"sealed":[a-z]*'` → `"sealed":false` |
 | Your identity carries `steward` | the pilot steward account carries `["steward","ops"]` |
@@ -313,6 +342,31 @@ too** — it is the case that proves the distinction, and seeing it land in
 "these need you" rather than on the skill's list is the point of the act.
 Dismiss one with a real reason.
 
+**Your six open rows, as of 2026-08-06 19:30** — so you can see the split
+before you open the screen rather than after:
+
+| Kind | Title | A skill can close it |
+|---|---|---|
+| `capability_gap` | `supabase.reporting` (**3 occurrences** — the top of your queue) | no |
+| `capability_gap` | `gsc.standard.impressions, ga4.standard.screenPageViews` | no |
+| `capability_gap` | `supabase.reporting.v_user_signups_by_day` | no |
+| `capability_gap` | `supabase.public` | no |
+| `missing_doc` | `supabase.public.subscriptions.plan_code` | **yes** |
+| `coverage_gap` | `certified exceeded limit metric overage` | **yes** |
+
+The useful pair to acknowledge is **`supabase.reporting`** (the
+`capability_gap` at the top, which is also the one act 7.0's reporting
+views are about) and **`supabase.public.subscriptions.plan_code`** (the
+`missing_doc`). Two rows, two different answers, one verb — read both
+panels side by side and check that the `capability_gap` one **names D-81
+on screen**. If both panels say the same thing, B1-F4 has regressed and
+that is the finding.
+
+**Note what this leaves the skill in 5.3:** with only one `missing_doc`
+and one `coverage_gap` acknowledgeable, the enrich batch will be small.
+That is correct and not a thin demo — the four it *doesn't* pick up are
+the demonstration.
+
 #### 5.3 — hand it to the skill
 
 Open a **Claude Code session with your steward bundle** and say:
@@ -414,24 +468,47 @@ page applied.
 
 **There are two ways in, and the session one is the one that matters.**
 
-**6a — from a session (the real path).** Open a Claude Code session with
-the reporter's setup bundle and ask a real question of the estate. Then,
-when the answer surfaces something the knowledge base should have said,
-just *say so*:
+**6a — from a session. This is the act, not an option.** Open a Claude
+Code session with the reporter's setup bundle and ask a **real question**
+of the estate — something you actually want to know, not a prompt written
+to trigger the feature. Then, when the answer surfaces something the
+knowledge base should have said, just *say so*, in your own words:
 
 > "That's right — but the KB should really say that a refund is counted
 > in the month the credit note is issued, not the month of the order."
 
 The agent files it for you: `flag_gap(kind: enrichment_request)` carrying
 your words as the `proposal`, under your own identity, into the same
-queue the form writes to. It should tell you it filed rather than that it
-added, relay who was notified, and say a steward reviews it next.
+queue the form writes to.
+
+**Since the amendment this session applied, that behaviour is a spec
+clause** — skill spec §5, D-114.3c — and not merely an instruction in a
+skill file. So this act is the **only behavioural evidence the clause
+has**: the shipped test greps the file for the instruction, which catches
+its absence and proves nothing about what an agent does (D-78). Watch
+four things, each of which is the clause failing if it is missing:
+
+1. **It files without asking.** A session that says *"shall I note that?"*
+   has already lost the request if you say "don't worry about it".
+2. **Your words go in verbatim.** The `proposal` is your sentence, not a
+   tidied summary of it — the doc later drafted from it cites you by name,
+   so a paraphrase is the agent's prose wearing your authority. You will
+   see the stored text in act 7; compare it to what you typed.
+3. **It says "I've filed it", never "I've added it"** or "the KB now
+   says". Nothing enters the knowledge base until somebody merges a diff.
+4. **It relays what came back** — `routed_to`, and `occurrences` if
+   somebody has asked before.
 
 This is the path a reporter actually takes — they are mid-question, not
 mid-form — and it is why the queue exists at all. It was the missing half
 of the loop until finding **B1-F2** (`results/phase2/b1/FINDINGS.md`):
 the tool and the queue were both built and no skill knew the move, so in
 practice it was a queue only browser users could file into.
+
+**If any of the four is wrong, stop and write down exactly what the agent
+said.** That transcript is worth more than a clean run — it is a finding
+against a spec clause, and it is the class of defect this whole checkpoint
+keeps turning up.
 
 **6b — from the browser (the fallback).** Open **Gap Triage**. Note the
 queue is scoped to *what you filed* — the server says so in a banner, and
@@ -443,9 +520,12 @@ something no evidence could settle, like "the churn number should be
 written down". That one is act 9's honest-skip case, and the demo is
 weaker without it.
 
-*Record:* both issue ids, and — if you used 6a — what the agent said back
-to you. If it claimed it had *added* something to the KB rather than
-filed a request, that is a finding worth writing down.
+*Record:* both issue ids; **the sentence you typed and the agent's reply,
+verbatim** (this is the clause's evidence, so a paraphrase of it is not
+evidence); and, once you reach act 7, whether the stored `proposal`
+matches what you typed word for word. If the agent claimed it had *added*
+something to the KB rather than filed a request, or tidied your words,
+write that down — either is a finding.
 
 ### Act 7 — the steward's verdict
 

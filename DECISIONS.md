@@ -5969,3 +5969,123 @@ staged data cannot.
 - **The register rows for D-107.3 (verdict history) and D-107.4 (jobs
   retention) are still not filed.** Flagged at A-3/B-2, unchanged here,
   and still outside a build session's fence.
+
+## D-114 — B-1 build acceptance + gate-closure session (owner ruling, 2026-08-06)
+
+Recorded as issued. (The numbered rulings the B-1 build took for itself
+are recorded above under *"D-114 — decisions this build had to take"*;
+this is the owner ruling that accepts them and authorizes what follows.)
+
+1. **B-1 BUILD ACCEPTED** (through `e5f2de3`); **B1-F1..F4 fixes
+   affirmed.** The kind→next-act disposition design is affirmed by name:
+   *"a skill can close this"* vs *"this one needs a person"*,
+   `capability_gap` citing **D-81** on screen so nobody re-litigates it,
+   and the S1 sentence adopted — **writing a doc about an object that
+   does not exist is the failure the table prevents.**
+2. **STANDING RULE ADOPTED**, beside migration-complete, fan-out and
+   read-back — **SURFACE-MACHINERY HONESTY**, verbatim:
+
+   > every new user-facing surface gets at least one operator hour on
+   > real estate state before its gate closes. Tests staging their own
+   > data cannot find stale captures, callers that don't exist, queues
+   > without verbs, or one verb hiding four meanings; a person in front
+   > of the product finds them in an hour.
+
+   Family evidence: **D-84, A4-F6, B1-F1..F4.**
+3. **THREE SPEC AMENDMENTS AUTHORIZED** as this session's task 0,
+   additive, diffs leading. Executed: see *D-114.3 as applied* below.
+4. **GATE REMAINS OPEN** pending the operator demonstration (runbook acts
+   5.3–11) — affirmed as the right call and **not a formality**, on the
+   evidence of what one operator hour just found. The pilot restart
+   (`make stack-pilot`) precedes act 5.2 so B1-F4 is live.
+5. **OPERATOR OUT-OF-BAND QUEUE restated** (unchanged, none of it
+   session-touchable): the vault unseal-key rekey and root-token revoke,
+   **never through a transcript**; the four residual rows in
+   `results/phase2/a4/SECRETS-INVENTORY.md`; `FIELD-NOTES.md` (the four
+   B-1 findings are already most of it); and the **34 contaminated docs**,
+   which remain standing debt with **A-5** as their product home.
+
+### The standing rules, as they now stand
+
+Four, and each was bought with a failure:
+
+| Rule | Bought by |
+|---|---|
+| **Fan-out**: a value that appears in two places will disagree in one of them | the D-84 class |
+| **Read-back**: a write is reported as it was read back from the store, never as it was submitted | A-3's claimed-registered-actually-absent shape |
+| **Removal** (D-113.2): a migration is complete when the old source is removed, not when the new one works | A4-F6 |
+| **Surface-machinery honesty** (new, D-114.2): every new user-facing surface gets an operator hour on real estate state before its gate closes | B1-F1..F4 |
+
+The fourth is the one that finds the other three. Each of B-1's findings
+is a surface *claiming* something the machinery behind it did not do — a
+stale capture presented as current, a capability with no caller, a queue
+with no verbs, one verb hiding four meanings — and every one of them was
+green in a suite that staged its own data.
+
+### D-114.3 as applied — the three amendments
+
+Additive, and each closes something a build session flagged rather than
+took. Nothing else in either spec changed.
+
+**(a) Fault-ledger §4 — the return's DDL, enumerated.** The D-101.2
+amendment's additive-DDL sentence named the four verdict columns and
+stopped; the `batched → approved` return it drew in the same diagram has
+two columns of its own, built at D-114.12 (migration `0013`). Now named:
+**`return_note text`** and **`returned_at timestamptz`**, NULL for every
+other kind, with **LED-R2's scrub and bounds applying to `return_note`
+exactly as to `verdict_reason`** — a skill wrote it rather than a person,
+which is not a reason to trust it into the store unscrubbed. The original
+sentence gains one clause pointing at the completion, so a reader of the
+enumeration is not left with four columns and a diagram that draws five
+states. Two paragraphs carry the reasoning the migration comment held and
+no spec did: **why columns rather than events** — a `ledger_events` row
+would increment `occurrences`, and occurrences is the demand signal §8
+orders the queue by, so a skill saying *I could not write this* would read
+as one more person asking for it — and **what the state means**: returned
+reads `approved`, because the verdict stands and what is missing is
+evidence, not permission.
+
+**(b) Fault-ledger §7 — kind → next act, beside kind → role.** The
+mapping B1-F4 built and could not cite. `routed_to` says which role
+*hears* about an issue; with the shipped default routing nearly
+everything to the data team it says nothing about what act closes one,
+and **acknowledge is one verb whose meaning depends on the kind**. The
+table lands beside the routing paragraph with every row citing its source
+rule — skill spec §6 S1, CP-E3/KB-7 for who certifies, **D-81** for who
+may run DDL, **L-3** for guardrail thresholds being ops config, §5 for
+the detector-shaped kinds — because the citation is what keeps the
+mapping from being re-decided per surface. Three clauses ride with it:
+`enrichment_request` is **deliberately absent** (it runs §4's verdict
+lifecycle, and one control meaning both *this is real* and *worth
+drafting* would let a request skip its verdict); **unknown kinds are
+non-enrichable**, which is S-5's posture in this spec's terms; and two
+obligations are stated — a triage surface offering *acknowledge* must say
+which meaning applies, and **the enrich skill filters on this table, not
+on `status = 'triaged'`**, which is what §6 S1's "items assigned to
+enrichment" always meant and nothing had ever assigned.
+
+**(c) Skill spec §5 — volunteered knowledge is filed, not absorbed.**
+B1-F2's missing caller, given its spec home. §5 described a pipeline and
+its failure exits and had no clause for the commonest way a session
+produces knowledge: **it goes fine and the user tells you something the
+KB should have said.** The clause binds every session, not only a report
+one, and carries four bounds each of which is the clause failing if
+dropped — `proposal` is the user's words **verbatim** while `description`
+is the skill's summary (a tidied proposal is the agent's prose wearing
+the user's authority, and §6 S1b cites it back to them by name); a dead
+end where the user *also* supplies the answer is **two filings**, which is
+also the line against `result_disputed`; **"I've filed it", never "I've
+added it"**, because nothing enters the KB until a human merges a
+reviewed diff; and **do not ask permission to file**. The clause states
+its own evidence status rather than implying one: the shipped test greps
+the skill file, which catches the instruction's *absence* and is **not**
+evidence of agent behaviour (D-78), and the behavioural scenario that
+would be belongs beside AS-18 in §9 and **is not built**.
+
+*Fence observed.* Exactly the three authorized amendments. Two things
+B1-F4 flagged were left alone as outside it: **`list_gaps` does not
+expose the disposition** (the skill filters by kind instead, which needs
+no MCP response-shape change — additive and probably right, still a spec
+surface), and **no §9 acceptance scenario** was added for the
+volunteered-knowledge clause, which is why the clause states its own
+evidence gap in prose instead.

@@ -121,7 +121,7 @@ open ──approve──► approved ──deliver batch──► batched(batch_
   └──reject(reason)──► rejected
 ```
 
-Additive DDL: the `ledger_issues.status` CHECK gains `approved | rejected | batched`; the table gains `verdict_by text`, `verdict_at timestamptz`, `verdict_reason text` (the rejection reason — human-authored text that will be shown to the filer, so LED-R2's bounds and scrub apply to it too) and `batch_id text`. All four are NULL for every other kind.
+Additive DDL: the `ledger_issues.status` CHECK gains `approved | rejected | batched`; the table gains `verdict_by text`, `verdict_at timestamptz`, `verdict_reason text` (the rejection reason — human-authored text that will be shown to the filer, so LED-R2's bounds and scrub apply to it too) and `batch_id text`. All four are NULL for every other kind. (The `batched → approved` return above carries two columns of its own; they are enumerated in the D-114.3a amendment below, which completes this list.)
 
 **What a verdict is, and is not** (dashboard spec UI-11). Approve means *worth drafting*. It changes **ledger state only**: it writes no KB content and makes no git call. The certification act remains exactly what it has always been — a human merging a reviewed diff under their own name (KB-7). Rejection sets `rejected` with its reason rather than deleting the row: the record of what was asked and declined is worth as much as the record of what was written, and a rejected request that eleven more people file is a decision worth revisiting.
 
@@ -132,6 +132,17 @@ Additive DDL: the `ledger_issues.status` CHECK gains `approved | rejected | batc
 **Amendment (D-106.4, 2026-08-05) — the proposal bound is 2000 characters.** The alias to `description`'s 500 above is **decoupled by intent**: suggested content legitimately carries enum decodings and structure sketches, which a gap description never does. The defense against data-value dumping is the LED-R2 scrub, not brevity. Everything else about the proposal's treatment is unchanged — the same scrub, the same server-set identity, the same render neutralization — and `description` stays 500.
 
 **Amendment (D-106.5, 2026-08-05) — recurrence after rejection reopens.** Symmetric with L-4 and with §7's dismissed-issue rule: a new occurrence on a `rejected` request **reopens** it to `open` with `reopen_count += 1`, its occurrence and distinct-subject counts cumulative, and its **prior verdict preserved** — `verdict_by`/`verdict_at`/`verdict_reason` are not cleared. The steward therefore reads *rejected before, refiled by N more* and may re-reject on the spot. No threshold sophistication in v1: one refiling reopens, exactly as one recurrence reopens a `wont_fix`, and the count is the argument. The verdict columns hold the latest verdict only — a re-rejection overwrites the previous reason, while `reopen_count` keeps the tally of refilings.
+
+**Amendment (D-114.3a, 2026-08-06) — the return has columns, and the DDL enumeration now names them.** The state diagram above draws `batched ──undraftable──► approved` and the resolution paragraph says the request "returns to `approved` carrying the skill's note", but the additive-DDL sentence stopped at the four verdict columns. The return's two are additive in the same way and are named here so the enumeration is the whole shape:
+
+- **`return_note text`** — what the skill says would unblock the request. Machine-authored, and shown to both the next steward and the filer, so **LED-R2's scrub and length bounds apply to it exactly as to `verdict_reason`**: the fact that a skill wrote it rather than a person is not a reason to trust it into the store unscrubbed.
+- **`returned_at timestamptz`**.
+
+Both are NULL for every other kind and for every request that never came back, exactly as the four verdict columns are.
+
+**Why columns rather than events.** A `ledger_events` row would increment `occurrences`, and `occurrences` is the demand signal §8 orders the queue by — so a skill saying *I could not write this* would read as one more person asking for it, inverting the meaning of the number a steward triages on. The return belongs to the issue's lifecycle, beside the verdict, not to its evidence stream. (Implemented at D-114.12; migration `0013_return_to_queue.sql`.)
+
+**What the state means when it comes back.** A returned request reads `approved`, not `open` and not failed: the verdict still stands, the work is still worth doing, and what is missing is evidence rather than permission. A surface that renders it as plain `approved` loses the distinction, because the request *was* attempted — so a surface displaying the queue displays `returned_at`/`return_note` as their own state. (Implemented that way at D-114.12; not otherwise stated in the dashboard spec, which is why it is stated here.)
 
 ## 5. Class-1 detector rules (shipped defaults; ops-config data per L-3)
 
@@ -171,6 +182,31 @@ Each rule row in ops config carries: `enabled`, thresholds, window, and its fing
 `enrichment_request` runs the verdict lifecycle added by the D-101.2 amendment (§4) instead of the `open → triaged` path above; its terminal `resolved` state and its L-4 recurrence behavior are the same ones drawn here.
 
 Routing (`routed_to`) is a kind→role table in ops config; shipped default routes **everything to the data-team role** (R2 owns triage per HLR §4) except `benchmark_regression`, which also notifies the merging author. Dismissed issues keep their fingerprint: recurrence reopens them too — a `wont_fix` that eleven more people hit deserves a second look, and the reopen counter says exactly that.
+
+**Amendment (D-114.3b, 2026-08-06) — kind → next act, beside kind → role.** `routed_to` says which role *hears* about an issue. It does not say what act closes it, and those are different questions that this spec had collapsed into one column: with the shipped default routing nearly everything to the data team, `routed_to` tells a triager nothing about whether acknowledging an issue puts it on a skill's work list or on their own desk. **Acknowledging is one verb whose meaning depends on the kind**, and until this table it was undefined which meaning applied.
+
+Every row below is *derived*, not decided here — the source rule is the row's authority, and the citation is what keeps the mapping from being re-litigated per surface:
+
+| Kind | A skill can close it | Actor | Next act | Derived from |
+|---|---|---|---|---|
+| `missing_doc` | yes | the enrich skill, then a human merging its PR | write the missing document | skill spec §6 S1 — ledger items it can ground |
+| `missing_entity` | yes | " | write or extend the entity doc that should have routed this | skill spec §6 S3 — entity docs are human docs, and drafting them is what enrich does |
+| `missing_join_path` | yes | " | document the join, graded by the evidence supporting it | HLR §8 P4's maturity ladder (skill spec §6 S2) — usage evidence upgrades inference to observation, nothing else does |
+| `uncertified_metric` | yes | " | draft the metric doc — **a human certifies it** | CP-E3 / KB-7 |
+| `doc_schema_mismatch` | yes | " | re-ground the doc against what the snapshot says now | §5's `repeated_validate_fail` |
+| `coverage_gap` | usually | " | usually: write the doc the search could not find | §5's `zero_result_search` |
+| **`capability_gap`** | **no** | the customer's DBA (or an ops owner, for a profile gap) | **apply the DDL the issue carries** (a reporting view, usually), re-sync so the object lands in a snapshot — *after which* documenting it is ordinary enrichment | **§4's own registry line** (SK-6 handoffs, DDL in `detail`) + **D-81** |
+| `guardrail_hit` | no | an ops owner | tune the guardrail, or give the query a view to run against rather than raise a limit | **L-3** — thresholds are ops config, not KB content |
+| `abandoned_journey` | no | a person, reading it | look at what people gave up on; it may become a documentation gap, or nothing | §5 — the rule fires on a session shape, evidence about people |
+| `benchmark_regression` | no | a person, with whoever merged the change | read the KB change that degraded the suite; repair or accept | §7 routing — the change is the suspect |
+| `result_disputed` | no | a person, investigating | find out which it is: a doc that says something wrong, or a real disagreement about the data | CP-R4 / SK-5 |
+| `human_filed`, `other` | no | a person, deciding | read it and decide which of the above it is | unclassified by construction |
+
+**`enrichment_request` is deliberately absent.** It runs the §4 verdict lifecycle instead of this one: its next act is the steward's *approve / reject*, and "acknowledge" is refused for it — one control meaning both *this is real* and *worth drafting* would let a request skip its verdict, which is UI-11's concern.
+
+**Unknown kinds are non-enrichable.** A kind this registry does not carry gets *a person decides* rather than a default onto somebody's work list. That is S-5's posture in this spec's terms: the unknown is surfaced, never silently absorbed — and the failure the whole table prevents is **writing a document about an object that does not exist**, since a reporting-view handoff in the queue looks exactly like a documentation gap, same shape, same `triaged`.
+
+**Two obligations follow.** (i) A triage surface that offers *acknowledge* states which of the two meanings applies to the kind in front of the user, with its next act — the disposition is computed server-side from this table and rendered per issue, never re-derived per client. (ii) **The enrich skill's work list filters on this table, not on `status = 'triaged'`** — §6 S1's "items assigned to enrichment" is exactly this column, which the spec named before any mechanism assigned it. A skill obeying S1 literally without the filter picks up the DDL handoffs.
 
 ## 8. Triage-queue contract
 

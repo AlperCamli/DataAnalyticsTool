@@ -79,6 +79,28 @@ intent → resolution → drafting → validation → execution → presentation
 
 Failure exits ride the report-authoring §8 table; SK-7's bounded-repair rule applies per stage (at most 2 repair attempts, then flag and stop).
 
+**Amendment (D-114.3c, 2026-08-06) — volunteered knowledge is filed, not absorbed.** §5 above describes a pipeline and its failure exits, and had no clause for the commonest way a session produces knowledge: **the session goes fine and the user tells you something the KB should have said.** *"That's right, but the KB should really say that a refund is counted in the month the credit note is issued."* Nothing in S1–S8 or K-FAIL covers that, because it is not a failure — and a skill with no instruction either filed it under a kind that carries no proposal or, more often, let it pass in conversation.
+
+**The clause, and it binds every session, not only a report one:** when a user volunteers content the knowledge base should carry, the skill **files it** —
+
+```
+flag_gap(kind: "enrichment_request",
+         description: <the gap, in the skill's words — what a steward reads in a queue>,
+         object:      <the FQN it is about, when they named one>,
+         proposal:    <what they said it should say, in THEIR words, verbatim>)
+```
+
+Four bounds, each of which is the clause failing if dropped:
+
+1. **`proposal` is the user's words verbatim, `description` is the skill's summary of the gap.** The proposal is *drafting evidence* and is cited to them by name and date when a doc is later grounded on it (§6 S1b). A tidied, summarized or paraphrased proposal is the agent's prose wearing the user's authority — which is exactly what the citation rule exists to prevent.
+2. **A dead end where the user also supplies the answer is two filings, not one:** the gap that blocked the session *and* the knowledge they volunteered. They route the same way and are answered differently, and a proposal attached to a K-FAIL kind never reaches the verdict queue (ledger §4). This is also the line against `result_disputed`: that kind is CP-R4's *the answer was wrong*; this clause is *the KB is missing something*, and a session can produce both.
+3. **Say "I've filed it", never "I've added it" or "the KB now says".** Nothing enters the knowledge base until a human merges a reviewed diff (KB-7); the request is *worth drafting* at best until a steward's verdict says so. Relay `routed_to`, and relay `occurrences` when it exceeds 1 — *"you're the third person to ask for this"* is the argument that gets it approved (ledger §4's demand signal).
+4. **Do not ask permission to file.** Filing costs the user nothing and the queue deduplicates; a request that dies because the skill asked *"shall I note that?"* and got *"don't worry about it"* is knowledge the estate lost to politeness.
+
+**Why this is in the spec at all.** The inlet (`flag_gap`'s `enrichment_request` kind with its proposal, MCP §6.10), the queue, the verdicts, the batch and the merge loop were all built and conformance-tested, and **no skill knew the move** — so in practice it was a queue only browser users could file into, which is the thing ledger §4 legislated against by name. A capability with no caller passes every test written against the capability (finding B1-F2). This clause is the caller.
+
+*Evidence status, stated rather than implied:* the shipped conformance test for this clause greps the skill file for the instruction, which catches its **absence** and is not evidence of agent behaviour (D-78). The behavioural scenario that would be — a real session in which a user volunteers knowledge and the transcript shows the filing under their identity, with their words unedited in the proposal — belongs beside AS-18 in §9 and **is not built**. It must not be reported as covered by the grep.
+
 ## 6. `enrich` skill
 
 Serves J1 levels 1–3 and J2 trigger 3. Profile context: Steward.
