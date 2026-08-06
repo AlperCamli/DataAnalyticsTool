@@ -1,7 +1,5 @@
 # Runner config for the Compose stack (connectors.sdk.service).
-# Credential references resolve against the runner's process
-# environment (compose `environment:`/`env_file:` — the local-dev vault
-# per ruling D1).
+# Credential references resolve through vault (A-4) — see `resolver:` below.
 core_url: http://core:8100
 token_env: CL_RUNNER_TOKEN
 runner_id: runner-local
@@ -22,8 +20,22 @@ connectors:
 # runner claims snapshot work only and execute_sql has nobody to serve it.
 classes: [batch, interactive]
 wait_s: 25
+# A-4: `vault://<mount>/<path>#<field>` references resolve against
+# HashiCorp Vault KV v2, under this runner's own AppRole identity
+# (VAULT_ADDR + VAULT_ROLE_ID/VAULT_SECRET_ID from its environment; the
+# dev stack uses VAULT_TOKEN against a dev-mode server instead).
+#
+# `allow_env: true` keeps the PILOT-ONLY `env://` backend resolvable
+# alongside it, because the migration flips references one connection at
+# a time and a runner mid-flip holds a registry with both. Every env://
+# resolution logs a warning naming the reference, so the ones still on
+# plaintext are visible rather than assumed gone. Set this to `false`
+# once the estate is migrated: a surviving plaintext reference then fails
+# loudly instead of working quietly, which is what turns "we migrated"
+# from a claim into a mechanism.
 resolver:
-  kind: process-env
+  kind: vault
+  allow_env: true
 
 # G3 startup gate: prove the execution role cannot write before this
 # runner offers to claim `execute` jobs. If CL_EXEC_DSN is unset or

@@ -60,7 +60,38 @@ Every source and target is classified — this record drives all later config:
 | Enterprise K8s | Helm chart (same images) |
 | Air-gapped | Offline image bundle; git server and IdP must be reachable in-network |
 
-Wire OIDC (customer IdP → MCP OAuth + dashboard session), register the vault (credential *references* only — the product never stores secrets, J-4), create the runner's vault identity. **Exit:** dashboard reachable, OIDC login works, a runner claims a `test_connection` no-op against a stub.
+Wire OIDC (customer IdP → MCP OAuth + dashboard session), then stand up the secrets home and give the core and the runner their identities in it.
+
+### 4.1 Secrets: where they live and what the product holds (A-4)
+
+**Nothing in this platform stores a credential.** A connection row holds a *reference*; a job payload carries a *reference*; the runner resolves it at `start` time under its own identity and holds the value in memory for the job's duration only (J-4/JC-8). What A-4 added is the other half of that sentence — a supported answer to *where the value actually is*.
+
+**The secrets home is HashiCorp Vault, KV v2.** One reference syntax, used identically by the runner (for connection credentials) and by the core (for its own config):
+
+```
+vault://<mount>/<path>#<field>          e.g. vault://secret/contextlayer/connections/supabase#dsn
+```
+
+The `/data/` segment KV v2's HTTP API requires is inserted by the resolver, not written in the reference. **There is no version pin, deliberately:** a pinned reference is a rotation that silently does not take, and rotation-through-vault is a gate condition, not a nice-to-have. Always-latest is the contract.
+
+**Two identities, two policies, least privilege between them** (`deploy/vault-seed.sh` creates both):
+
+| Identity | Reads | Never reads |
+|---|---|---|
+| `cl-core` (AppRole) | `secret/contextlayer/core*` — ops DB URL, runner/ops service tokens, KB git token, OIDC client secret | any customer connection credential |
+| `cl-runner` (AppRole) | `secret/contextlayer/connections/*` — the customer's own credentials | the core's config, including the git token |
+
+A single "platform" policy would be shorter and would hand the runner the core's git token. It is worth the extra four lines. *(Vault's `path "x/*"` does not match `x`; both are granted. That is not a style choice — a policy with only the glob denies a read of the secret at the prefix itself, with a bare "permission denied" and nothing to say the rule never applied.)*
+
+**The core resolves its own config at boot, all-or-nothing.** Any `CORE_*`/`SYNC_*` value written as a `vault://` reference is resolved before anything reads config; the first one that fails names *the variable and the reference* and the process exits. A core that starts on half its secrets fails later, somewhere else, with a worse error — the same reasoning as S-6's all-or-nothing snapshots.
+
+**Dev-mode or persistent — and the ordering that matters.** The base Compose stack runs Vault in `-dev` mode: in-memory, auto-unsealed, root token committed. That is correct for `docker compose up` where the secrets are toys, and wrong the moment vault holds the only copy of anything. Use `deploy/compose.vault-file.yml` for a real deployment or a pilot: file storage on a named volume, `vault operator init`, and an unseal step after every restart (there is no auto-unseal without a cloud KMS — that decision belongs to the first customer deployment). **Do not delete any plaintext credential file until the persistent vault is in use and its unseal key is stored off this disk.** That ordering is the difference between a migration and an outage.
+
+**The bootstrap remainder, stated rather than hidden.** Vault cannot hold the credential that opens vault. What remains on disk is `VAULT_ADDR` plus one AppRole `role_id`/`secret_id` pair per identity — on the pilot, `.secrets/vault-core.env` and `.secrets/vault-runner.env`; in the dev stack, the toy values in `deploy/vault-dev.env`. Two files, not one, because they are two identities under two policies. A platform claiming zero credential files is lying about where it kept one; this one names its remainder and keeps it to the smallest thing that can open the door.
+
+**`env://` and `.secrets/` are PILOT-ONLY.** The `env://NAME` backend resolves against the runner's process environment or an env file — which means a plaintext credential on the host. It is retained for one reason: A-4's migration flips references one connection at a time, so a runner mid-flip must resolve both schemes. It is not a supported production posture. Every `env://` resolution logs a warning naming the reference (never the value), so the ones still on plaintext are visible rather than assumed gone, and `resolver.allow_env: false` in the runner config turns a surviving plaintext reference from a warning into an error — which is what makes "the estate is migrated" a mechanism instead of a claim.
+
+**Exit:** dashboard reachable; OIDC login works; a runner claims a `test_connection` no-op against a stub; and `/healthz` reports `vault.configured: true`, `vault.reachable: true`, `vault.sealed: false`. That last field is there because a sealed vault after a host restart is the commonest way this breaks, and it should cost one `curl`, not one morning.
 
 ## 5. Step 2 — KB repo bootstrap
 

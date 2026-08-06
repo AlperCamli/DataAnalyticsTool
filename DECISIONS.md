@@ -4994,3 +4994,256 @@ the capability spec has **no `test_connection` section** — the builtin
 probe's two preflight surfaces are shipped and undocumented there.
 
 **Suites at this entry:** core **286 passed / 4 skipped / 27 files** (the 4 skipped are `connections-live.test.ts`, which runs only against a stack named by `CL_LIVE_API` — it was run, live, and is recorded above); python **748 passed / 14 skipped / 1 failed** — the 34-doc contamination triage, estate state, unchanged by this work.
+
+## D-110 — A-3 + B-2 closure + dispositions (owner ruling, 2026-08-06)
+
+**Numbering, first, because the ruling arrived as "D-109" and D-109 was
+already taken.** The A-3/B-2 build session recorded its own decisions as
+`## D-109 — decisions this build had to take` and landed them in
+`ec1987b`; the Phase-2 plan's A-3 entry cites "DECISIONS D-109" for that
+build. The owner's closure ruling for the same checkpoint, written
+against a working copy believed to end at D-108, reused the number. Two
+D-109s with different clause contents would make every future citation
+ambiguous, and the build-side one is already cited in a plan document, so
+**the ruling is recorded here as D-110** and the build decisions keep
+D-109. Clause mapping is one-for-one: the ruling's clause *n* is D-110.*n*
+(so the authorized compose fix is **D-110.2**, the capability-spec section
+is **D-110.3c**, the operator debts are **D-110.4**). This renumbering is
+bookkeeping — no clause's content was altered, and nothing else in the
+ruling was interpreted.
+
+**D-110.1 — A-3 + B-2 CLOSED as landed** (`ec1987b`, `3d75251`). E2 closed,
+U-1 served. Affirmed by name: the read-back in `upsertSyncSystem` (every
+writer inherits it), `write_not_observed` over a 200, and the
+publish-target health model fix — a connection absent from
+`sync-policy.yaml` is judged on its last job, which is correct, and the
+amber-forever shape it replaced would have failed step-3's exit for every
+future customer, not just for the pilot's two publisher rows.
+
+**D-110.2 — compose-env precedence is a structural defect, and the fix is
+applied.** Third occurrence (D-84.2 sync-off for two days; D-109.8
+dashboard-off behind a healthy `/healthz`; one earlier). Ruled: not
+operator error. The rule now has a statable form —
+
+> a value a **deployment supplies** lives in an env file; only a value
+> **this compose file computes** lives in `environment:`.
+
+*As applied.* Every feature toggle left `environment:` for
+`deploy/core.defaults.env` (all off), which overlays outrank by plain
+list order: `core.defaults.env` → `deploy/core.live.env` (committed;
+live mode arms MCP + dashboard) → `.secrets/sync.env` (the pilot's own)
+→ `deploy/baseline/<condition>.env`. `make stack-live` no longer sources
+anything into the shell, and `make stack-mcp` became an overlay
+(`deploy/compose.mcp.yml`) rather than a shell assignment. Verified by
+`docker compose config`: the live overlay resolves `CORE_MCP_ENABLED=1`
+and `SYNC_ENABLED=1` with an empty shell, and the baseline overlay still
+inverts sync to `0` on top of it — now by list order rather than as a
+side effect of `environment:` ranking.
+
+**One thing this ruling forced that its text did not anticipate.** The
+obvious escape hatch — a bare pass-through entry, `environment:
+[- CORE_MCP_ENABLED]`, which reads as "shell wins if set, env file
+otherwise" — **is the same defect wearing a different hat**. Compose
+resolves the unset case to null and the container ends up with the
+variable *unset*, wiping the env-file value rather than deferring to it.
+Verified at runtime, not assumed, and kept as a test
+(`test_a_bare_passthrough_entry_is_not_an_escape_hatch`) so the next
+person who reaches for it finds the answer instead of the two silent
+days. Consequence: **there is no shell override for a toggle any more**,
+which would have quietly broken `CORE_MCP_ENABLED=1 make stack-live` —
+three checkpoints of muscle memory. So the habit was made loud instead of
+silent: `deploy/check-toggle-env.sh` runs ahead of every `make stack-*`
+target and refuses to start, naming the toggle and where to set it. That
+guard is the honest half of removing the hatch; without it this ruling
+would have traded one quiet failure for another.
+
+*Effective-flags reporting*, the ruling's second half: `/healthz` now
+reports the **whole** toggle set rather than three hand-picked fields,
+from `FEATURE_TOGGLES` in `config.ts` — so a toggle added to the core
+without a line in the health packet is a failing test, and no future
+surface can be both silently off and unreportable. The set is a
+three-way contract (`config.ts` reports it, `core.defaults.env` supplies
+its off-state, `check-toggle-env.sh` refuses a shell export of it) and
+`tests/test_compose_env_passthrough.py` asserts the three agree, so
+adding a toggle costs three lines or a red test. `migrate_on_start`
+joined the packet as the first beneficiary.
+
+**D-110.3 — register filings.**
+
+- **(a) Governance writes leave no audit row.** Filed, home
+  `specs/dashboard-spec.md` §5.1, pointer on register row U-12. Stated as
+  the shape rather than the symptom: `audit_records` is specified as one
+  row per *MCP call* and is faithfully that, so connection CRUD — and
+  every governance write B-2/B-3 adds after it — lands nowhere. The
+  durable trace today is the job's `triggers` array, which exists only
+  where a job exists; a registration that enqueues nothing leaves
+  nothing. Not fixed here because the fix is a schema ruling (widen
+  `audit_records` and re-read its every consumer, or add a second
+  governance-write table at the read API), and inventing that inside a
+  build session is how a spec gets contradicted silently. **Trigger,
+  normative: MUST close before B-4's audit view ships.** An audit view
+  that renders MCP calls and omits the writes that changed who can reach
+  what is not incomplete, it is dishonest — in exactly the register the
+  auditor role exists to read. B-4's gate inherits the clause.
+- **(b) D-107.3 verdict history and D-107.4 jobs retention** — filed as
+  recorded, dashboard spec §5.2, so B-4 meets them as known open items
+  rather than rediscovering them.
+- **(c) Capability-spec `test_connection` section** — additive amendment
+  applied as authorized: `specs/capability-interfaces-spec.md` §3.1
+  documents the probe's three preflight surfaces (`metadata`, `query`,
+  `publish`), its result shape, its failure mapping, and the `unprobed`
+  contract as **normative** — `unprobed` is not a pass and no consumer
+  may render it as one. Placed under §3 (where `health_probe` is
+  declared) rather than given a capability section of its own, because
+  §11's conformance table and §12's register are cited by number in this
+  file and renumbering them to make room would strand those citations.
+  Conformance rows **CC-14/CC-15/CC-16** were added for coverage that
+  already existed and was undocumented — the three probe tests in
+  `tests/test_sdk_runner.py` are tagged to them. No behaviour changed;
+  this documents what A-3 shipped.
+
+**D-110.4 — operator debts, verified against the live stack at the head
+of this session.** None blocks A-4's build; all three block honest books.
+
+- **(a) D-108 clauses 2/3.** `results/phase2/a2-field-notes/` does not
+  exist — not empty, absent. The clauses' placeholders are unfilled. One
+  sentence on the room plus the raw notes, or "none taken" → A2-F2.
+- **(b) The contamination triage.** 34 docs, review-sync in hand, D-106.6
+  standing; still the python suite's one red
+  (`test_no_contamination_in_current_kb`).
+- **(c) The two red rows.** Confirmed live through the governed API: `ga4`
+  red at 1 416 318 s stale (16.4 days) and `gsc` red at 477 089 s
+  (5.5 days), both against 3-day thresholds. `supabase` green/fresh, the
+  two publisher rows green/`not_a_sync_source`. All five last probes
+  succeeded, so this is staleness, not breakage — the dashboard surfaced
+  it and acting on it is the loop the product exists for.
+
+*Live state at this entry:* core healthy, `/app/` 200, `/` 302,
+`mcp_enabled` / `sync_enabled` / `dashboard_enabled` all true, five
+connections registered, 18 `test_connection` jobs on record including the
+`scratch-demo` add-test-remove leg of the gate demo (`dead_lettered
+auth_error`, which is the re-auth path firing). Every pilot credential is
+still an `env://` reference — the surface A-4 migrates.
+
+## D-111 — decisions this A-4 build had to take
+
+A-4 has one gate sentence and it hides a design: *one vault resolver
+behind the existing `resolver:` seam*. The seam has existed since CP-3a
+and was written for exactly this, so the runner half was small. What was
+not small: the core never had a seam at all, the migration has to be
+incremental rather than a cut-over, and the pilot's end state — no
+plaintext credential files — turns out to have a prerequisite nobody had
+written down. Each decision below is implemented as described.
+
+**D-111.1 — the reference shape carries no version pin, deliberately.**
+`vault://<mount>/<path>#<field>`, identical in the Python resolver and
+the TypeScript one, with KV v2's `/data/` segment inserted by the
+resolver rather than written into the reference (so a KV version change
+rewrites one line, not every registry row). The rejected alternative was
+`?version=N` support: it is one parameter, it is what the API offers, and
+it would have made A-4's own gate unprovable. **A pinned reference is a
+rotation that silently does not take** — write the new value, watch
+nothing change, go looking in the wrong place. That is D-84.2's family,
+and this checkpoint exists partly to stop paying into it. Always-latest
+is the contract, and the rotation test asserts it.
+
+**D-111.2 — two identities, two policies, not one platform role.** The
+core reads `secret/contextlayer/core*`; the runner reads
+`secret/contextlayer/connections/*`; neither can read the other's. A
+single role would have been four lines shorter and would have given the
+runner — the process that executes customer SQL — a read of the KB git
+token, which is push access to the customer's knowledge base. Verified in
+both directions against a real Vault, not asserted.
+
+**D-111.3 — `env://` is retained, marked PILOT-ONLY, and made visible.**
+The seam routes by scheme (`SchemeRouter`), because A-4 flips references
+one connection at a time and a runner mid-flip holds both kinds. Three
+things keep "retained" from decaying into "supported": the module
+docstring and the playbook both say pilot-only in those words; every
+`env://` resolution logs a warning naming the reference (never the
+value), so the remaining plaintext-backed credentials are a `grep` rather
+than an assumption; and `resolver.allow_env: false` turns a surviving
+`env://` reference into a hard error. That flag is what makes "the estate
+is migrated" a mechanism instead of a claim.
+
+**D-111.4 — the core resolves its config at boot, all-or-nothing, and
+generically.** Any config value that *is* a `vault://` reference is one —
+no hand-maintained list of "the secret variables", because such a list
+goes stale the first time someone adds a config value and the failure
+mode is a secret that silently stays plaintext because its name was not
+on it. The first unresolvable reference throws, naming the variable and
+the reference, and the process exits. A core on half its secrets fails
+later, elsewhere, with a worse error; this is S-6's all-or-nothing
+reasoning applied to boot.
+
+**D-111.5 — `/healthz` reports vault reachability and seal state, and no
+address.** `configured`, `reachable`, `sealed`, `initialized`. `sealed`
+earns its place because a persistent vault seals on every restart and
+that is the single commonest way this breaks; it is a fact about
+infrastructure, not a secret. The address is deliberately absent —
+`/healthz` is unauthenticated, and an internal URL there buys the
+operator nothing they did not already type.
+
+**D-111.6 — the JC-8 canary was re-pointed, not duplicated.** The same
+test that has guarded credential injection since CP-3a now seeds its
+canary into vault, resolves it through `VaultResolver` under an AppRole
+login, and keeps every original assertion. A second canary beside the old
+one would have proved the vault code works while leaving the *runner's
+actual path* covered by the old one; moving it is the claim.
+
+**D-111.7 — the pilot needs a persistent vault, which the ruling's text
+did not anticipate.** Dev-mode Vault is in-memory. Harmless in the dev
+stack, where the secrets are toys — and destructive at A-4's own final
+step, because reducing `.secrets/` to the bootstrap remainder deletes the
+only other copy. A reboot would then have cost a re-provisioned Supabase
+role, Google service-account key and Power BI secret.
+`deploy/compose.vault-file.yml` ships file storage on a named volume, and
+**the runbook gates `rm .secrets/runner.env` on it being in use with the
+unseal key stored off this disk.** The cost is stated rather than hidden:
+that vault seals on every restart and there is no auto-unseal without a
+cloud KMS. Recorded as finding A4-F2.
+
+**D-111.8 — the migration is a script, because the module cannot edit.**
+The B-2 Connections module ships Add, Test and Remove, and renders no
+`config` on the card. Changing one reference through the UI therefore
+means retyping a config JSON that the screen will not show you. On five
+connections that is five chances to drop a config key silently. The
+runbook uses `results/phase2/a4/flip-references.sh` — the same governed
+API, read-modify-write, dry-run by default, verifying A-3's read-back
+after each write. **This is a missing screen, not a broken API**, and it
+is filed as **A4-F1** against B-1/B-2 rather than absorbed: until a
+connection can be *edited* and its config *seen*, A-3's "wired without a
+DBA shell" is true for creating a source and not for changing one.
+
+**D-111.9 — the compose fix's escape hatch had to be closed too.**
+Recorded under D-110.2 as applied, and repeated here because it is a
+build decision: a bare pass-through entry (`environment: [- CORE_MCP_ENABLED]`)
+is not a safe shell override — compose resolves the unset case to null
+and the container gets the variable *unset*, wiping the env-file value.
+Verified at runtime. So there is no shell override at all, and
+`deploy/check-toggle-env.sh` makes the old habit loud instead of silent.
+
+## What A-4 does NOT close
+
+**The migration itself is the operator's** and no session can run it: it
+moves real credentials, and one of its steps deletes the last plaintext
+copy of them. `results/phase2/a4/VAULT-MIGRATION-RUNBOOK.md` is the page;
+`flip-references.sh` beside it does the reference rewriting through the
+governed API and holds no database credential.
+
+**Task 4 is blocked behind that run** — the rotation proof, the
+`.secrets/` inventory with a reason per surviving line, the post-run
+playbook §4 check, the gate check against the plan's A-4 text, and
+closure. Playbook §4 has been rewritten to the shipped reality now
+(vault-first, `env://` and `.secrets/` marked pilot-only in those words,
+the bootstrap remainder named as two files); what the operator's run adds
+is whether it is *true* — §4.1 was written from the build, and only a
+person following it can say where it lies.
+
+**What is verified, and how:** the runner resolver and the core loader
+against a **real Vault container** — AppRole login, KV v2 read, token
+reuse and re-login on expiry and on revocation, a rotated value picked up
+with no restart, the policy split refusing in both directions, boot
+refusing to proceed half-resolved, and no secret in any error message.
+What is *not* verified is any of that against the pilot's own
+credentials, which is precisely what STOP-1 is for.

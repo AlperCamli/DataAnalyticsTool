@@ -18,7 +18,7 @@ Config (YAML):
       - connectors.postgres.connector:connector
     classes: [batch, interactive]  # interactive = execute/publish lane
     wait_s: 25
-    resolver: { kind: process-env }            # or env-file + path:
+    resolver: { kind: vault }                  # or process-env / env-file + path:
     execution_preflight:           # G3 gate; see below
       - connector: postgres
         config: { system: supabase, execute_dsn_env: CL_EXEC_DSN }
@@ -69,7 +69,15 @@ from connectors.sdk.protocol import (
 )
 from connectors.sdk.runner import Job, JobOutcome, run_job
 from connectors.sdk.redact import redact_text
-from connectors.sdk.vault import CredentialResolver, EnvResolver, VaultResolutionError
+from connectors.sdk.vault import (
+    ENV_SCHEME,
+    VAULT_SCHEME,
+    CredentialResolver,
+    EnvResolver,
+    SchemeRouter,
+    VaultResolutionError,
+    VaultResolver,
+)
 
 logger = logging.getLogger("connectors.sdk.service")
 
@@ -109,6 +117,12 @@ class RunnerConfig:
     heartbeat_interval_s: float | None = None  # default: lease ttl / 2
     resolver_kind: str = "process-env"
     resolver_path: str | None = None
+    #: `vault` only: keep resolving `env://` references alongside
+    #: `vault://` ones. True during A-4's migration, because references
+    #: flip one connection at a time; set false once the estate is
+    #: migrated and a surviving plaintext reference should be an error
+    #: rather than a warning.
+    resolver_allow_env: bool = True
     # G3 startup gate: per-connector execution configs to preflight
     # before this runner offers to claim `execute` jobs.
     execution_preflight: tuple[dict, ...] = ()
@@ -144,12 +158,15 @@ def load_runner_config(path: str | Path) -> RunnerConfig:
 
     resolver = raw.get("resolver") or {"kind": "process-env"}
     kind = resolver.get("kind", "process-env")
-    if kind not in ("process-env", "env-file"):
+    if kind not in ("process-env", "env-file", "vault"):
         raise RunnerConfigError(
-            f"runner config {path}: resolver.kind must be process-env or env-file"
+            f"runner config {path}: resolver.kind must be process-env, env-file or vault"
         )
     if kind == "env-file" and not resolver.get("path"):
         raise RunnerConfigError(f"runner config {path}: env-file resolver needs path")
+    allow_env = resolver.get("allow_env", True)
+    if not isinstance(allow_env, bool):
+        raise RunnerConfigError(f"runner config {path}: resolver.allow_env must be a boolean")
 
     if not raw.get("core_url"):
         raise RunnerConfigError(f"runner config {path}: core_url required")
@@ -167,11 +184,28 @@ def load_runner_config(path: str | Path) -> RunnerConfig:
         ),
         resolver_kind=kind,
         resolver_path=resolver.get("path"),
+        resolver_allow_env=allow_env,
         execution_preflight=tuple(raw.get("execution_preflight") or ()),
     )
 
 
 def make_resolver(config: RunnerConfig) -> CredentialResolver:
+    """Build the credential resolver this runner will use (J-4).
+
+    `vault` is the supported production kind; the two env kinds are the
+    pilot-only local-dev backend (ruling D1, and see vault.py's module
+    docstring). Under `vault`, `env://` stays resolvable by default so
+    A-4's migration can flip references one connection at a time — set
+    `resolver.allow_env: false` when the estate is migrated and a
+    surviving plaintext reference should fail loudly.
+    """
+    if config.resolver_kind == "vault":
+        backends: dict[str, CredentialResolver] = {
+            VAULT_SCHEME: VaultResolver.from_env(),
+        }
+        if config.resolver_allow_env:
+            backends[ENV_SCHEME] = EnvResolver.from_process_env()
+        return SchemeRouter(backends)
     if config.resolver_kind == "env-file":
         return EnvResolver.from_env_file(config.resolver_path)
     return EnvResolver.from_process_env()

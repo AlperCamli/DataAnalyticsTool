@@ -54,6 +54,21 @@ Three endpoints, each: authenticated by the caller's OIDC session; role-and-subj
 
 Conformance for each includes the negative: a reporter's call cannot return another subject's rows (DT-1) — proven by test, not by review.
 
+### 5.1 Open — governance writes are absent from the audit read (filed D-110.3a)
+
+**The gap, stated plainly.** `audit_records` is specified as one row per MCP call, and it is exactly that. Connection CRUD — the A-3 writes that register, reconfigure and remove a source through `/v1/dashboard/connections` — writes **no audit row**. Today the durable record of a dashboard act is the job's `triggers` array, which carries the acting identity for a probe but exists only where a job exists: a registration that enqueues nothing leaves nothing behind. The same will be true of every governance write B-2/B-3 adds (webhook rotation, detector thresholds, profile edits) unless the shape changes first.
+
+**Why it is filed rather than fixed here.** The fix is a schema question, not a patch: either `audit_records` widens beyond "one row per MCP call" and its every existing consumer is re-read against the wider contract, or a second governance-write table joins it at the read API. That is a ruling, and inventing it inside a build session is how a spec gets contradicted silently.
+
+**Trigger — normative.** This MUST close **before B-4's audit view ships**. An audit view that renders MCP calls and silently omits the writes that changed who can reach what is not an incomplete feature; it is a dishonest one, and it would be dishonest in exactly the register the auditor role exists to read. B-4's gate inherits this clause.
+
+### 5.2 Filed as recorded (D-110.3b)
+
+Two A-2 rulings whose surfaces the read APIs will meet, recorded here so they are not rediscovered at B-4:
+
+- **D-107.3 — verdict history.** An ambiguous profile binding is refused, not resolved. The refusal is a decision with a subject, a time and a reason, and nothing currently retains it; whether verdict history is an audit concern or a ledger one is open.
+- **D-107.4 — jobs retention.** A browser gets the login flow and a script gets 401; both leave job rows whose retention is unset. The audit read's window semantics assume a horizon that no policy defines.
+
 ## 6. Render-safety rules
 
 All user-supplied text renders inert (UI-5) — ledger text, gap descriptions, object/column names (the F4 lesson: names are attacker-influenceable), error details, PR titles echoed from the git provider. Links out (drift PRs, reports, git) carry no credentials and open the provider's own auth. Nothing in the dashboard persists API payloads client-side beyond the session.

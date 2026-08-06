@@ -43,6 +43,41 @@ health_probe: builtin                      # implements test_connection
 
 A publisher adapter's manifest instead declares `capabilities.publish` with its static flag set (§8.1). The manifest is validated at connector release (conformance CC-1) and re-read by the core when a connection is configured; `config_schema` drives the Connections module's form generation.
 
+### 3.1 Health probe — `health_probe: builtin`, job type `test_connection`
+
+*Additive amendment, authorized by D-110.3c. Documents a surface that shipped at A-3 and had no section here; nothing below changes behaviour.* It is documented under the manifest rather than given a capability section of its own because it **is** a manifest declaration and it spans capabilities: `test_connection` is the one job type that maps to no single provider.
+
+A connector declaring `health_probe: builtin` opts into the SDK's probe; the runner adds `test_connection` to its claim declaration for that connector, and the core's Connections module (dashboard spec §3) is its caller. Adapters that declare nothing are never asked.
+
+**Two rules make the verdict worth trusting.**
+
+1. **It opens no new path to a credential.** Every check reuses a surface that already existed for another reason — the config gate the snapshot engine runs, the introspection-role check at the head of every live snapshot job, the G3 execution-role wall the runner preflights at startup. A probe with its own credential path would be a second thing to keep honest.
+2. **It never reports a pass it did not perform.** This is the `unprobed` contract below, and it is the reason the probe exists: a green tick beside a connection nobody has ever successfully used is the failure A-3 was called to prevent.
+
+**Preflight surfaces.** The probe runs the config gate first, then calls `preflight(config)` on each capability in `("metadata", "query", "publish")` that the connector actually registers. A capability the connector does not implement is skipped silently — it was never claimed.
+
+| Capability | Method | What it must do | Default when unimplemented |
+|---|---|---|---|
+| `metadata` | `MetadataProvider.preflight` | The cheapest real thing that proves the source answers, **through the same credential resolution `introspect` uses**: connect and read the role, or make the one GET the snapshot job would make first | `{"probed": false, "reason": …}` |
+| `query` | `QueryExecutor.preflight` | The G3 startup check on demand — for SQL executors, verify the execution role cannot write | `{"probed": false, "reason": …}` |
+| `publish` | `Publisher.preflight` | Tenant/licensing probe. CI-5's refinement lives here when built: a probe may only ever **narrow** the manifest's declared flags, never widen them. Unbuilt in v1 | `{"probed": false, "reason": …}` |
+
+**Result shape** (`succeeded`): `{ok, system, connector: {name, version}, checks: [...], unprobed: [...]}`. Each check is `{capability, status, facts?, message?}` with `status` one of `pass` | `warn` | `unprobed`. Facts are `redact_deep`-scrubbed before they leave the runner (JC-8) — a probe exists to touch credentials, so its own report is the likeliest leak site.
+
+**`unprobed` semantics — normative.** A preflight returning `probed: false` puts its capability in the `unprobed` list and gives its check `status: "unprobed"`. **`unprobed` is not a pass, and no consumer may render it as one.** The job still `succeeded`: the probe ran correctly and its honest answer is "this capability was not exercised." Consumers state it as its own third thing — the Connections module shows it beside the health verdict rather than folding it into green (dashboard spec §6). A connection whose every capability is `unprobed` has been *checked*, not *verified*, and the two pilot publisher adapters are exactly that case.
+
+**Failure mapping.** The probe fails with the connector's own error code so the outer taxonomy stays meaningful, and `detail` carries `checks` so far plus the `capability` that failed:
+
+| Raised | Job error | Why it matters |
+|---|---|---|
+| `ConfigError`, or config invalid against `config_schema` | `config_error`, non-retryable, `detail.capability_code: "config_schema"` | A config that could never work is not a credential problem |
+| `AuthError` | `auth_error`, non-retryable | This is what the Connections module turns into the operator's re-auth prompt (A-3 gate clause), naming the credential **reference** and never a value |
+| `SourceUnavailable` | `source_unavailable` | The source, not the credential |
+| `QuotaExceeded` | **not a failure** — `status: "warn"`, probe continues | Hitting quota proved reachability and authentication, which is what was asked. Never a `defer`: nobody is waiting behind a probe to do real work |
+| anything else | `internal`, retryable, traceback in `detail` | Job §6.7 |
+
+**Credential references** resolve exactly as for any other job (job protocol §7, J-4): the probe receives resolved values through the same injection path, holds them for the job's duration only, and the vault stage's own failure is an `auth_error` with `detail.stage: "vault"` — distinguishable from the source refusing valid credentials, which is the distinction the re-auth prompt depends on.
+
 ## 4. Common envelopes
 
 **Config** (`payload.config`): connector-specific, valid against the manifest's `config_schema`, containing no secrets (credential *references* travel separately, job protocol §7). Always includes `system` (the deployment-unique name) and, for metadata jobs, `mode`.
@@ -250,6 +285,9 @@ Invariants: **LP-1** — `operation` is from the fixed taxonomy (product spec §
 | CC-11 | Usage result contains no literal values from queries (canary-literal test) | UP-1 |
 | CC-12 | Result value encoding: every row of the QE-5 table exercised against a fixture view — temporal as ISO-8601/RFC3339 text, numeric as string, unmapped types rendered rather than dropped, and the whole result `json.dumps`-able | QE-5 |
 | CC-13 | Poisoned job (a value the encoder cannot handle staged into a result): the job fails `internal` through the standard envelope, the runner process survives, and the next job on the same runner completes without lease expiry | QE-6, job §6.7 |
+| CC-14 | Health probe honesty: a connector declaring a capability whose handler implements no preflight `succeeds` with that capability in `unprobed` and `status: "unprobed"` — never counted as a pass | §3.1 |
+| CC-15 | Health probe error mapping: config invalid → `config_error` non-retryable before any credential is touched; a refused credential → `auth_error` non-retryable with the failing `capability` in `detail` | §3.1, A-3 gate |
+| CC-16 | Health probe scrubbing: a preflight returning credential-shaped facts yields a result in which the secret does not appear | §3.1, JC-8 |
 
 ## 12. Open decisions (spec-local register)
 

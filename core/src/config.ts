@@ -147,6 +147,49 @@ export interface SyncConfig {
 
 export class ConfigError extends Error {}
 
+/**
+ * Every boolean that arms or disarms a surface, paired with the variable
+ * that sets it (D-110.2).
+ *
+ * A surface that can be silently off must be checkable without reading
+ * the process environment — the lesson of D-84.2 (two days of sync that
+ * never ran) and D-109.8 (a core answering 404 at every dashboard address
+ * while `/healthz` said `ok`). `/healthz` reports this whole set as the
+ * process *resolved* it, and names the variable so the next question
+ * ("where do I set it, then?") is already answered.
+ *
+ * This list is the core's half of a three-way contract with
+ * `deploy/core.defaults.env` (where each one gets its default) and
+ * `deploy/check-toggle-env.sh` (which refuses a shell export of one).
+ * `tests/test_compose_env_passthrough.py` asserts the three agree, so
+ * adding a toggle in one place and forgetting the others fails a test
+ * rather than shipping a surface nobody can check.
+ */
+export const FEATURE_TOGGLES: { flag: string; env: string }[] = [
+  { flag: "mcp_enabled", env: "CORE_MCP_ENABLED" },
+  { flag: "dashboard_enabled", env: "CORE_DASHBOARD_ENABLED" },
+  { flag: "sync_enabled", env: "SYNC_ENABLED" },
+  { flag: "migrate_on_start", env: "CORE_MIGRATE_ON_START" },
+];
+
+/** The toggle set as this process resolved it, for the `/healthz` packet. */
+export function effectiveFlags(cfg: CoreConfig): Record<string, boolean> {
+  const byFlag: Record<string, boolean> = {
+    mcp_enabled: cfg.mcp.enabled,
+    dashboard_enabled: cfg.dashboard.enabled,
+    sync_enabled: cfg.sync.enabled,
+    migrate_on_start: cfg.migrateOnStart,
+  };
+  // Ordered by FEATURE_TOGGLES, and missing keys are a build error rather
+  // than a quietly absent field in the packet.
+  const flags: Record<string, boolean> = {};
+  for (const { flag } of FEATURE_TOGGLES) {
+    if (!(flag in byFlag)) throw new ConfigError(`no effective value for toggle ${flag}`);
+    flags[flag] = byFlag[flag]!;
+  }
+  return flags;
+}
+
 function intVar(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
   const raw = env[name];
   if (raw === undefined || raw === "") return fallback;

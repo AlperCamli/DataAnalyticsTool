@@ -12,9 +12,22 @@ import { defaultMigrationsDir, migrate } from "./migrate.js";
 import { failStaleRunningRuns, runPendingRuns } from "./pipeline.js";
 import { startScheduler } from "./scheduler.js";
 import { buildServer, startSweeper } from "./server.js";
+import { resolveEnvReferences, VaultClient, vaultSettingsFromEnv } from "./vault.js";
 
 async function main(): Promise<void> {
-  const cfg = loadConfig();
+  // A-4: config values may be `vault://` references. Resolve them before
+  // anything reads config, and fail the whole boot if any one of them
+  // cannot be resolved — a core running on half its secrets fails later,
+  // somewhere else, with a worse error. The names of the resolved
+  // variables are logged; no value ever is (JC-8).
+  const settings = vaultSettingsFromEnv(process.env);
+  const vault = settings ? new VaultClient(settings) : null;
+  const { env, resolved } = await resolveEnvReferences(process.env, vault);
+  if (resolved.length > 0) {
+    console.log(`vault: resolved ${resolved.length} config reference(s): ${resolved.join(", ")}`);
+  }
+
+  const cfg = loadConfig(env);
   const pool = createPool(cfg.databaseUrl);
 
   if (cfg.migrateOnStart) {
@@ -24,7 +37,7 @@ async function main(): Promise<void> {
   const notifier = new JobsNotifier(cfg.databaseUrl);
   await notifier.start();
 
-  const app = buildServer(cfg, pool, notifier);
+  const app = buildServer(cfg, pool, notifier, undefined, { vault });
   const log = (msg: string, err?: unknown) =>
     err ? app.log.error({ err }, msg) : app.log.info(msg);
   const stopSweeper = startSweeper(pool, cfg, log);

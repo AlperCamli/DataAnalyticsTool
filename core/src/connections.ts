@@ -208,13 +208,15 @@ export function readConnectionSpec(system: string, body: unknown): ConnectionSpe
     if (!key) problems.push(`${at}.key (the manifest's credential key) is required`);
     if (!ref) {
       problems.push(
-        `${at}.ref is required and must be a reference (env://NAME today, vault://PATH when A-4 lands)`,
+        `${at}.ref is required and must be a reference ` +
+          "(vault://<mount>/<path>#<field>, or env://NAME — pilot-only, A-4)",
       );
     } else if (!CREDENTIAL_REF.test(ref)) {
       // Deliberately does not echo `ref`: if this branch fired because
       // somebody pasted a DSN into it, echoing is the leak.
       problems.push(
-        `${at}.ref is not a credential reference — it must be env://NAME or vault://PATH. ` +
+        `${at}.ref is not a credential reference — it must be ` +
+          "vault://<mount>/<path>#<field>, or env://NAME (pilot-only). " +
           "This product stores the reference; the value lives where the resolver reads it",
       );
     }

@@ -1,0 +1,14 @@
+# MCP overlay — arms /mcp + the dashboard against the dev IdP, with no
+# customer estate behind it (`make stack-mcp`).
+#
+# This exists because a toggle cannot be raised from the shell any more
+# (D-110.2): `CORE_MCP_ENABLED=1 docker compose up` is a silent no-op
+# now that no toggle is interpolated. Arming a surface is an overlay, so
+# the thing that turns it on is a file you can read afterwards.
+#
+#   docker compose -f docker-compose.yml -f deploy/compose.mcp.yml up -d --build
+
+services:
+  core:
+    env_file:
+      - ./deploy/core.live.env

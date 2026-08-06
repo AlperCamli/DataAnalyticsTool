@@ -11,13 +11,35 @@ services:
     volumes:
       - ./.secrets/core-live:/app/jobs/live:ro
     env_file:
-      # SYNC_ENABLED=1, SYNC_GIT_REMOTE (customer KB), SYNC_GIT_TOKEN
-      # (fine-grained PAT, D2), SYNC_PLATFORM_COMMIT — shape described
-      # in SETUP.md (JC-8: never committed)
+      # Appended after docker-compose.yml's ./deploy/core.defaults.env,
+      # and later entries win — which is the whole point of D-110.2. Both
+      # of these used to be silently outranked by the base file's
+      # `environment:` block, so live mode only worked when the operator
+      # remembered to source the file into the shell first.
+      #
+      # Committed: live mode arms the MCP surface and the dashboard.
+      - ./deploy/core.live.env
+      # A-4: the live core's own AppRole identity (`cl-core`), replacing
+      # the dev stack's root token. Separate from the runner's file below
+      # on purpose — they hold different roles under different policies,
+      # and one shared file would quietly hand the runner the core's read
+      # of the git token. The bootstrap remainder, stated in playbook §4.
+      #
+      # `required: false` because A-4's migration is incremental: before
+      # the operator runs it this file does not exist and the stack must
+      # come up exactly as it does today. A hard requirement here would
+      # turn a per-connection flip into a cut-over, which is the opposite
+      # of what the runbook asks for.
+      - path: ./.secrets/vault-core.env
+        required: false
+      # Live-specific, git-ignored (JC-8): SYNC_ENABLED=1, SYNC_GIT_REMOTE
+      # (customer KB), SYNC_GIT_TOKEN (fine-grained PAT, D2) and friends —
+      # shape described in SETUP.md. Last, so the live deployment can
+      # override any committed default above.
       - ./.secrets/sync.env
   devidp:
     volumes:
-      # The pilot's real accounts, git-ignored (JC-8). The base stack's
+      # The live deployment's real accounts, git-ignored (JC-8). The base stack's
       # `deploy/oidc/users.json` carries demo defaults and is published
       # with the platform release — so it must never hold the live
       # passwords, and never a real person's credentials (A-2's second
@@ -26,4 +48,21 @@ services:
       - ./.secrets/idp-users.json:/etc/contextlayer/idp-users.json:ro
   runner:
     env_file:
-      - ./.secrets/runner.env
+      # A-4: the live runner's own AppRole identity (`cl-runner`, policy
+      # cl-runner: customer connection credentials and nothing else).
+      # This file and the core's are the bootstrap remainder — the one
+      # credential that cannot live in vault, because it is what opens
+      # vault. Stated, not hidden (playbook §4). Optional for the same
+      # reason as the core's: the migration is incremental.
+      - path: ./.secrets/vault-runner.env
+        required: false
+      # PILOT-ONLY, and shrinking: the plaintext credentials for whichever
+      # connections have not yet been flipped to `vault://`. The migration
+      # runbook (results/phase2/a4/VAULT-MIGRATION-RUNBOOK.md) empties it
+      # one connection at a time; when the last reference is flipped this
+      # file is DELETED and `resolver.allow_env: false` makes its return an
+      # error rather than a silent regression. `required: false` is what
+      # lets it be deleted at all — the end state of A-4 is a live stack
+      # with no such file, and compose has to be able to describe that.
+      - path: ./.secrets/runner.env
+        required: false

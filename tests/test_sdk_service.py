@@ -22,10 +22,11 @@ from connectors.sdk.service import (
     load_runner_config,
     scrub_secrets,
 )
-from connectors.sdk.vault import EnvResolver
+from connectors.sdk.vault import EnvResolver, VaultAuth, VaultResolver
 from connectors.static_demo.connector import connector as demo_connector
 from snapshot.accept import accept
 from tests.conftest import make_connector
+from tests.fake_vault import FakeVault
 
 
 class FakeClient:
@@ -218,6 +219,17 @@ def test_lease_lost_at_start_abandons(tmp_path):
 
 
 def test_credential_injection_and_cleanup(tmp_path):
+    """JC-8, run **through the vault path** (A-4).
+
+    This is the same canary it has always been, re-pointed rather than
+    duplicated: the secret now lives in vault, the runner resolves it
+    under its own AppRole identity, and the assertions are unchanged —
+    the connector receives a variable *name*, the value is gone from the
+    environment when the job ends, and it appears in no outgoing message.
+    Re-pointing is the whole claim. A second canary beside the old one
+    would prove the vault code works; moving this one proves the path the
+    runner actually takes is the one under test.
+    """
     secret = "unit-test-canary-zzzz"
     seen: dict = {}
 
@@ -227,19 +239,32 @@ def test_credential_injection_and_cleanup(tmp_path):
         seen["value"] = os.environ.get(var)
         return IntrospectionResult(system_class="sql", objects=[])
 
+    vault = FakeVault()
+    vault.put("secret/contextlayer/pilot", {"dsn": secret})
+    resolver = VaultResolver(
+        "https://vault.invalid",
+        VaultAuth(role_id=vault.role_id, secret_id=vault.secret_id),
+        session=vault,
+    )
+
     connector = make_connector(tmp_path, check)
     client = FakeClient()
-    runner = make_runner(
-        client, {"testconn": connector}, resolver=EnvResolver({"MY_DSN": secret}),
-    )
+    runner = make_runner(client, {"testconn": connector}, resolver=resolver)
     runner.execute(job_record(
         connector="testconn", system="t1",
-        credentials=[{"ref": "env://MY_DSN", "key": "dsn"}],
+        credentials=[{"ref": "vault://secret/contextlayer/pilot#dsn", "key": "dsn"}],
     ))
     assert seen["value"] == secret
     assert seen["var"] not in os.environ  # cleaned up after the job
     # JC-8: the secret never appears in any outgoing message.
     assert secret not in json.dumps([list(map(str, c)) for c in client.calls])
+    # ...nor in anything the runner sent *to vault* — the login body is the
+    # one place a resolved value could ride along unnoticed.
+    assert secret not in json.dumps(vault.posted)
+    # And the runner really went to vault for it, rather than finding it
+    # somewhere cheaper: one AppRole login, one KV v2 read.
+    assert vault.logins == 1
+    assert ("GET", "https://vault.invalid/v1/secret/data/contextlayer/pilot") in vault.calls
 
 
 def test_vault_failure_is_auth_error_with_stage():

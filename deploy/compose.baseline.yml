@@ -30,10 +30,13 @@
 
 services:
   core:
+    # Toggles live in an env file, listed last so it outranks the live
+    # overlay's sync.env (D-110.2). The non-toggle values below stay in
+    # `environment:` because this compose file computes them.
+    env_file:
+      - ./deploy/baseline/enriched.env
     environment:
-      # Enriched condition: the customer KB, sync OFF, localhost.
-      CORE_MCP_ENABLED: "1"
-      SYNC_ENABLED: "0"
+      # Enriched condition: the customer KB, sync OFF (enriched.env), localhost.
       SYNC_GIT_REMOTE: https://github.com/AlperCamli/DataAnalyticsTool.git
       SYNC_GIT_TOKEN: ${CL_BASELINE_GIT_TOKEN:-}
       CORE_OIDC_ISSUER: http://devidp:8180
@@ -43,15 +46,14 @@ services:
     build:
       context: .
       dockerfile: core/Dockerfile
+    # Defined only in this overlay, so it inherits no env file from the
+    # base stack: its toggles are stated in full here (D-110.2).
+    env_file:
+      - ./deploy/baseline/machine.env
     environment:
       CORE_DATABASE_URL: postgres://postgres:contextlayer@postgres:5432/cl_ops
       CORE_OPS_TOKENS: ops-machine=${CL_OPS_TOKEN:-dev-ops-token}
       CORE_RUNNER_TOKENS: runner-local=${CL_RUNNER_TOKEN:-dev-runner-token}
-      # Migrations are the enriched core's job; a second instance racing
-      # them on the shared DB is a needless failure mode.
-      CORE_MIGRATE_ON_START: "0"
-      CORE_MCP_ENABLED: "1"
-      SYNC_ENABLED: "0"
       SYNC_GIT_REMOTE: https://github.com/AlperCamli/cl-baseline-machine-kb.git
       SYNC_GIT_TOKEN: ${CL_BASELINE_GIT_TOKEN:-}
       CORE_OIDC_ISSUER: http://devidp:8180
@@ -70,13 +72,12 @@ services:
     build:
       context: .
       dockerfile: core/Dockerfile
+    env_file:
+      - ./deploy/baseline/nokb.env
     environment:
       CORE_DATABASE_URL: postgres://postgres:contextlayer@postgres:5432/cl_ops
       CORE_OPS_TOKENS: ops-nokb=${CL_OPS_TOKEN:-dev-ops-token}
       CORE_RUNNER_TOKENS: runner-local=${CL_RUNNER_TOKEN:-dev-runner-token}
-      CORE_MIGRATE_ON_START: "0"
-      CORE_MCP_ENABLED: "1"
-      SYNC_ENABLED: "0"
       SYNC_GIT_REMOTE: https://github.com/AlperCamli/cl-baseline-nokb.git
       SYNC_GIT_TOKEN: ${CL_BASELINE_GIT_TOKEN:-}
       CORE_OIDC_ISSUER: http://devidp:8180

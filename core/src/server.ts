@@ -20,7 +20,9 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { createHash, timingSafeEqual } from "node:crypto";
 import pg from "pg";
+import { effectiveFlags } from "./config.js";
 import type { CoreConfig } from "./config.js";
+import type { VaultClient, VaultHealth } from "./vault.js";
 import { JOB_DONE_CHANNEL, JobsNotifier } from "./db.js";
 import { listHealthEvents, recordHealthEvent } from "./health.js";
 import {
@@ -73,6 +75,10 @@ export function buildServer(
   pool: pg.Pool,
   notifier: JobsNotifier,
   logStream?: { write: (chunk: string) => void },
+  /** A-4: the vault this core resolved its own config through, so
+   *  `/healthz` can say whether it is still reachable. Null when the
+   *  deployment names no vault, which is a legitimate state. */
+  opts?: { vault?: Pick<VaultClient, "health"> | null },
 ): FastifyInstance {
   const app = Fastify({
     logger: logStream
@@ -601,23 +607,36 @@ export function buildServer(
         }
       }
 
+      const vaultHealth: VaultHealth = opts?.vault
+        ? await opts.vault.health()
+        : { configured: false, reachable: false };
+
       return {
         status: "ok",
         protocol_version: PROTOCOL_VERSION,
         jobs,
         instance: {
           public_url: cfg.mcp.publicUrl,
-          mcp_enabled: cfg.mcp.enabled,
-          sync_enabled: cfg.sync.enabled,
-          // B-2: reported for the same reason `sync_enabled` is (SO-F /
-          // D-84.2). A core started without the MCP env has no dashboard
-          // and answers 404 at every dashboard address while /healthz
-          // still says `ok` — which is indistinguishable from a broken
-          // build unless the packet states it. It costs one field to
-          // make "the dashboard is off" checkable instead of guessable.
-          dashboard_enabled: cfg.dashboard.enabled,
+          // The full toggle set as this process resolved it (D-110.2),
+          // which subsumes the three fields this packet used to name one
+          // at a time. B-2 added `dashboard_enabled` for the same reason
+          // SO-F/D-84.2 added `sync_enabled`: a core started without the
+          // right env has no dashboard and answers 404 at every dashboard
+          // address while /healthz still says `ok` — indistinguishable
+          // from a broken build unless the packet states it. Reporting
+          // the *set* rather than a hand-picked few means the next toggle
+          // is checkable the day it lands, not the day it burns someone.
+          ...effectiveFlags(cfg),
           kb_remote: cfg.sync.gitRemote || null,
           kb_ref: kbRef,
+          // A-4: reachability, never contents. A core resolves its
+          // secrets once at boot, so it keeps running after vault goes
+          // away — and the next restart then fails at boot with no
+          // warning anyone saw coming. `sealed` is here because a sealed
+          // vault after a host restart is the single most common way
+          // this breaks, and it is a fact about infrastructure, not a
+          // secret. No address, no field names, no values.
+          vault: vaultHealth,
         },
       };
     } catch (err) {

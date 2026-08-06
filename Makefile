@@ -2,26 +2,44 @@
 # CP-4 adds the MCP surface: `make stack-mcp` arms /mcp + the dev IdP.
 
 stack-up:    ## build + start the local job-protocol stack
+	@sh deploy/check-toggle-env.sh
 	docker compose up -d --build
 
 stack-mcp:   ## stack with the MCP server + dev OIDC provider armed (CP-4)
-	CORE_MCP_ENABLED=1 docker compose up -d --build
+	@sh deploy/check-toggle-env.sh
+	docker compose -f docker-compose.yml -f deploy/compose.mcp.yml up -d --build
 
 stack-demo:  ## enqueue the no-credentials demo jobs and await results
 	docker compose exec core sh -c 'node dist/cli.js enqueue --wait jobs/demo/*.json'
 
-# The overlay's `env_file:` does NOT reach the sync vars: docker-compose.yml
-# declares them under `environment:` as ${SYNC_*:-}, and compose ranks
-# `environment:` above `env_file:` — so an unexported .secrets/sync.env
-# yields SYNC_ENABLED=0 and a stack that looks healthy and never syncs
-# (D-84.2; the pilot ran two days that way). Source it into the shell so
-# compose interpolates the real values. `CORE_MCP_ENABLED=1 make stack-live`
-# arms /mcp on top; SYNC_PLATFORM_COMMIT feeds §10 wheel provenance.
+# No `set -a; . .secrets/sync.env` any more. That line existed because
+# docker-compose.yml declared the toggles and SYNC_* under `environment:`
+# as ${VAR:-default}, and compose ranks `environment:` above `env_file:` —
+# so an unexported .secrets/sync.env yielded SYNC_ENABLED=0 and a stack
+# that looked healthy and never synced (D-84.2; the pilot ran two days that
+# way, and D-109.8 repeated it with the dashboard). Since D-110.2 those
+# values live in env files and the overlay's file simply wins, so the
+# overlay says what it means. SYNC_PLATFORM_COMMIT stays interpolated —
+# only the shell knows the commit — and feeds §10 wheel provenance.
 stack-live:  ## live overlay stack up + enqueue the example estate's three systems
-	set -a; . .secrets/sync.env; set +a; \
-	  SYNC_PLATFORM_COMMIT=$$(git rev-parse HEAD) \
+	@sh deploy/check-toggle-env.sh
+	SYNC_PLATFORM_COMMIT=$$(git rev-parse HEAD) \
 	  docker compose -f docker-compose.yml -f deploy/compose.live.yml up -d --build
 	docker compose exec core sh -c 'node dist/cli.js enqueue --wait jobs/live/*.json'
+
+# Same as stack-live, on the PERSISTENT vault (A-4). Use this one once the
+# pilot's secrets are in vault: `stack-live` starts the base stack's
+# dev-mode vault, which is in-memory and therefore empty, and the core
+# would refuse to boot naming the first reference it could not resolve.
+# That failure is loud by design — but a target that cannot produce it is
+# better than a loud failure you have to diagnose at 09:00. Vault seals on
+# restart; unseal it before this, or `/healthz` will say `sealed: true`.
+stack-pilot: ## live stack on the persistent vault (A-4; unseal vault first)
+	@sh deploy/check-toggle-env.sh
+	SYNC_PLATFORM_COMMIT=$$(git rev-parse HEAD) \
+	  docker compose -f docker-compose.yml \
+	                 -f deploy/compose.vault-file.yml \
+	                 -f deploy/compose.live.yml up -d --build
 
 stack-down:  ## stop the stack (keeps the pgdata volume; add -v yourself to wipe)
 	docker compose down

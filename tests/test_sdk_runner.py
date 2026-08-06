@@ -267,10 +267,10 @@ def probe(connector, config):
 
 
 def test_probe_reports_unprobed_rather_than_a_pass_it_did_not_perform():
-    """The honesty rule: the static demo declares metadata and implements
-    no preflight, so the probe succeeds *and says it exercised nothing*.
-    A green tick beside a source nobody has ever read is the failure this
-    whole checkpoint exists to prevent."""
+    """CC-14 (capability §3.1). The honesty rule: the static demo declares
+    metadata and implements no preflight, so the probe succeeds *and says
+    it exercised nothing*. A green tick beside a source nobody has ever
+    read is the failure this whole checkpoint exists to prevent."""
     outcome = probe(demo_connector, dict(DEMO_CONFIG))
     assert outcome.status == "succeeded"
     assert outcome.result["ok"] is True
@@ -287,9 +287,9 @@ def test_probe_runs_the_config_gate_first():
 
 
 def test_probe_maps_a_refused_credential_to_auth_error(tmp_path):
-    """`auth_error` is what the Connections module turns into a re-auth
-    prompt, so the mapping from the connector's own exception to the
-    outer taxonomy is load-bearing rather than cosmetic."""
+    """CC-15 (capability §3.1). `auth_error` is what the Connections module
+    turns into a re-auth prompt, so the mapping from the connector's own
+    exception to the outer taxonomy is load-bearing rather than cosmetic."""
     from connectors.sdk import AuthError
 
     class Refusing(FakeMetadata):
@@ -308,8 +308,9 @@ def test_probe_maps_a_refused_credential_to_auth_error(tmp_path):
 
 
 def test_probe_scrubs_credentials_out_of_its_own_report(tmp_path):
-    """A probe exists to touch credentials, so its report is the one
-    place a resolved DSN would most plausibly leak (JC-8/F3)."""
+    """CC-16 (capability §3.1). A probe exists to touch credentials, so its
+    report is the one place a resolved DSN would most plausibly leak
+    (JC-8/F3)."""
 
     class Leaky(FakeMetadata):
         def preflight(self, config):

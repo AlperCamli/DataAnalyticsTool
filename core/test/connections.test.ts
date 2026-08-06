@@ -28,6 +28,7 @@ import {
   type BrowserSession,
   type DashboardRig,
 } from "./dashboard-helpers.js";
+import { FEATURE_TOGGLES } from "../src/config.js";
 import { healthFor, readConnectionSpec, PayloadRejected } from "../src/connections.js";
 import { modulesFor } from "../src/spa.js";
 import { getSyncSystem, upsertSyncSystem, RegistryWriteNotObserved } from "../src/triggers.js";
@@ -458,10 +459,18 @@ describe("B-2 dashboard shell", () => {
     // is exactly what happened on the pilot the first time this runbook
     // was followed. The packet has to say it.
     const probe = await fetch(`${rig.base}/healthz`);
-    const body = (await probe.json()) as { instance: { dashboard_enabled: boolean } };
+    const body = (await probe.json()) as { instance: Record<string, unknown> };
     expect(body.instance.dashboard_enabled).toBe(true);
-    expect(body.instance).toHaveProperty("mcp_enabled");
-    expect(body.instance).toHaveProperty("sync_enabled");
+
+    // D-110.2 widened this from three hand-picked fields to the whole
+    // toggle set. Asserting against FEATURE_TOGGLES rather than a literal
+    // list is the point: a toggle added to the core without a line in the
+    // health packet fails here, so no future surface can be silently off
+    // *and* unreportable — which is the pair that cost the two days.
+    for (const { flag } of FEATURE_TOGGLES) {
+      expect(body.instance).toHaveProperty(flag);
+      expect(typeof body.instance[flag]).toBe("boolean");
+    }
   });
 
   it("serves the SPA as static assets from the core, behind no second server", async () => {

@@ -1,0 +1,53 @@
+# Persistent-vault overlay (A-4). Replaces the base stack's dev-mode,
+# in-memory Vault with a file-backed one that survives a restart.
+#
+#   docker compose -f docker-compose.yml \
+#                  -f deploy/compose.vault-file.yml \
+#                  -f deploy/compose.live.yml up -d
+#
+# Order matters only in that compose.live.yml still layers its own env
+# files last; this overlay touches the vault service alone.
+#
+# WHY THIS EXISTS: the base stack's vault is `-dev` — in-memory, auto-
+# unsealed, root token committed. Losing its contents on restart costs
+# nothing while the secrets are toys. On the pilot, once `.secrets/` is
+# deleted, vault holds the only copy of every credential in the estate,
+# and an in-memory server would turn a reboot into a re-provisioning
+# afternoon. **The migration runbook gates the deletion of `.secrets/`
+# on this overlay being in use and the unseal key being stored off-disk.**
+#
+# THE COST, stated: this vault seals on every restart and must be
+# unsealed by hand before the core or the runner can resolve anything.
+# The core refuses to boot on an unresolvable reference (deliberately),
+# so the failure is loud and its cause is in `/healthz` — `vault.sealed`
+# is a field for precisely this morning.
+
+services:
+  vault:
+    # This server is initialised once by `vault operator init` and
+    # unsealed by the operator thereafter. The two dev vars are blanked
+    # rather than merely omitted: compose merges `environment:` maps key
+    # by key, so the base stack's values survive an overlay that simply
+    # does not mention them — and the image's entrypoint adds `-dev` when
+    # it sees either one. Omitting them would have produced a vault that
+    # mounts the persistent volume and then ignores it.
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_DEV_ROOT_TOKEN_ID: ""
+      VAULT_DEV_LISTEN_ADDRESS: ""
+    command: ["vault", "server", "-config=/vault/config/vault.hcl"]
+    volumes:
+      - ./deploy/vault-file.hcl:/vault/config/vault.hcl:ro
+      - ./deploy/vault-seed.sh:/vault/seed.sh:ro
+      - vaultdata:/vault/file
+    healthcheck:
+      # `vault status` exits non-zero while sealed, which is the correct
+      # reading: a sealed vault is not ready to serve, and the core that
+      # depends on it should wait rather than boot into a failure.
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+volumes:
+  vaultdata:
