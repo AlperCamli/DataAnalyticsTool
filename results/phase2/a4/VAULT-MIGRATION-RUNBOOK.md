@@ -76,10 +76,41 @@ cd ~/Desktop/DataProject
 docker compose -f docker-compose.yml \
                -f deploy/compose.vault-file.yml \
                -f deploy/compose.live.yml up -d vault
+
+# Wait for the listener. `up -d` returns when the CONTAINER is started,
+# which is a second or so before Vault is accepting connections — run
+# `vault status` on the next line and you get `connection refused`, which
+# looks like a failure and is a race.
+until docker compose exec -T vault vault status >/dev/null 2>&1 \
+   || docker compose exec -T vault vault status 2>&1 | grep -q Sealed; do
+  sleep 1
+done
 docker compose exec vault vault status
 ```
 
-Expect `Initialized false`, `Sealed true`. That is a new, empty vault.
+Expect this, and read all three lines:
+
+```
+Initialized        false
+Sealed             true
+Storage Type       file
+```
+
+`Storage Type file` is the one to check — it is how you know you are on
+the persistent overlay and not the base stack's in-memory dev vault.
+
+**Two things that look wrong here and are not:**
+
+- **`vault status` exits 2.** That is Vault's exit code for "sealed",
+  not an error. `echo $?` after it will say 2 until act 2 is finished.
+- **`docker ps` shows the container `(health: starting)`, then
+  `(unhealthy)` after five minutes.** The healthcheck is `vault status`,
+  so an uninitialized or sealed vault is deliberately *not* healthy — a
+  vault that cannot serve secrets should not report ready, and `core` and
+  `runner` depend on `service_healthy` precisely so they do not boot into
+  a failure. It flips to `healthy` within seconds of the unseal below,
+  and recovers on its own however long you take. Take the time to store
+  the keys properly.
 
 **Initialise it.** This prints an unseal key and a root token **once**.
 
@@ -401,6 +432,10 @@ A-4's field note and it is worth more than a clean checklist.
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `vault status` → `connection refused`, right after `up -d` | the listener is a second behind the container | wait and re-run; act 2's `until` loop does this for you |
+| `vault status` exits 2 | Vault's exit code for "sealed" | not an error; expected until act 2's unseal |
+| Vault container `(unhealthy)` before act 2 finishes | the healthcheck *is* `vault status` | expected — it flips to healthy seconds after the unseal, and `core`/`runner` wait for it on purpose |
+| `docker compose up` hangs on `core`/`runner` | vault is sealed, so its dependency is unmet | unseal it; the wait is the gate working |
 | Core will not start, names a variable | that variable's `vault://` reference does not resolve | check spelling of mount/path/field; `vault kv get` it as root |
 | `/healthz` shows `vault.sealed: true` | the host or the container restarted | `docker compose exec vault vault operator unseal <key>` |
 | `/healthz` shows `vault.reachable: false` | vault container down, or `VAULT_ADDR` wrong | `docker compose ps vault` |
