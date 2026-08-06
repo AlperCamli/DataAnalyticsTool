@@ -1,0 +1,242 @@
+{
+  "api_version": "1",
+  "role_scope": "write",
+  "policy_readable": true,
+  "connections": [
+    {
+      "system": "ga4",
+      "connector": {
+        "name": "ga4",
+        "version_constraint": ">=0.2 <0.3"
+      },
+      "config": {
+        "mode": "api",
+        "system": "ga4",
+        "property_id": "000000000"
+      },
+      "credentials": [
+        {
+          "key": "service_account",
+          "ref": "vault://secret/contextlayer/connections/google#sa_key_json",
+          "required_for": [
+            "query"
+          ]
+        }
+      ],
+      "health": {
+        "status": "red",
+        "reason": "the newest accepted snapshot is 1447272s old, past this system's 259200s threshold",
+        "snapshot": {
+          "snapshot_id": "01KXZXXSQ35ZKAVQEGGEXNTHGX",
+          "captured_at": "2026-07-20T14:12:21+00:00",
+          "accepted_at": "2026-07-20T14:12:22.370565+00:00",
+          "age_s": 1447272,
+          "object_count": 466,
+          "source_mode": "api"
+        },
+        "policy": {
+          "threshold_s": 259200,
+          "trigger_mode": "manual"
+        },
+        "freshness": "stale",
+        "last_job": {
+          "job_id": "01KZB1XR3JD2WNN10JNJY7E5T7",
+          "type": "test_connection",
+          "state": "succeeded",
+          "finished_at": "2026-08-06T08:09:36.894595+00:00",
+          "error": null
+        }
+      }
+    },
+    {
+      "system": "gsc",
+      "connector": {
+        "name": "gsc",
+        "version_constraint": ">=0.2 <0.3"
+      },
+      "config": {
+        "mode": "api",
+        "system": "gsc",
+        "site_url": "sc-domain:example-estate.com"
+      },
+      "credentials": [
+        {
+          "key": "service_account",
+          "ref": "vault://secret/contextlayer/connections/google#sa_key_json",
+          "required_for": [
+            "query"
+          ]
+        }
+      ],
+      "health": {
+        "status": "red",
+        "reason": "the newest accepted snapshot is 508043s old, past this system's 259200s threshold",
+        "snapshot": {
+          "snapshot_id": "01KYVXMRVXX7EYTSA3YNGV4WSH",
+          "captured_at": "2026-07-31T11:06:10+00:00",
+          "accepted_at": "2026-07-31T11:06:10.684744+00:00",
+          "age_s": 508043,
+          "object_count": 10,
+          "source_mode": "api"
+        },
+        "policy": {
+          "threshold_s": 259200,
+          "trigger_mode": "manual"
+        },
+        "freshness": "stale",
+        "last_job": {
+          "job_id": "01KZB1XSCSVFBK0N74JMWN8JSK",
+          "type": "test_connection",
+          "state": "succeeded",
+          "finished_at": "2026-08-06T08:09:37.471106+00:00",
+          "error": null
+        }
+      }
+    },
+    {
+      "system": "looker_studio",
+      "connector": {
+        "name": "looker_studio",
+        "version_constraint": ">=0.1 <0.2"
+      },
+      "config": {
+        "system": "looker_studio",
+        "sources": {
+          "ga4": {
+            "kind": "ga4",
+            "alias": "ga4_main",
+            "property_id": "000000000"
+          },
+          "gsc": {
+            "kind": "gsc",
+            "alias": "gsc_main",
+            "site_url": "sc-domain:example-estate.com",
+            "table_type": "SITE_IMPRESSION"
+          },
+          "supabase": {
+            "host": "YOUR_POOLER_HOST",
+            "kind": "postgres",
+            "port": 5432,
+            "alias": "supabase_reporting",
+            "database": "postgres",
+            "username": "example_exec.YOUR_PROJECT_REF"
+          }
+        },
+        "template_report_id": "cad8f5e3-6d47-45e1-9526-a24b71e0fd54",
+        "template_visual_kinds": [
+          "table",
+          "line",
+          "bar",
+          "scorecard",
+          "pivot"
+        ]
+      },
+      "credentials": [],
+      "health": {
+        "status": "green",
+        "reason": "not a sync source (absent from sync-policy.yaml); its last test_connection job succeeded",
+        "snapshot": null,
+        "policy": null,
+        "freshness": "not_a_sync_source",
+        "last_job": {
+          "job_id": "01KZB1RRYSSDJTCXWWJ955A3YG",
+          "type": "test_connection",
+          "state": "succeeded",
+          "finished_at": "2026-08-06T08:06:52.640308+00:00",
+          "error": null
+        }
+      }
+    },
+    {
+      "system": "powerbi",
+      "connector": {
+        "name": "powerbi",
+        "version_constraint": ">=0.1 <0.2"
+      },
+      "config": {
+        "system": "powerbi",
+        "client_id": "fdeccf1b-d459-4433-b7d3-258f2b86bc3e",
+        "tenant_id": "e44dc0a2-f336-4b10-82b9-1d4997c4d279",
+        "workspace_id": "5d8eeeff-137f-487c-bd46-1a6669c345e2"
+      },
+      "credentials": [
+        {
+          "key": "client_secret",
+          "ref": "vault://secret/contextlayer/connections/powerbi#client_secret",
+          "required_for": [
+            "publish"
+          ]
+        }
+      ],
+      "health": {
+        "status": "green",
+        "reason": "not a sync source (absent from sync-policy.yaml); its last test_connection job succeeded",
+        "snapshot": null,
+        "policy": null,
+        "freshness": "not_a_sync_source",
+        "last_job": {
+          "job_id": "01KZB1RRXW2WZ7F7DF4N0Y4ET6",
+          "type": "test_connection",
+          "state": "succeeded",
+          "finished_at": "2026-08-06T08:06:52.614697+00:00",
+          "error": null
+        }
+      }
+    },
+    {
+      "system": "supabase",
+      "connector": {
+        "name": "postgres",
+        "version_constraint": ">=0.2 <0.3"
+      },
+      "config": {
+        "mode": "live",
+        "system": "supabase",
+        "schemas": [
+          "public",
+          "reporting"
+        ]
+      },
+      "credentials": [
+        {
+          "key": "dsn",
+          "ref": "vault://secret/contextlayer/connections/supabase#introspect_dsn",
+          "required_for": [
+            "live"
+          ]
+        },
+        {
+          "key": "execute_dsn",
+          "ref": "vault://secret/contextlayer/connections/supabase#exec_dsn",
+          "required_for": [
+            "query"
+          ]
+        }
+      ],
+      "health": {
+        "status": "green",
+        "reason": "snapshot 120684s old, inside the 2592000s threshold",
+        "snapshot": {
+          "snapshot_id": "01KZ7F2168CQHSWXFC4ZV0S6BB",
+          "captured_at": "2026-08-04T22:42:09+00:00",
+          "accepted_at": "2026-08-04T22:42:09.736044+00:00",
+          "age_s": 120684,
+          "object_count": 38,
+          "source_mode": "live"
+        },
+        "policy": {
+          "threshold_s": 2592000,
+          "trigger_mode": "manual"
+        },
+        "freshness": "fresh",
+        "last_job": {
+          "job_id": "01KZB20XQ80NQ64QFM18SAVQ19",
+          "type": "test_connection",
+          "state": "succeeded",
+          "finished_at": "2026-08-06T08:11:20.837425+00:00",
+          "error": null
+        }
+      }
+    }
+  ]
+}

@@ -16,6 +16,7 @@
 #             side. A reporter's token is a 403 here, which is the
 #             endpoint working, not this script failing.
 set -euo pipefail
+INVOKED_FROM="$(pwd)"
 cd "$(dirname "$0")"
 
 SINCE="${1:-}"
@@ -40,8 +41,19 @@ HINT
 fi
 
 if [ -n "${CL_OUT:-}" ]; then
-  mkdir -p "$CL_OUT"
-  cd "$CL_OUT"
+  # Resolve against the INVOKING directory, not this script's. The `cd`
+  # above moved us into results/phase2/a3-b2/, so a relative CL_OUT like
+  # `results/phase2/a4` was creating a nested
+  # results/phase2/a3-b2/results/phase2/a4/ and writing there — silently,
+  # since the script reports only basenames. Found running the A-4
+  # migration.
+  case "$CL_OUT" in
+    /*) OUT_DIR="$CL_OUT" ;;
+    *)  OUT_DIR="$INVOKED_FROM/$CL_OUT" ;;
+  esac
+  mkdir -p "$OUT_DIR"
+  cd "$OUT_DIR"
+  echo "writing to $OUT_DIR" >&2
 fi
 
 export CL_API CL_TOKEN SINCE

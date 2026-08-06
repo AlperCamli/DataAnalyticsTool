@@ -1,0 +1,8 @@
+2026-08-06T08:06:02.248Z|supabase|succeeded|alper|-|-|01KZB1Q7R7KY8947NTNB7A6SR6
+2026-08-06T08:06:52.520Z|ga4|dead_lettered|alper|config_error|service-account key in $CL_CRED_013d21777ed143ca8e3799086cad46c9_SERVICE_ACCOUNT could not be parsed (contents not echoed; check the key)|01KZB1RRV7R5MC4T4RAV1DNV0P
+2026-08-06T08:06:52.573Z|gsc|dead_lettered|alper|config_error|service-account key in $CL_CRED_16e6dd59583240c882b6a21f1d510e3d_SERVICE_ACCOUNT could not be parsed (contents not echoed; check the key)|01KZB1RRWXFVA1F0AA0DWKQRJ0
+2026-08-06T08:06:52.604Z|powerbi|succeeded|alper|-|-|01KZB1RRXW2WZ7F7DF4N0Y4ET6
+2026-08-06T08:06:52.633Z|looker_studio|succeeded|alper|-|-|01KZB1RRYSSDJTCXWWJ955A3YG
+2026-08-06T08:09:35.603Z|ga4|succeeded|alper|-|-|01KZB1XR3JD2WNN10JNJY7E5T7
+2026-08-06T08:09:36.921Z|gsc|succeeded|alper|-|-|01KZB1XSCSVFBK0N74JMWN8JSK
+2026-08-06T08:11:19.656Z|supabase|succeeded|alper|-|-|01KZB20XQ80NQ64QFM18SAVQ19

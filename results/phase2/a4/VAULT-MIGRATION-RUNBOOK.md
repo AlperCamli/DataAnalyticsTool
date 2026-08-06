@@ -239,21 +239,33 @@ the files the runner reads today; sourcing those files into the shell
 moves them with no transcription step, which is the only way that does
 not eventually produce a DSN with a missing character.
 
-```bash
-# Load today's values as shell variables. `set -a` exports them so the
-# names match what the files declare.
-set -a; . .secrets/runner.env; . .secrets/sync.env; set +a
+> **Take the values from the running containers, not from the files.**
+> Sourcing `.secrets/runner.env` in a shell looks equivalent and is not:
+> Compose's env-file parser and a POSIX shell disagree about quoting and
+> escaping. On the pilot the Google service-account key came out of the
+> shell **44 characters short and no longer valid JSON**, while the four
+> flat strings were byte-identical — so four of five "worked" and the
+> fifth failed two acts later as `config_error`. The container's
+> environment is by definition the value that works today. Finding
+> **A4-F4**.
 
-# Confirm each one arrived, by LENGTH — never by printing it.
+```bash
+# Read each value out of the process that is successfully using it.
+CL_INTROSPECT_DSN=$(docker compose exec -T runner printenv CL_INTROSPECT_DSN)
+CL_EXEC_DSN=$(docker compose exec -T runner printenv CL_EXEC_DSN)
+GOOGLE_SA_KEY_JSON=$(docker compose exec -T runner printenv GOOGLE_SA_KEY_JSON)
+POWERBI_CLIENT_SECRET=$(docker compose exec -T runner printenv POWERBI_CLIENT_SECRET)
+SYNC_GIT_TOKEN=$(docker compose exec -T core printenv SYNC_GIT_TOKEN)
+
 for v in CL_INTROSPECT_DSN CL_EXEC_DSN GOOGLE_SA_KEY_JSON \
          POWERBI_CLIENT_SECRET SYNC_GIT_TOKEN; do
-  eval "printf '%-24s %s chars\n' $v \${#$v}"
+  eval "printf '  %-24s %s chars\n' $v \${#$v}"
 done
 ```
 
-Every line must show a non-zero length. A zero means that name is not in
-the file you think it is — check before writing it into vault, because an
-empty secret writes happily and fails at act 6 wearing a different face.
+Every line must show a non-zero length. A zero means the runner does not
+have that name — an empty secret writes happily and fails at act 6
+wearing a different face.
 
 ```bash
 # customer connection credentials → the cl-runner policy's subtree
@@ -275,6 +287,30 @@ docker compose exec -T -e VAULT_TOKEN="$VT" vault \
   vault kv put secret/contextlayer/core \
     git_token="$SYNC_GIT_TOKEN"
 ```
+
+**Verify every one against the container's copy, by hash.** Comparing
+against the variable you just set proves only that vault stored what it
+was handed; this proves it stored what actually works:
+
+```bash
+bash -c '
+h() { printf "%s" "$1" | shasum -a 256 | cut -c1-12; }
+for pair in "CL_INTROSPECT_DSN:supabase:introspect_dsn" \
+            "CL_EXEC_DSN:supabase:exec_dsn" \
+            "GOOGLE_SA_KEY_JSON:google:sa_key_json" \
+            "POWERBI_CLIENT_SECRET:powerbi:client_secret"; do
+  var=${pair%%:*}; rest=${pair#*:}; p=${rest%%:*}; field=${rest#*:}
+  c=$(docker compose exec -T runner printenv "$var")
+  v=$(docker compose exec -T -e VAULT_TOKEN="'"$VT"'" vault \
+        vault kv get -field="$field" "secret/contextlayer/connections/$p" 2>/dev/null)
+  [ "$c" = "$v" ] && m=ok || m=MISMATCH
+  printf "  %-22s %-12s %-12s %s\n" "$var" "$(h "$c")" "$(h "$v")" "$m"
+done'
+```
+
+All four must say `ok`. (Do not name a shell variable `path` inside this
+— in zsh `path` is tied to `$PATH` and assigning it wipes your
+environment mid-loop.)
 
 **No history suppression is needed and none is used.** The shell records
 the line you typed, not what the variables expanded to — so history holds

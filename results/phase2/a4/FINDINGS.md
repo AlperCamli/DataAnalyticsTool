@@ -99,3 +99,56 @@ quietly drop one.
 **Worth generalising.** Anything in this repo that authorises by path
 prefix deserves the same live check. The seed script is now the only
 place we write a Vault policy, which keeps the blast radius to one file.
+
+---
+
+## A4-F4 — sourcing an env file in a shell is not what Compose does
+
+**Found during the migration itself, 2026-08-06.** Act 4 loaded the
+pilot's credentials with `set -a; . .secrets/runner.env; set +a` and
+wrote them into vault. Four of the five moved correctly. The fifth —
+`GOOGLE_SA_KEY_JSON`, the Google service-account key — arrived in vault
+**44 characters shorter than the value the runner actually had**, and no
+longer parsed as JSON.
+
+| | length | parses as JSON |
+|---|---|---|
+| shell-sourced from `.secrets/runner.env` | 2332 | **no** |
+| what Compose passed the runner | 2376 | yes |
+
+Docker Compose's env-file parser and a POSIX shell disagree about quoting
+and escaping, and a service-account key is the one pilot credential with
+enough embedded `\n` and quote characters for the disagreement to show.
+The other four are flat strings, so they were byte-identical and passed.
+
+**Why the runbook's own check did not catch it.** Act 4 verified the
+round-trip by comparing vault's stored value to the *shell-sourced*
+variable — the same interpretation on both sides of the comparison, so it
+could only ever agree with itself. It confirmed vault stored what it was
+given; it could not confirm that what it was given was right.
+
+**How it surfaced.** `ga4` and `gsc` probed `config_error` with
+`service-account key ... could not be parsed (contents not echoed; check
+the key)`. That message did its job — it named the failing surface, told
+the operator where to look, and refused to echo the value while doing it.
+
+**Fixed, and the fix is the general rule:** take the value from the
+**running container's environment**, which is by definition the value
+that works today, not from a re-interpretation of the file it came from.
+
+```bash
+SA=$(docker compose exec -T runner printenv GOOGLE_SA_KEY_JSON)
+docker compose exec -T -e VAULT_TOKEN="$VT" vault \
+  vault kv put secret/contextlayer/connections/google sa_key_json="$SA"
+```
+
+**And the verification rule that follows:** compare the stored value
+against the container's env by hash, never against the source you just
+read. Doing that for all five found exactly one mismatch and proved the
+other four.
+
+**Where it closes.** The runbook's act 4 is rewritten to the container-env
+method. Worth generalising beyond A-4: any future migration that moves a
+credential between two systems must verify against the *consumer's* copy,
+not the producer's, because only the consumer's copy is evidence that
+anything works.
