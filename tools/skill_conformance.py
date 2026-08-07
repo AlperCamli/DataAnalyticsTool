@@ -475,3 +475,125 @@ def check_batch_pr_body(
                 Finding("CP-E5", "returned items carry no statement of what evidence would unblock them")
             )
     return findings
+
+
+# --------------------------------------------------------------------------
+# AS-19 / S1c — the contamination-triage batch (D-119.2b)
+
+
+#: The three classes a triaged doc lands in. Exactly one per doc, stated
+#: in the PR body: a reviewer reading a repair needs to know which kind of
+#: repair they are reading before they read the diff.
+TRIAGE_CLASSES = ("confirms-prose", "needs-re-grounding", "depends-on-missing-object")
+
+_FRONT_MATTER_LINE = re.compile(r"^[+-](?![+-])")
+
+
+def check_triage_repair(
+    fm_before: Mapping[str, Any],
+    fm_after: Mapping[str, Any],
+    *,
+    body_before: str,
+    body_after: str,
+    triage_class: str,
+    current_schema_hash: str | None = None,
+) -> list[Finding]:
+    """One repaired doc against S1c's rules for its stated class.
+
+    The load-bearing one is the first: a `confirms-prose` repair is
+    **front-matter-only**. That class exists because most contaminated
+    docs turn out to have been right, and its whole value to a reviewer is
+    that thirty of them can be read as thirty stamps rather than thirty
+    rewrites — which is true only if none of them smuggled a rewrite in.
+    """
+    findings: list[Finding] = []
+    if triage_class not in TRIAGE_CLASSES:
+        return [Finding("AS-19", f"unknown triage class {triage_class!r} (one of {TRIAGE_CLASSES})")]
+
+    # CP-E3 / KB §5: re-grounding is not re-certification, in any class.
+    if str(fm_after.get("status", "")).strip() == "verified":
+        findings.append(Finding(
+            "CP-E3", "a triage repair set `status: verified` — `contaminated → verified` is the "
+                     "human's transition, performed on the branch under their own name"))
+    if fm_after.get("last_verified") not in (None, "", "null") and \
+            fm_after.get("last_verified") != fm_before.get("last_verified"):
+        findings.append(Finding(
+            "CP-E3", f"a triage repair wrote `last_verified: {fm_after.get('last_verified')!r}` — "
+                     "that signature is the certifying human's, never the skill's"))
+
+    if triage_class == "depends-on-missing-object":
+        # The doc is evidence of an open decision; repairing it hides one.
+        if str(fm_after.get("status", "")).strip() != "contaminated":
+            findings.append(Finding(
+                "AS-19", "a `depends-on-missing-object` doc was moved off `contaminated` — it needs a "
+                         "decision (drop the dependency, or restore the object), not a status change"))
+        dropped = [d for d in (fm_before.get("depends_on") or [])
+                   if d not in (fm_after.get("depends_on") or [])]
+        if dropped:
+            findings.append(Finding(
+                "AS-19", f"a triage repair dropped {dropped} from `depends_on` — removing the tripwire "
+                         "is not repairing the room"))
+        return findings
+
+    # The repair proper: the marker is cleared and the stamp refreshed.
+    if fm_after.get("contamination") not in (None, "null"):
+        findings.append(Finding(
+            "AS-19", "the repair left `contamination` set — a doc re-read and found sound clears its marker"))
+    if str(fm_after.get("status", "")).strip() != "draft":
+        findings.append(Finding(
+            "AS-19", f"a repaired doc landed `status: {fm_after.get('status')!r}`; it lands `draft` "
+                     "and the steward certifies"))
+    if current_schema_hash and fm_after.get("written_against_schema_hash") != current_schema_hash:
+        findings.append(Finding(
+            "AS-19", f"`written_against_schema_hash` is {fm_after.get('written_against_schema_hash')!r}, "
+                     f"not the current {current_schema_hash!r} — the doc claims to have been written "
+                     "against facts it was not re-read against"))
+
+    if triage_class == "confirms-prose":
+        if body_before.strip() != body_after.strip():
+            findings.append(Finding(
+                "AS-19", "a `confirms-prose` repair changed the body — either the doc needed "
+                         "re-grounding and was misclassified, or prose was edited under cover of a "
+                         "no-change repair; both are invisible in a batch of thirty stamps"))
+    elif triage_class == "needs-re-grounding":
+        if body_before.strip() == body_after.strip() and \
+                (fm_before.get("column_purposes") == fm_after.get("column_purposes")) and \
+                (fm_before.get("purpose") == fm_after.get("purpose")):
+            findings.append(Finding(
+                "AS-19", "a `needs-re-grounding` repair changed no claim — nothing was re-grounded, "
+                         "so either the class is wrong or the repair was not done"))
+    return findings
+
+
+def check_triage_pr_body(
+    body: str,
+    *,
+    docs: Mapping[str, str],
+) -> list[Finding]:
+    """S5's triage additions: every doc classified, certification handed back.
+
+    `docs` maps doc path → the class the batch assigned it. A body that
+    names a doc without saying which kind of repair it is asks the
+    reviewer to reverse-engineer the classification from the diff, which
+    is the work the classification exists to save.
+    """
+    findings: list[Finding] = []
+    lowered = body.lower()
+    for doc, klass in docs.items():
+        if doc.lower() not in lowered:
+            findings.append(Finding("AS-19", f"{doc} is in the batch but not named in the PR body"))
+            continue
+        if klass.lower() not in lowered:
+            findings.append(Finding(
+                "AS-19", f"{doc} is not classified in the PR body (expected {klass})"))
+    if not re.search(r"^\s*\|.*\|", body, re.MULTILINE):
+        findings.append(Finding("AS-19", "no per-doc table in the PR body"))
+
+    # The certification act is the steward's, and the body has to ask for
+    # it explicitly: a batch of repaired-but-draft docs merged in silence
+    # leaves every one of them uncertified and nobody told.
+    if not (re.search(r"last_verified", lowered) and re.search(r"status:\s*verified", lowered)):
+        findings.append(Finding(
+            "CP-E6", "the PR body does not state the certification act — the steward is left to "
+                     "guess that `status: verified` + `last_verified` are theirs to write"))
+    return findings

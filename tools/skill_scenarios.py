@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -798,6 +799,164 @@ def _stage_batch(ops_db_url: str) -> dict:
 
 
 # --------------------------------------------------------------------------
+# scenario: enrich in contamination-triage mode (AS-19 / S1c, D-119.2b)
+
+
+ENRICH_TRIAGE_PROMPT = """\
+The knowledge base at `kb/` in this directory has contaminated documents.
+Use the `enrich` skill in its **contamination-triage work-list mode
+(S1c)** to clear one batch.
+
+Follow S1c exactly:
+
+- Build the work list with the skill's own tool:
+  `python3 .claude/skills/enrich/worklist.py --kb kb`. It gives you each
+  doc's contamination marker and the contaminating object's facts as the
+  snapshot has them now, including its CHECK constraints.
+- Read each contaminated doc and classify it as exactly one of
+  `confirms-prose`, `needs-re-grounding`, or `depends-on-missing-object`,
+  on the evidence.
+- Repair the docs in place, in `kb/`, per the class you assigned. Take the
+  current `written_against_schema_hash` values from the snapshot at
+  `kb/.contextlayer/snapshots/triage.json`.
+- Write the pull-request body you would open to `out/PR-BODY.md`, with the
+  per-doc classification table and everything else S5 asks a triage batch
+  to carry.
+
+Do not open a pull request and do not commit anything — edit the files in
+`kb/`, write the PR body, and finish."""
+
+
+TRIAGE_EXPECTED = {
+    "systems/triage/shop/exports.md": "confirms-prose",
+    "systems/triage/shop/imports.md": "needs-re-grounding",
+    "systems/triage/shop/orders.md": "depends-on-missing-object",
+}
+
+
+def _declared_class(body: str, doc: str) -> str | None:
+    """The class the batch assigned this doc, read off the PR body."""
+    from tools.skill_conformance import TRIAGE_CLASSES
+
+    for line in body.splitlines():
+        if doc in line or doc.rsplit("/", 1)[-1] in line:
+            for klass in TRIAGE_CLASSES:
+                if klass in line.lower():
+                    return klass
+    return None
+
+
+def scenario_enrich_triage(conn: dict, model: str, workroot: Path, timeout_s: int) -> ScenarioResult:
+    """AS-19: a contaminated batch carrying all three classes.
+
+    Staged deliberately so each class is decidable from the evidence and
+    only from the evidence: `exports.md`\'s enum decoding already matches
+    the new CHECK exactly; `imports.md`\'s is missing two values the CHECK
+    admits; `orders.md` declares a dependency on an object the snapshot
+    does not have. What is measured is entirely what the agent did to the
+    files — an agent that skimmed and stamped all three fails here, which
+    is the point (D-78).
+
+    This scenario asserts on files rather than on the audit stream: S1c
+    reads the working copy, which is the estate\'s own state, and adds no
+    MCP call to read it. The MCP config is still handed over so the
+    session can reach `get_table`/`flag_gap` if it chooses to.
+    """
+    from tools.skill_conformance import check_triage_pr_body, check_triage_repair
+
+    res = ScenarioResult("AS-19 enrich contamination triage (S1c)", "enrich", "steward")
+    workdir = workroot / "enrich-triage"
+    workdir.mkdir(parents=True, exist_ok=True)
+    (workdir / "out").mkdir(exist_ok=True)
+    staged = REPO / "tools" / "scenarios" / "triage-kb"
+    kb = workdir / "kb"
+    if kb.exists():
+        shutil.rmtree(kb)
+    shutil.copytree(staged, kb)
+
+    before = {rel: _parse_frontmatter((staged / rel).read_text()) for rel in TRIAGE_EXPECTED}
+    hashes = {
+        f"triage.shop.{obj['name']}": obj["schema_hash"]
+        for obj in json.loads((staged / ".contextlayer" / "snapshots" / "triage.json").read_text())["objects"]
+    }
+
+    _prepare_workdir(workdir, "enrich", _mcp_config(conn["mcp_url"], "steward", conn["tokens"]["steward"]))
+    since = datetime.now(timezone.utc)
+    agent = _run_agent(
+        workdir, ENRICH_TRIAGE_PROMPT, model,
+        ["mcp__contextlayer__get_table", "mcp__contextlayer__search_context",
+         "mcp__contextlayer__flag_gap", "Read", "Write", "Edit", "Bash"],
+        timeout_s,
+    )
+    res.agent_result = agent.get("result", "")[:2000]
+    res.session_id = agent.get("session_id", "")
+    res.cost_usd = agent.get("total_cost_usd")
+    res.audit_tools = [r["tool"] for r in _audit_tools(conn["ops_db_url"], "steward", since)]
+
+    body_path = workdir / "out" / "PR-BODY.md"
+    if not body_path.exists():
+        res.assertions.append(Assertion("AS-19: the batch produced a PR body", False, "out/PR-BODY.md absent"))
+        return res
+    body = body_path.read_text()
+
+    # 1. The classification itself — the judgment the tool refuses to make.
+    declared = {rel: _declared_class(body, rel) for rel in TRIAGE_EXPECTED}
+    res.assertions.append(Assertion(
+        "AS-19: each doc is classified, and classified correctly on the evidence",
+        declared == TRIAGE_EXPECTED,
+        f"declared={declared}; expected={TRIAGE_EXPECTED}",
+    ))
+
+    # 2. Each repair against the rules of the class it was given.
+    after_texts = {rel: (kb / rel).read_text() for rel in TRIAGE_EXPECTED}
+    findings: list = []
+    for rel, expected_class in TRIAGE_EXPECTED.items():
+        fm_after, body_after = _parse_frontmatter(after_texts[rel])
+        fm_before, body_before = before[rel]
+        own = fm_before.get("object")
+        findings += [(rel, f) for f in check_triage_repair(
+            fm_before, fm_after,
+            body_before=body_before, body_after=body_after,
+            triage_class=declared.get(rel) or expected_class,
+            current_schema_hash=hashes.get(own),
+        )]
+    res.assertions.append(Assertion(
+        "AS-19/CP-E6: every repair obeys its class — front-matter-only where it confirms, "
+        "re-grounded where it contradicts, untouched where the object is gone",
+        not findings,
+        "; ".join(f"{rel}: {f.detail}" for rel, f in findings) or
+        "marker cleared, hash refreshed, prose moved only where the facts moved",
+    ))
+
+    # 3. CP-E3, over the whole diff: the skill re-grounds, the steward certifies.
+    all_text = "\n".join(after_texts.values())
+    res.assertions.append(Assertion(
+        "CP-E3: no `status: verified` and no `last_verified` signature written by the skill",
+        "status: verified" not in all_text and "last_verified: null" in all_text
+        and not re.search(r"last_verified:\s*[\"\d]", all_text),
+        "repairs land as draft; certification is the steward\'s act on the branch",
+    ))
+
+    # 4. The body: classification table + the certification ask.
+    body_findings = check_triage_pr_body(body, docs=TRIAGE_EXPECTED)
+    res.assertions.append(Assertion(
+        "AS-19: the PR body classifies every doc and hands certification back to the steward",
+        not body_findings,
+        "; ".join(f.detail for f in body_findings) or "per-doc table present; certification stated",
+    ))
+
+    # 5. The missing-object doc keeps its evidence: still contaminated, dependency intact.
+    fm_orders, _ = _parse_frontmatter(after_texts["systems/triage/shop/orders.md"])
+    res.assertions.append(Assertion(
+        "AS-19: the doc whose dependency vanished is left contaminated, with the dependency intact",
+        fm_orders.get("status") == "contaminated"
+        and "triage.shop.legacy_carts" in (fm_orders.get("depends_on") or []),
+        f"status={fm_orders.get('status')!r}, depends_on={fm_orders.get('depends_on')}",
+    ))
+    return res
+
+
+# --------------------------------------------------------------------------
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -806,7 +965,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--model", required=True)
     ap.add_argument("--out", type=Path, required=True, help="evidence output dir")
     ap.add_argument("--timeout-s", type=int, default=900)
-    ap.add_argument("--only", choices=["enrich", "report", "review-sync", "enrich-batch"], help="run one scenario")
+    ap.add_argument("--only", choices=["enrich", "report", "review-sync", "enrich-batch", "enrich-triage"],
+                    help="run one scenario")
     ap.add_argument("--workroot", type=Path, help="agent working dirs (default: a temp under --out)")
     args = ap.parse_args(argv)
 
@@ -830,6 +990,8 @@ def main(argv: list[str] | None = None) -> int:
         scenarios.append(scenario_review_sync)
     if args.only in (None, "enrich-batch"):
         scenarios.append(scenario_enrich_batch)
+    if args.only in (None, "enrich-triage"):
+        scenarios.append(scenario_enrich_triage)
 
     results: list[ScenarioResult] = []
     for fn in scenarios:

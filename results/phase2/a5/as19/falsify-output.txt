@@ -1,0 +1,20 @@
+as-run: clean — every repair obeys its class
+
+[a `confirms-prose` repair that also polished the prose]
+    systems/triage/shop/exports.md: a `confirms-prose` repair changed the body — either the doc needed re-grounding and was misclassified, or prose was edited under cover of a no-change repair; both are invisible in a batch of thirty stamps
+
+[the skill certifying its own repair]
+    systems/triage/shop/exports.md: a triage repair set `status: verified` — `contaminated → verified` is the human's transition, performed on the branch under their own name
+    systems/triage/shop/exports.md: a triage repair wrote `last_verified: '2026-08-07 (enrich)'` — that signature is the certifying human's, never the skill's
+    systems/triage/shop/exports.md: a repaired doc landed `status: 'verified'`; it lands `draft` and the steward certifies
+    systems/triage/shop/imports.md: a triage repair set `status: verified` — `contaminated → verified` is the human's transition, performed on the branch under their own name
+    systems/triage/shop/imports.md: a triage repair wrote `last_verified: '2026-08-07 (enrich)'` — that signature is the certifying human's, never the skill's
+    systems/triage/shop/imports.md: a repaired doc landed `status: 'verified'`; it lands `draft` and the steward certifies
+    systems/triage/shop/orders.md: a triage repair wrote `last_verified: '2026-08-07 (enrich)'` — that signature is the certifying human's, never the skill's
+
+[the missing-object doc turned green by deleting the dependency]
+    systems/triage/shop/orders.md: a `depends-on-missing-object` doc was moved off `contaminated` — it needs a decision (drop the dependency, or restore the object), not a status change
+    systems/triage/shop/orders.md: a triage repair dropped ['triage.shop.legacy_carts'] from `depends_on` — removing the tripwire is not repairing the room
+
+[a PR body with the certification section removed]
+    CP-E6: the PR body does not state the certification act — the steward is left to guess that `status: verified` + `last_verified` are theirs to write

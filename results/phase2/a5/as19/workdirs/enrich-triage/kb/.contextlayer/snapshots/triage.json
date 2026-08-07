@@ -1,0 +1,58 @@
+{
+  "snapshot_version": "1",
+  "system": "triage",
+  "captured_at": "2026-08-06T09:15:00Z",
+  "connector": {"name": "postgres", "version": "0.1.0"},
+  "source_mode": "live",
+  "objects": [
+    {
+      "name": "exports",
+      "schema": "shop",
+      "kind": "table",
+      "schema_hash": "sha256:11f0e6ca9b4d4e7d9a2c8b5f3e7a1d0c6b4a8e2f0d9c7b5a3e1f0d9c8b7a6e5f",
+      "columns": [
+        {"name": "id", "type": "uuid", "nullable": false},
+        {"name": "order_id", "type": "uuid", "nullable": false},
+        {"name": "format", "type": "text", "nullable": false},
+        {"name": "status", "type": "text", "nullable": false},
+        {"name": "created_at", "type": "timestamptz", "nullable": false}
+      ],
+      "stats": {
+        "checks": [
+          "CHECK (format = ANY (ARRAY['pdf'::text, 'csv'::text]))",
+          "CHECK (status = ANY (ARRAY['processing'::text, 'completed'::text, 'failed'::text]))"
+        ]
+      }
+    },
+    {
+      "name": "imports",
+      "schema": "shop",
+      "kind": "table",
+      "schema_hash": "sha256:22a1b7db0c5e5f8eab3d9c6a4f8b2e1d7c5b9f3a1e0d8c6b4a2f1e0d9c8b7a6e",
+      "columns": [
+        {"name": "id", "type": "uuid", "nullable": false},
+        {"name": "status", "type": "text", "nullable": false},
+        {"name": "parser_name", "type": "text", "nullable": true},
+        {"name": "created_at", "type": "timestamptz", "nullable": false}
+      ],
+      "stats": {
+        "checks": [
+          "CHECK (status = ANY (ARRAY['uploaded'::text, 'parsing'::text, 'parsed'::text, 'reviewed'::text, 'converted'::text, 'failed'::text]))"
+        ]
+      }
+    },
+    {
+      "name": "orders",
+      "schema": "shop",
+      "kind": "table",
+      "schema_hash": "sha256:33b2c8ec1d6f6a9fbc4e0d7b5a9c3f2e8d6c0a4b2f1e9d7c5b3a2f1e0d9c8b7a",
+      "columns": [
+        {"name": "id", "type": "uuid", "nullable": false},
+        {"name": "customer_id", "type": "uuid", "nullable": false},
+        {"name": "total_cents", "type": "integer", "nullable": false},
+        {"name": "placed_at", "type": "timestamptz", "nullable": false}
+      ],
+      "stats": {"checks": ["CHECK (total_cents >= 0)"]}
+    }
+  ]
+}

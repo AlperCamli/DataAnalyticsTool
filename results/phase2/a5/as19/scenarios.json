@@ -1,0 +1,48 @@
+{
+  "generated_at": "2026-08-07T20:21:32.932448Z",
+  "model_id": "claude-opus-5",
+  "fixture": {
+    "base": "http://127.0.0.1:53902",
+    "execution": false
+  },
+  "verdict": "PASS",
+  "scenarios": [
+    {
+      "scenario": "AS-19 enrich contamination triage (S1c)",
+      "skill": "enrich",
+      "profile": "steward",
+      "passed": true,
+      "session_id": "da229bd8-98e3-4744-bed0-d3e81b1a6615",
+      "cost_usd": 1.3836445,
+      "audit_tools": [],
+      "assertions": [
+        {
+          "name": "AS-19: each doc is classified, and classified correctly on the evidence",
+          "ok": true,
+          "detail": "declared={'systems/triage/shop/exports.md': 'confirms-prose', 'systems/triage/shop/imports.md': 'needs-re-grounding', 'systems/triage/shop/orders.md': 'depends-on-missing-object'}; expected={'systems/triage/shop/exports.md': 'confirms-prose', 'systems/triage/shop/imports.md': 'needs-re-grounding', 'systems/triage/shop/orders.md': 'depends-on-missing-object'}"
+        },
+        {
+          "name": "AS-19/CP-E6: every repair obeys its class \u2014 front-matter-only where it confirms, re-grounded where it contradicts, untouched where the object is gone",
+          "ok": true,
+          "detail": "marker cleared, hash refreshed, prose moved only where the facts moved"
+        },
+        {
+          "name": "CP-E3: no `status: verified` and no `last_verified` signature written by the skill",
+          "ok": true,
+          "detail": "repairs land as draft; certification is the steward's act on the branch"
+        },
+        {
+          "name": "AS-19: the PR body classifies every doc and hands certification back to the steward",
+          "ok": true,
+          "detail": "per-doc table present; certification stated"
+        },
+        {
+          "name": "AS-19: the doc whose dependency vanished is left contaminated, with the dependency intact",
+          "ok": true,
+          "detail": "status='contaminated', depends_on=['triage.shop.orders', 'triage.shop.legacy_carts']"
+        }
+      ],
+      "agent_result": "Batch cleared. Three docs, one cause group, three different answers.\n\n| Doc | Class | Verdict |\n|---|---|---|\n| `exports.md` | **confirms-prose** | The `CHECK` says `('processing','completed','failed')` and `('pdf','csv')` \u2014 exactly what the doc already said, both columns. Front-matter only: marker cleared, hash \u2192 `sha256:11f0e6ca\u2026`. Body byte-identical. |\n| `imports.md` | **needs-re-grounding** | The doc claimed four values were \"the whole vocabulary\" and that nothing sits between `parsed` and the data going live. The `CHECK` admits six \u2014 and `reviewed`/`converted` sit exactly in the range the doc ruled out. Rewritten from the constraint, contradiction recorded in Warnings, DDL cited, hash \u2192 `sha256:22a1b7db\u2026`. |\n| `orders.md` | **depends-on-missing-object** | `triage.shop.legacy_carts` is gone from the snapshot. **Left contaminated, untouched.** |\n\nThree judgment calls worth your attention:\n\n**I did not decode `reviewed` and `converted`.** The constraint proves they're legal values; nothing I read says what they mean. Writing \"`reviewed` = a person checked the parse\" would have been fluent and unsourced, so they're named as an open gap in the doc itself and in the PR body. That's the one thing in this batch a person who knows the import pipeline should look at.\n\n**I did not improve `exports.md`'s sources.** Its enum is cited as \"inferred from column names\" when a `CHECK` constraint now corroborates it \u2014 a genuine improvement I deliberately left alone, because a front-matter-only diff is what makes a confirms-prose repair reviewable. Flagged in the PR body instead.\n\n**The batch is not CI-validated, and the PR body says so plainly.** This KB has no `.github/vendor/` wheel and no machine layer at all, so S4's render+validate can't run. The platform repo's validator stops at the snapshot \u2014 `'system_class' is a required property` \u2014 pre-existing, about the snapshot, never reaching the docs. I hand-checked what it would have covered: both hashes match their object's `sch"
+    }
+  ]
+}

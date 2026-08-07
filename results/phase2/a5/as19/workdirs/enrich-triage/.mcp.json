@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "contextlayer": {
+      "type": "http",
+      "url": "http://127.0.0.1:53902/mcp?profile=steward",
+      "headers": {
+        "Authorization": "Bearer TEST_TOKEN"
+      }
+    }
+  }
+}

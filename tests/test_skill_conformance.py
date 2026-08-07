@@ -19,6 +19,8 @@ from tools.skill_conformance import (
     check_gap_not_guessed,
     check_no_verbatim_submission,
     check_purpose_frontmatter,
+    check_triage_pr_body,
+    check_triage_repair,
 )
 
 
@@ -505,3 +507,139 @@ CL-Resolves: {self.ISSUE_A}
         body = self.GOOD_BODY + "CL-Resolves: 33333333-3333-4333-8333-333333333333\n"
         findings = check_batch_pr_body(body, satisfied=[self.ISSUE_A], returned=[self.ISSUE_B])
         assert any("not in this batch" in f.detail for f in findings)
+
+
+class TestTriageRepair:
+    """AS-19 / S1c — the contamination-triage repair rules (D-119.2b)."""
+
+    BEFORE = {
+        "status": "contaminated",
+        "contamination": {"object": "supabase.public.exports", "change": "stat_changed",
+                          "detail": "stat_changed: checks"},
+        "written_against_schema_hash": "sha256:old",
+        "last_verified": None,
+        "depends_on": ["supabase.public.exports", "supabase.public.users"],
+        "purpose": "Export jobs.",
+        "column_purposes": {"status": "Job state; see body for the enum."},
+    }
+    BODY = "## Grain\n\nOne row per export job.\n\n## Warnings\n\n- `status` is app-level.\n"
+
+    def _after(self, **over):
+        after = dict(self.BEFORE)
+        after.update({"status": "draft", "contamination": None,
+                      "written_against_schema_hash": "sha256:new"})
+        after.update(over)
+        return after
+
+    def test_a_front_matter_only_confirms_repair_passes(self):
+        assert check_triage_repair(
+            self.BEFORE, self._after(), body_before=self.BODY, body_after=self.BODY,
+            triage_class="confirms-prose", current_schema_hash="sha256:new") == []
+
+    def test_a_confirms_repair_that_edits_prose_is_flagged(self):
+        findings = check_triage_repair(
+            self.BEFORE, self._after(), body_before=self.BODY,
+            body_after=self.BODY + "\n- and another thought\n",
+            triage_class="confirms-prose", current_schema_hash="sha256:new")
+        assert _codes(findings) == ["AS-19"]
+        assert "under cover of a no-change repair" in findings[0].detail
+
+    def test_an_uncleared_marker_is_flagged(self):
+        findings = check_triage_repair(
+            self.BEFORE, self._after(contamination=self.BEFORE["contamination"]),
+            body_before=self.BODY, body_after=self.BODY,
+            triage_class="confirms-prose", current_schema_hash="sha256:new")
+        assert any("left `contamination` set" in f.detail for f in findings)
+
+    def test_a_stale_hash_is_flagged(self):
+        findings = check_triage_repair(
+            self.BEFORE, self._after(written_against_schema_hash="sha256:old"),
+            body_before=self.BODY, body_after=self.BODY,
+            triage_class="confirms-prose", current_schema_hash="sha256:new")
+        assert any("written against facts it was not re-read against" in f.detail for f in findings)
+
+    def test_the_skill_certifying_itself_is_flagged(self):
+        findings = check_triage_repair(
+            self.BEFORE, self._after(status="verified", last_verified="2026-08-07 (enrich)"),
+            body_before=self.BODY, body_after=self.BODY,
+            triage_class="confirms-prose", current_schema_hash="sha256:new")
+        assert _codes(findings).count("CP-E3") == 2
+
+    def test_a_re_grounding_repair_that_changed_nothing_is_flagged(self):
+        findings = check_triage_repair(
+            self.BEFORE, self._after(), body_before=self.BODY, body_after=self.BODY,
+            triage_class="needs-re-grounding", current_schema_hash="sha256:new")
+        assert any("nothing was re-grounded" in f.detail for f in findings)
+
+    def test_a_re_grounding_repair_that_rewrote_a_claim_passes(self):
+        assert check_triage_repair(
+            self.BEFORE,
+            self._after(column_purposes={"status": "Job state; CHECK admits processing/completed/failed."}),
+            body_before=self.BODY,
+            body_after=self.BODY + "\n- the constraint added 2026-08-04 admits only three values\n",
+            triage_class="needs-re-grounding", current_schema_hash="sha256:new") == []
+
+    def test_a_missing_object_doc_must_stay_contaminated(self):
+        findings = check_triage_repair(
+            self.BEFORE, self._after(), body_before=self.BODY, body_after=self.BODY,
+            triage_class="depends-on-missing-object")
+        assert any("needs a decision" in f.detail for f in findings)
+
+    def test_dropping_the_unresolved_dependency_is_flagged(self):
+        after = dict(self.BEFORE)
+        after["depends_on"] = ["supabase.public.exports"]
+        findings = check_triage_repair(
+            self.BEFORE, after, body_before=self.BODY, body_after=self.BODY,
+            triage_class="depends-on-missing-object")
+        assert any("removing the tripwire" in f.detail for f in findings)
+
+    def test_an_untouched_missing_object_doc_passes(self):
+        assert check_triage_repair(
+            self.BEFORE, dict(self.BEFORE), body_before=self.BODY, body_after=self.BODY,
+            triage_class="depends-on-missing-object") == []
+
+    def test_an_unknown_class_is_refused(self):
+        findings = check_triage_repair(
+            self.BEFORE, self._after(), body_before=self.BODY, body_after=self.BODY,
+            triage_class="looks-fine")
+        assert len(findings) == 1 and "unknown triage class" in findings[0].detail
+
+
+class TestTriagePrBody:
+    """AS-19 / S1c — the batch body carries the classification and the ask."""
+
+    DOCS = {
+        "systems/supabase/public/exports.md": "confirms-prose",
+        "entities/user.md": "depends-on-missing-object",
+    }
+    GOOD_BODY = """## Docs in this batch
+
+| Doc | Class | What moved | What this PR changes |
+|---|---|---|---|
+| `systems/supabase/public/exports.md` | confirms-prose | CHECK on status | front-matter only |
+| `entities/user.md` | depends-on-missing-object | legacy_users is gone | nothing — left contaminated |
+
+### Certification — yours, on this branch, before merge
+
+For each doc you accept, set `status: verified` and
+`last_verified: "2026-08-07 (your-name)"`, and commit it under your own identity.
+"""
+
+    def test_a_well_formed_triage_body_passes(self):
+        assert check_triage_pr_body(self.GOOD_BODY, docs=self.DOCS) == []
+
+    def test_an_unclassified_doc_is_flagged(self):
+        body = self.GOOD_BODY.replace("| `entities/user.md` | depends-on-missing-object |",
+                                      "| `entities/user.md` | |")
+        findings = check_triage_pr_body(body, docs=self.DOCS)
+        assert any("not classified" in f.detail for f in findings)
+
+    def test_a_doc_missing_from_the_body_is_flagged(self):
+        findings = check_triage_pr_body(self.GOOD_BODY,
+                                        docs={**self.DOCS, "systems/x/y.md": "confirms-prose"})
+        assert any("not named in the PR body" in f.detail for f in findings)
+
+    def test_a_body_that_does_not_hand_back_certification_is_flagged(self):
+        body = self.GOOD_BODY.split("### Certification")[0]
+        findings = check_triage_pr_body(body, docs=self.DOCS)
+        assert _codes(findings) == ["CP-E6"]
