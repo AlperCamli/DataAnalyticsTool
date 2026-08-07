@@ -216,7 +216,7 @@ def _main(argv: Sequence[str] | None = None) -> int:
     golden_cache = GoldenCache(golden_exec)
 
     import os
-    mkb = build_machine_kb(args.workdir / "machine-kb")
+    mkb = build_machine_kb(args.workdir / "machine-kb", DEFAULT_SNAPSHOTS)
     conditions = [no_kb_condition(), mkb.condition(), enriched_kb_condition(args.enriched_kb)]
     backend = ClaudeCodeBackend(claude_path=os.environ["CLAUDE_CODE_EXECPATH"],
                                 secrets=secrets, workdir_root=args.workdir / "journeys",

@@ -109,7 +109,7 @@ def test_tool_surface_matches_case_systems(suite):
 
 def test_kb_journey_reads_context_runs_sql_finishes(tmp_path, snapshots, inventory, suite):
     case = suite.case("RB-01")
-    build = build_machine_kb(tmp_path / "mkb")
+    build = build_machine_kb(tmp_path / "mkb", BENCH_SNAPSHOTS)
     cond = SimpleNamespace(name="machine-kb", context_root=build.out_dir, ref=build.ref)
     sql = "SELECT date_trunc('day', created_at)::date d, count(*) n FROM public.users GROUP BY 1"
     client = FakeClient([

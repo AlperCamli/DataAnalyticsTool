@@ -111,6 +111,16 @@ def build_machine_kb(
     manifest whose hash is the machine-kb ref.
     """
     out_dir = Path(out_dir)
+    # No snapshots renders an empty tree, and an empty tree is not a
+    # condition — it is a machine without the customer's KB on it, which is
+    # every machine but a pilot's. Say that here rather than let the caller
+    # discover it as a missing file three assertions later.
+    if not list(snapshot_paths):
+        raise ValueError(
+            "no snapshots to render the machine-kb condition from "
+            f"(default resolves to {validate.DEFAULT_KB}/.contextlayer/snapshots/*.json, "
+            "which is empty or absent) — pass snapshot_paths explicitly"
+        )
     if clean and out_dir.exists():
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

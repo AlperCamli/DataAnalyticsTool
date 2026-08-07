@@ -239,8 +239,12 @@ def cmd_conditions(args: argparse.Namespace) -> int:
     root.mkdir(parents=True, exist_ok=True)
     mcp_text = _mcp_config_text()
 
-    # machine-kb: deterministic render from the pinned suite snapshots (R1).
-    mkb = build_machine_kb(root / MACHINE_KB / "kb")
+    # machine-kb: deterministic render from the SAME snapshots the manifest
+    # records below (R1). Reading the module default here instead would let
+    # the rendered condition and its recorded provenance come from two
+    # different places — the fan-out rule, in one function.
+    snapshot_paths = args.snapshots or list(DEFAULT_SNAPSHOTS)
+    mkb = build_machine_kb(root / MACHINE_KB / "kb", snapshot_paths)
 
     # enriched-kb: the customer KB exported at a pinned kb_ref.
     kb_sha = _export_enriched_kb(args.kb, args.kb_ref, root / ENRICHED_KB / "kb")
@@ -260,7 +264,6 @@ def cmd_conditions(args: argparse.Namespace) -> int:
             print(f"[INVARIANT] {p}")
         return 2
 
-    snapshot_paths = args.snapshots or list(DEFAULT_SNAPSHOTS)
     snaps = load_snapshots(snapshot_paths)
     snap_dir = Path(snapshot_paths[0]).parent
     manifest = {
