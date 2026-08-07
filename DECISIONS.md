@@ -7056,3 +7056,81 @@ against the snapshot first, and if the constraint does not say what I say
 it says, stop and tell me rather than writing either version.* An
 instruction to fix that cannot be refused on evidence is a dictation, and
 S1c's whole claim is that the reading is the work.
+
+### A5-F2 — the repin command in `FLOOR-CHECK.md` was incomplete, and fails silently
+
+Found by running it, at the operator's request, on 2026-08-08.
+
+`FLOOR-CHECK.md`'s one-command fix — and step 1a of `OPERATOR-STEPS.md` as
+first written, which carried it forward unchecked — was:
+
+```bash
+CL_HOST_ADDR=$(ipconfig getifaddr en0) make stack-pilot
+```
+
+It sets the address the server **advertises** and not the interface it
+**binds**. `docker-compose.yml` publishes core and devidp at
+`${CL_BIND:-127.0.0.1}`, so the stack came up announcing
+`http://192.168.1.102:8100` while listening only on loopback. `/healthz` on
+`127.0.0.1` answered `"public_url": "http://192.168.1.102:8100"` and looked
+like a clean repair; nothing was reachable at that address, from the
+browser or from the core container. **The failure is the same one A5-F1
+describes, with a different number in the error** — which is what makes it
+worth recording: a verification that reads `public_url` alone cannot tell
+the two apart. The working command is
+
+```bash
+CL_BIND=0.0.0.0 CL_HOST_ADDR=$(ipconfig getifaddr en0) make stack-pilot
+```
+
+and the check has to be a request *to the advertised address* — the login
+302, the MCP `www-authenticate`, and the IdP's discovery document — not a
+field read back over loopback. `OPERATOR-STEPS.md` now checks all four.
+
+### A5-F3 — one OIDC issuer, two network views: the defect under A5-F1
+
+The operator's complaint ("I am sick of configuring everything every time
+my IP has changed") is a correct reading of a real defect, and A5-F1 is its
+symptom rather than its cause.
+
+`CORE_OIDC_ISSUER` is consumed by two parties with different views of the
+network: the **browser**, which needs a host-reachable address for the
+`/authorize` redirect, and the **core container**, which fetches the
+discovery document and calls `introspection_endpoint` server-side
+(`core/src/oidc.ts`) and therefore needs a container-reachable one. Today
+one value serves both, and the only value that can is the host's LAN
+address — so the deployment is pinned to a DHCP lease, and every renewal
+breaks sign-in everywhere at once.
+
+The baseline overlay already solves its half by setting
+`CORE_OIDC_ISSUER: http://devidp:8180` (`deploy/compose.baseline.yml`) —
+which works precisely because a headless benchmark has no browser leg. That
+asymmetry is the shape of the fix: an internal issuer for the server's own
+calls, a public one for redirects.
+
+**Not made this session, deliberately.** It changes token validation — the
+`iss` claim the introspection path checks — which is where a subtle error
+is least visible and most expensive, and it is a platform change that
+belongs to a ruling rather than to a support turn during the operator's
+run. Recommended as its own item, with the `make repin` convenience target
+(one command, currently two environment variables to remember) as a much
+smaller second one. Meanwhile the operator has a five-minute workaround
+that is genuinely durable on this network: a DHCP reservation for this Mac
+on the router, recorded at the end of `OPERATOR-STEPS.md`.
+
+### Step 1 executed for the operator, 2026-08-08
+
+At their explicit request, and within D-120.4's authorization. Repin,
+`/healthz`, the full sign-in chain probed at the advertised address, and
+both bundles recompiled against it (`~/cl-steward`, `~/cl-reporter`);
+`~/cl-steward/kb` fast-forwarded to `22263e3`. Vault was not recreated by
+the restart and never re-sealed, so no unseal key was handled. The bundles'
+setup stamps will match what the server computes: the image's
+`/app/skills` and the repo's `core/skills` differ only by `__pycache__`,
+which `readSkill` excludes by construction — checked rather than assumed,
+because a stamp mismatch would have every session opening with a
+`SETUP OUT OF DATE` notice.
+
+**What remains the operator's, unchanged:** the browser sign-in (PA-1 —
+a bundle carries no credential), every merge, every certification, and the
+floor-check journey under the reporter's own identity.

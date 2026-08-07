@@ -1,20 +1,20 @@
 # A-5 closure — your steps
 
-**Time: about 5 hours of attention**, and it is meant to be split. Most of
-it is reading: ten metric definitions and thirty-three documents, each of
-which somebody has to decide about. The machine parts are short.
+**Time: about 4 hours of attention**, and it is meant to be split. Almost
+all of it is reading: ten metric definitions and thirty-three documents,
+each of which somebody has to decide about.
 
-This run is different from the last one. The B-1 demo was browser clicks
-and one terminal command; this one has **real terminal work at the start**,
-because the deployment's address moved and nothing on it can be signed into
-until that is corrected. After step 1 it settles back into the familiar
-shape: read a pull request, decide, merge.
+**The setup is done.** On 2026-08-08 the deployment was repinned to this
+machine's current address, both session folders were rebuilt against it,
+and your knowledge base copy was brought up to date. **Step 1 is a record,
+not a task** — you start at 1b by signing in, and after that this run is
+the familiar shape: read a pull request, decide, merge.
 
-**You will use three things:**
+**You will use two things:**
 
 1. **A browser** — GitHub, and the dashboard.
-2. **One terminal in the platform folder** — step 1 only, and never again.
-3. **One terminal in `~/cl-steward`** — steps 3, 4, and the certifying.
+2. **One terminal in `~/cl-steward`** — steps 3, 4, and the certifying.
+   (Step 5 uses `~/cl-reporter`, one command.)
 
 **What the whole run is for.** The knowledge base currently holds 33
 documents nobody has re-read since the facts underneath them got sharper,
@@ -25,7 +25,7 @@ that runs on every future change. Then one reporter journey to see whether
 the floor holds when somebody actually stands on it.
 
 **Three of the thirty-three documents are wrong** — not stale, wrong. They
-are called out where they come up. They are the reason this is worth five
+are called out where they come up. They are the reason this is worth four
 hours rather than a status flip.
 
 ---
@@ -34,15 +34,16 @@ hours rather than a status flip.
 
 | What | Where |
 |---|---|
-| The dashboard | **`http://<ADDRESS>:8100/app/`** — step 1 tells you `<ADDRESS>` |
-| Your setup download | **`http://<ADDRESS>:8100/v1/setup/bundle`** |
+| The dashboard | **http://192.168.1.102:8100/app/** |
 | The knowledge base on GitHub | **https://github.com/AlperCamli/Sample-Knowladge-Base** |
-| The platform folder (step 1 only) | **`~/Desktop/DataProject`** |
-| The steward folder (everything else) | **`~/cl-steward`** |
+| The steward folder | **`~/cl-steward`** |
+| The reporter folder (step 5) | **`~/cl-reporter`** |
 
-**Do not write the address down from this page.** This machine gets its
-address from the network and it moved once already — that is what step 1
-is fixing. Step 1 prints the current one; use what it prints.
+**If the dashboard address stops working**, this machine's network address
+has moved again. Check with `ipconfig getifaddr en0`; if it is no longer
+`192.168.1.102`, that is the fault returning and it needs the one command
+in step 1, not a workaround. **Say so rather than fighting it** — there is
+a permanent fix and it is described at the end of this page.
 
 ## Sign-ins you will need
 
@@ -69,10 +70,43 @@ Where a step should not be left half-done, it says so at the top.
 
 ---
 
-# Step 1 — Correct the deployment's address, and pick up the new skill
+# Step 1 — ✅ DONE FOR YOU, 2026-08-08
 
-**Time: about 20 minutes**, most of it a rebuild you watch.
-**Do not split this step.** Finish it in one sitting.
+**You do not need to run this step.** It was done at your request on
+2026-08-08. What follows is a record of what was done and how to check it,
+plus the one part that is still yours (1b — signing in).
+
+**Verified after the restart:**
+
+```
+public_url:  http://192.168.1.102:8100      ← matches the machine
+vault:       sealed: false                   ← never re-locked; no unseal needed
+login 302 →  http://192.168.1.102:8180/authorize…   ← and that host answers
+MCP says  →  resource_metadata at 192.168.1.102:8100 → authorization server 192.168.1.102:8180
+skill:       worklist.py present in the server image AND in ~/cl-steward
+```
+
+Both session folders were rebuilt against the live address:
+`~/cl-steward` (steward) and `~/cl-reporter` (reporter), so step 5a is done
+too. `~/cl-steward/kb` was fast-forwarded to `main` (`22263e3`). Nothing was
+deleted; your drafts and KB clone are untouched.
+
+**One correction worth knowing about — the command below was wrong when
+first written.** It was carried over from `FLOOR-CHECK.md`, and it is
+missing `CL_BIND`. Without that, the ports bind to `127.0.0.1` only while
+the server advertises the LAN address — so it comes up *looking* fixed and
+is still unreachable, failing exactly the way it failed before, with a
+different number in the error. If you ever need to run this again, the
+whole command is:
+
+```
+CL_BIND=0.0.0.0 CL_HOST_ADDR=$(ipconfig getifaddr en0) make stack-pilot
+```
+
+**Skip to 1b.** The rest of this step is kept as a record.
+
+<details>
+<summary>What was run (record)</summary>
 
 **Where:** a terminal, in `~/Desktop/DataProject`.
 
@@ -142,9 +176,11 @@ of this page.
 - **It refuses to start naming settings in the shell.** Close that terminal,
   open a new one, start again.
 
-### 1b — Check you can actually sign in
+</details>
 
-**Where:** browser, at `http://<ADDRESS>:8100/app/`
+### 1b — Check you can actually sign in — **this part is still yours**
+
+**Where:** browser, at http://192.168.1.102:8100/app/
 
 Sign in as **`alper`**.
 
@@ -156,7 +192,23 @@ is worth confirming before you build anything on top of it.
 never appeared, bounced somewhere unreachable, or errored. Do not work
 around it.
 
-### 1c — Take the new setup down to your steward folder
+### 1c — ✅ Already done — the steward folder has the new skill
+
+`~/cl-steward` was rebuilt against the live address, and
+`ls ~/cl-steward/.claude/skills/enrich/` shows `SKILL.md`, `ci_gate.py`
+and **`worklist.py`** — the triage tool the four batches need. Its
+`.mcp.json` points at `192.168.1.102:8100`.
+
+The setup fingerprint was checked against the one the server computes: the
+server's skill files and the ones compiled into your folder are identical
+(only Python cache folders differ, and those are excluded by design). So
+sessions will start clean rather than warning you the setup is out of date.
+
+**If you ever need to do this by hand**, the browser route below is the
+customer-shaped one and always works.
+
+<details>
+<summary>The by-hand route (record)</summary>
 
 **Where:** browser, then the terminal.
 
@@ -187,6 +239,8 @@ download only replaces the setup files, and it contains no folder called
 - **`worklist.py` is missing after unpacking.** Stop and report it. The
   rebuild in 1a did not pick up current source, and step 4 would fail in a
   confusing way instead of an obvious one.
+
+</details>
 
 ---
 
@@ -719,20 +773,18 @@ result rather than a failure.
 The question is your own benchmark case RB-01: *how many new users are
 signing up?*
 
-### 5a — Get the reporter's setup
+### 5a — ✅ Already done — the reporter's setup is ready
 
-1. In the browser, **sign out**, then sign in as **`eda`**.
-2. Go to **`http://<ADDRESS>:8100/v1/setup/bundle`**.
-3. It downloads `contextlayer-setup-reporter.tar.gz`.
-4. In a terminal:
+`~/cl-reporter` was rebuilt on 2026-08-08 against the live address. Its
+`.mcp.json` reads
+`http://192.168.1.102:8100/mcp?profile=reporter&setup=…`.
 
-```
-tar -xzf ~/Downloads/contextlayer-setup-reporter.tar.gz -C ~/cl-reporter
-cat ~/cl-reporter/.mcp.json
-```
+You do **not** need to download anything. Go straight to 5b.
 
-**What success looks like:** the address in that file is `<ADDRESS>` — the
-one step 1 printed — and it says `profile=reporter`.
+The sign-in as `eda` still happens — but in 5b, when the session first
+connects and opens a browser window for it. That is the part that has to be
+a real person at a real sign-in page, and it is the whole point of the
+check.
 
 **Why as `eda` and not as you:** what is being measured is a business
 user's floor, and a business user has a business user's visibility. Running
@@ -823,17 +875,19 @@ Then hand over what you recorded:
 
 ## Planning your sittings
 
+**Step 1 is done, so the run is now about 4 hours, all of it reading and
+deciding.**
+
 | Sitting | Steps | Time | Notes |
 |---|---|---|---|
-| **1** | 1, 2, 3 | ~1h 30m | Step 1 must be finished in one go. After it, the pilot is signed-in-able again — that alone is worth doing today. |
+| **1** | 1b (sign in), 2, 3 | ~1h 15m | Start by confirming the sign-in works. Then one merge and the metrics. |
 | **2** | Batch 1 | ~50m | The heaviest reading. Two wrong documents. |
 | **3** | Batches 2 and 3 | ~1h 15m | Or one each. Merge one before starting the next. |
 | **4** | Batch 4, then step 5, then step 6 | ~1h 15m | **Keep these together** — the floor check should follow the last merge. |
 
 **Safe to stop after:** any numbered step, and after any individual batch.
-**Do not stop in the middle of:** step 1 (the stack is half-restarted), or
-between a batch's session finishing and your merge (a pull request left
-open blocks the next batch).
+**Do not stop in the middle of:** the gap between a batch's session
+finishing and your merge — a pull request left open blocks the next batch.
 
 ---
 
@@ -893,14 +947,55 @@ vault rekey, the root-token revoke, and four rows in
 
 ---
 
+## Making the address problem stop happening
+
+You should not have to reconfigure this every time the network hands your
+Mac a different number, and you are right that it is a product problem
+rather than a chore you are failing at. Here is the honest picture.
+
+**Why it happens.** One setting, `CORE_OIDC_ISSUER`, has to be an address
+that **two different things** can reach: your browser, and the server
+process inside its container. Those two have different views of the
+network, and the only address that satisfies both today is this machine's
+LAN address — which the network is free to change. It is baked in when the
+stack starts, so it goes stale silently and everything that signs in breaks
+at once.
+
+**The fix you can do today, once, in five minutes — recommended.**
+Give this Mac a fixed address on your router: open the router's admin page,
+find DHCP reservation (sometimes "static lease" or "address reservation"),
+and bind `192.168.1.102` to this machine. After that the address never
+moves on this network, and none of this recurs. It is not elegant, but it
+is five minutes and it is completely reliable.
+
+**The real fix, which I have not made.** Split that one setting in two: an
+internal address for the server's own calls (`http://devidp:8180`, which
+works inside the container regardless of any LAN address) and a public one
+for browser redirects. That removes the class of problem rather than
+avoiding it. **I did not do it tonight**, for two reasons: it changes how
+sign-in tokens are validated, which is the part of the system where a
+subtle mistake is least visible and most damaging; and it is a platform
+change that ought to be decided on rather than slipped in while you are
+mid-run. It is written up as a finding. Say the word and it gets a proper
+ruling and its own change.
+
+**And a smaller one:** the restart could be a single named command instead
+of two environment variables you have to remember. That is a ten-minute
+change and it is also not made, because tonight's job was to get you
+running rather than to grow the toolbox.
+
+---
+
 ## If something looks wrong
 
-**The dashboard address does not load, at any point after step 1.**
+**The dashboard address does not load.**
 This machine's address can change again when it reconnects to the network.
-Re-run `ipconfig getifaddr en0`. If it differs from what step 1 printed,
-that is the same fault returning — re-run step 1a and 1c. Say that it
-happened, because a deployment whose address moves under it is a product
-problem, not an inconvenience.
+Re-run `ipconfig getifaddr en0`. If it is no longer `192.168.1.102`, that is
+the same fault returning — the fix is one command:
+`CL_BIND=0.0.0.0 CL_HOST_ADDR=$(ipconfig getifaddr en0) make stack-pilot`
+from `~/Desktop/DataProject` in a fresh terminal, then re-check
+`curl -s http://127.0.0.1:8100/healthz`. Then read the section just above
+this one and do the five-minute router fix, so it is the last time.
 
 **A session says its setup is out of date.**
 Believe it. Re-do step 1c and start that batch again. It is designed to say
