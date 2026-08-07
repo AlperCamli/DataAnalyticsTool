@@ -6703,3 +6703,260 @@ own demo. So:
 
 Fence: exactly D-118.3's authorization plus its consequential references.
 Nothing in D-117, D-116 or the ledger's storage rules changed.
+
+## D-119 — B-1 CLOSED + A-5 authorization (owner ruling, 2026-08-07)
+
+Recorded verbatim.
+
+> 1. B-1 CLOSED on the demo evidence and extraction (operator-attested
+>    good result; session's clause-by-clause check governs the record).
+>    E2, SO-F, U-4/5/6/7/8/9/10/15/19, UI-D, PA-1/2/3, B1-F1..F9 all
+>    carry their closure pointers. The knowledge-request loop is
+>    demonstrated end to end.
+> 2. NEXT: checkpoint A-5 per the serial order — the knowledge floor.
+>    Pre-rulings (counterpropose in ≤5 lines each if the build
+>    disagrees):
+>    a. BENCHMARK SUITE HOME: the golden suite moves into the KB
+>       (customer-owned golden knowledge; the deferred "normative home"
+>       decision from the seed-packet era closes here). KB-spec
+>       additive amendment authorized enumerating its path; KB CI runs
+>       the R7 integrity check (deterministic only — goldens resolve
+>       against current snapshot facts, expected objects exist,
+>       contaminated-path flagging; ZERO model calls in CI, unchanged).
+>    b. CONTAMINATION ENTRY POINT: the enrich skill gains a
+>       contamination-triage work-list mode (contaminated docs by
+>       severity, re-ground against current snapshot, prepare
+>       re-verification diffs — the human still certifies by merge);
+>       skill-spec additive amendment authorized. This is the product
+>       home the 34 docs have been waiting for.
+>    c. METRICS SEEDING SOURCES: the seed packet's customer-verified
+>       SQL (benchmark-seed-v0.yaml) + the reporting views + certified
+>       entity docs; owner field = the operator. Metric docs per the
+>       KB spec's existing metric class; implementations verbatim.
+>    d. SOLO-CERTIFICATION at scale applies (D-116.3): batch the
+>       re-verification PRs sensibly (≤10 docs each, review-sync
+>       style); each merge is the named act.
+> 3. OPERATOR ITEMS RIDING A-5: the Stripe verdict for ledger 4c4ecb3d
+>    (public.subscriptions repair lands inside A-5's triage); the
+>    out-of-band pile stands (vault rekey, root-token revoke, four
+>    SECRETS-INVENTORY rows).
+
+**No counterproposal.** All four pre-rulings are adopted as written; what
+follows is what each turned out to mean when built. Two of the ruling's
+factual premises had moved by the time the session read them, and both are
+corrected below rather than worked around — the contaminated set is **33**,
+not 34, and **the `public.subscriptions` repair already happened**.
+
+## D-119 as applied — tasks 0, 1 and 2
+
+### 2a — the suite goes home, and the check that follows it
+
+**What the move actually fixed.** `benchmark-seed-v0.yaml` was not merely
+in the wrong repository; it was **package data in the validation wheel**,
+which means every customer's KB CI installed the pilot's ten requests, the
+pilot's verified SQL, and a frozen copy of the pilot's three snapshots. The
+normative home is now `.contextlayer/benchmark/suite.yaml` (KB §3.1, the
+authorized amendment), and wheel **0.7.0** carries the checker instead of
+the customer.
+
+**The stale copy was already wrong, which is the argument for the move in
+one line.** The snapshots travelling beside the suite had drifted from
+`.contextlayer/snapshots/supabase.json` — the reporting views and the SS-5
+check capture were in the KB's copy and not in the packaged one. Goldens
+now resolve against **the KB's own accepted snapshots**, so a dropped
+column fails at the commit that lands the drop rather than whenever
+somebody remembers to refresh a pin.
+
+**KB-9 as shipped, stated as the narrowing it is** (KB §10.1): schema +
+resolution, base-relation column existence, contaminated-context as a
+**flag**. Zero model calls, no network, accuracy runs still manual —
+BASELINE-1's trigger is untouched. A KB with no suite prints that it found
+none and **passes**, because "nothing was checked" and "everything checked
+out" must not read alike; that is D-116.4's lesson applied one layer down,
+and it has its own test.
+
+**Proved in both directions, which is the only way a check is worth
+anything** (KB PR #46, and #47 opened against it and then closed):
+
+| | run | result |
+|---|---|---|
+| the real suite | [31214259952](https://github.com/AlperCamli/Sample-Knowladge-Base/actions/runs/31214259952) | **pass** — 10 cases, 3 snapshots, 0 errors, 13 contamination flags |
+| a golden referencing a dropped column | [31214288955](https://github.com/AlperCamli/Sample-Knowladge-Base/actions/runs/31214288955) | **fail** — `[ERROR] RB-01 golden-column: supabase.public.users.signed_up_at referenced but not in snapshot` |
+
+The proof branch was deleted after the run was recorded. Its whole job was
+to be red.
+
+**Removal, per D-113.2.** The platform keeps a frozen copy under
+`fixtures/benchmark/` and it is labelled as what it is — a test input for
+the checker's own tests, deliberately not the live suite, because a checker
+test that moved whenever the estate moved would report the estate's state
+as its own failure. `DEFAULT_SUITE`/`DEFAULT_SNAPSHOTS` now resolve from
+the KB (`CTXLAYER_KB` overridable), and every manual-kit command that used
+to read a packaged default takes `--suite`/`--snapshot`.
+
+**One near-miss worth recording**, because it is the D-96 R-6(b) mechanism
+biting back: `kb-ci.yml` reads `runtime_deps` with an awk that stops at the
+first non-`  - ` line, so the comment explaining the new `sqlglot` pin —
+written *inside* the list — silently truncated it and would have installed
+three deps of four. Caught by rehearsing the workflow's own commands
+locally before pushing. The manifest now says, in the file, to keep the
+list contiguous.
+
+### 2b — contamination triage becomes a mode, not a chore
+
+**S1c** (skill spec §6, the authorized amendment): the KB's own
+contamination state delivers the batch. `worklist.py` ships in the skill
+bundle — stdlib-only, zero model calls — and joins each marker to the
+contaminating object's facts *now*, including the `stats.checks`
+constraints SS-5 captures, plus dependency resolution, prior certification,
+report-path membership (readable at last, because the suite lives in the KB
+now) and which of the changed columns the doc actually speaks about.
+
+**It classifies nothing, and that is the design.** Deciding whether a new
+constraint confirms a paragraph or contradicts it is reading. The tool puts
+prose and facts in one place; the session judges; the human certifies.
+
+Three classes, and the first one carries the load: **`confirms-prose` is a
+front-matter-only diff**, which is a *checkable property* and the only
+reason a batch of thirty repairs is reviewable at all. `needs-re-grounding`
+rewrites from the snapshot and cites the constraint at DDL grade.
+`depends-on-missing-object` is **left contaminated** — deleting a
+dependency to turn a doc green is removing the tripwire, not repairing the
+room.
+
+**CP-E6:** a repair re-grounds; it does not re-certify. Docs land `draft`
+and the PR body hands the `verified` + `last_verified` act back to the
+steward by name — which under solo-operator mode (D-116.3) is what their
+merge already is, said out loud so nobody has to infer it thirty times.
+
+**Conformance, D-78-layered.** Validators over staged diffs (18 tests) plus
+**AS-19 behavioural: PASS 5/5** against the fixture deployment
+(`results/phase2/a5/as19/`), on a batch staged so each class is decidable
+from the evidence and only from the evidence. The falsifiability
+demonstration sits beside it and runs against the *actual* artifacts:
+polish the prose under a `confirms-prose` repair, certify a repair, delete
+the unresolved dependency, or drop the certification section — each is
+caught.
+
+Two things the agent did unprompted are worth more than the verdict: it
+**declined to improve a `sources` list** with the stronger new citation,
+naming it as drafting under cover of a repair; and it **refused to claim a
+green self-check**, reporting the staged KB's missing wheel and listing
+what it verified by hand instead. It also found a real fixture defect (a
+snapshot missing `system_class`), since fixed.
+
+### The triage plan, and two premises of the ruling that had moved
+
+`results/phase2/a5/TRIAGE-PLAN.md`: **33 docs, four batches, with paste
+prompts.** Every marker is one event — sync #34, the first run after SS-5
+started capturing `CHECK` constraints — so the expected shape is not thirty
+broken documents but thirty nobody has re-read since the facts got sharper.
+
+**30 `confirms-prose`, 3 `needs-re-grounding`, 0
+`depends-on-missing-object`.** The three are the reason the exercise is not
+a formality, and none of them is visible from a marker:
+
+- `ai_runs.md` and `ai_prompt_configs.md` both describe `flow_type` as an
+  **11-value set**; the captured constraint admits **13** — `skills_pool`
+  and `professional_summary` are missing from both. They cross-reference
+  each other, so they are wrong together and are batched together.
+- `v_jobs_by_status.md` warns that `public.jobs.status` is **not**
+  constrained by a database CHECK. It is. The doc's warning is the
+  opposite of the truth, and it is a warning a report author would act on.
+
+**The ruling's count and its `subscriptions` clause are both corrected.**
+The set is 33, not 34, and **3.'s premise no longer holds**: during the B-1
+closure run the operator merged KB PR #44 (marker cleared), certified the
+doc by hand, and merged PR #45 (pro-plan pricing, which lowered it back to
+`draft` pending re-certification). `subscriptions.md` is **not in the
+triage backlog**, so no batch carries its repair and no batch waits on the
+Stripe verdict. What remains open is the *pricing* question — ledger
+`4c4ecb3d` (open) and the second filing `3f04d202` (still `batched`, still
+carrying `99.99` where the merged doc records `99.00` as customer-confirmed
+with the disagreement named in its own sources line). When the verdict
+arrives it is an ordinary enrichment PR against a `draft` doc, not a triage
+repair.
+
+One anomaly rides batch 4: `usage_counters.md` carries **no contamination
+marker** and is still `status: contaminated` — PR #37 re-grounded it and
+cleared the marker without moving the status, because at the time nothing
+said what status a repaired doc lands in. S1c now does.
+
+### 2c — the metrics catalogue
+
+Ten drafts (KB PR #48), from the ten goldens, the reporting views' own
+definitions, and the entity docs — **implementations verbatim**, window
+parameterised, nothing else touched. Each carries both routes where both
+exist, since the `reporting.v_*` view is the only path that returns rows
+under RLS, and says where the two grains do not mix.
+
+`owner: alper (operator) — pending`, `status: draft`, `last_verified:
+null` throughout: the report skill treats only `verified` metrics as
+certified, so until the operator flips them a citing report will say
+*draft* in its trust notes, which is correct behaviour and the whole point
+of drafting separately from certifying.
+
+**Three seed cases produced no metric on purpose** — RB-04 is a lens over
+GA4's own standard metrics, RB-05 is a composition of three metrics already
+here, RB-03 is `organic-search-clicks` sliced by query. A forced metric
+nobody would reuse is worse than a note.
+
+Gaps are in the docs rather than in a spreadsheet: `subscriptions.status`
+has no DB CHECK and the table held 0 rows on 2026-08-07; `conversions` is
+the metric where GA4 and Supabase are *expected* to disagree and lists why;
+`activation-rate`'s steps are not strictly nested. One caveat the estate
+has **closed**: RB-09 warned that `ai_runs.status = 'failed'` rested on an
+unconfirmed vocabulary, and the 2026-08-04 snapshot captured the CHECK.
+
+**Named, not smuggled:** the `metric` front-matter class is still
+unregistered in the validation library (KB §4.4 defines it; the 1.7–1.9
+staging never landed), so KB CI link-checks these files and does **not**
+schema-check them. Registering it is a validation-library change and a
+wheel carry, recommended as its own PR rather than folded into this one.
+
+### Task 3 — the floor check did not run, and the reason is a live defect
+
+**A5-F1: the deployment's public address is a DHCP lease that moved.** The
+core runs with `CORE_PUBLIC_URL`/`CORE_OIDC_ISSUER` pinned to
+`192.168.1.104`; this machine is now `192.168.1.102`. The MCP endpoint's
+`www-authenticate` names an OAuth resource document on `.104`, and
+`/v1/auth/login` 302s to `.104:8180` — so **no session and no browser on
+this LAN can sign in to the pilot right now**, over localhost or otherwise,
+and every bundle compiled before the move is stale in a way A-2's
+staleness mechanism does not detect (it watches profiles, not the
+deployment's own address). Fix is one command and it is first on the STOP
+list; the session did not run it, because restarting the operator's stack
+unattended trades a wrong address with a known fix for a possibly-dead
+stack with nobody present.
+
+**And even reachable, this check is the operator's.** MCP access is a
+browser sign-in under the reporter's own identity (PA-1); minting a token
+by another route would demonstrate a path no real user takes, which is
+what D-118.1 exists to prevent. The fixture deployment would have answered
+— and would have measured the fixture's KB rather than this estate's floor,
+so it was not used.
+
+**The gate's own text is not satisfiable yet regardless**, and that is the
+honest reading: it asks for a certified metric, and the catalogue is an
+unmerged draft. `results/phase2/a5/FLOOR-CHECK.md` records the attempt, the
+static state of RB-01's path (one of three legs — the verified view —
+already there), and the prepared re-run.
+
+### Task 4 — A-5 is NOT closed
+
+Graded in `results/phase2/a5/GATE-CHECK.md`. Items 3, 4 and 6 of playbook
+§9 all remain **open**, each for a reason that is an operator act rather
+than missing work: the triage batches (STOP-1), the metrics merge and
+certification (STOP-2), and the KB-9 merge. The contamination count at end
+state is **33 — unchanged**, and the Python contamination test is
+**still red**, which is exactly what it should be while the estate has 33
+contaminated docs. Nothing was deleted to make a suite green.
+
+Suites: python **827 passed / 14 skipped / 1 failed** (the contamination
+test, estate state); core untouched this session.
+
+**Fence:** the two authorized amendments (KB §3.1 + §10.1, skill §6 S1c +
+AS-19) and nothing else. No B-3/B-4 surface, no BASELINE-1 run, no new MCP
+tool, no KB content outside the skill-PR flows, nothing merged by the
+session. D-117's grounding bounds held: every claim in the metrics
+catalogue comes from the goldens, the views, or the estate's own docs.
