@@ -53,6 +53,7 @@ import {
   normalizeQueryTerms,
   recordEvent,
   registryKind,
+  returnToQueue,
 } from "./ledger.js";
 import type { Identity, OidcClient } from "./oidc.js";
 import { policyFromDoc, type SyncPolicy } from "./policy.js";
@@ -248,6 +249,24 @@ const TOOL_DEFS: { name: string; description: string; inputSchema: Record<string
       },
     },
   },
+  {
+    name: "return_request",
+    description:
+      "Steward-gated: hand one batched knowledge request back to the approved worklist with a note saying what would " +
+      "unblock it. The request stays open — this records that nobody answered it and why. Use it for the batch item " +
+      "you cannot draft without guessing, or whose target document refuses to be written.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        issue_id: { type: "string" },
+        // §6.12 (D-118.3): required, and refused when blank. A return
+        // with no note reads as `approved` to the next steward and
+        // tells them nothing — the same rule the dashboard enforces.
+        note: { type: "string" },
+      },
+      required: ["issue_id", "note"],
+    },
+  },
 ];
 
 /** Tools whose call takes a system/target qualifier (MCP-R4). */
@@ -265,8 +284,14 @@ function qualifierArg(tool: string, args: Record<string, unknown>): string | und
  */
 const STATEMENT_TEXT_TOOLS = new Set(["validate_sql", "execute_sql", "publish_report"]);
 
-/** list_gaps is S-gated (L-7/LED-R1): server-resolved profile only. */
-const STEWARD_GATED = new Set(["list_gaps"]);
+/**
+ * S-gated (L-7/LED-R1): server-resolved profile only. `return_request`
+ * joins `list_gaps` here (D-118.3) rather than getting a gate of its
+ * own — it is the write half of the same triage surface, performed by
+ * the same session under the same identity, so a second mechanism
+ * would be a second thing to get wrong.
+ */
+const STEWARD_GATED = new Set(["list_gaps", "return_request"]);
 const STEWARD_PROFILES = new Set(["steward", "benchmark"]);
 
 interface ToolOutcome {
@@ -909,6 +934,78 @@ async function toolListGaps(ctx: CallContext, args: Record<string, unknown>): Pr
   };
 }
 
+/**
+ * §6.12 (D-118.3, finding B1-F9): the `batched → approved` return, over
+ * the channel the session already has.
+ *
+ * The transition existed in the schema, the dashboard API and the §4
+ * diagram, and was reachable only with a bearer token on a command
+ * line — which is precisely what a compiled setup bundle does not carry
+ * (PA-1). So the enrich skill's third per-item outcome ("hand it back")
+ * could be *said* and not *done*, and the skill was correctly forbidden
+ * from claiming a state change it could not make. This closes that.
+ *
+ * It is the same write the dashboard performs, through the same ledger
+ * function and the same steward gate — not a new privilege, a second
+ * door onto one that the browser already had.
+ */
+async function toolReturnRequest(ctx: CallContext, args: Record<string, unknown>): Promise<ToolOutcome> {
+  // Belt-and-braces with the dispatch gate, for the same reason
+  // list_gaps carries one: a mis-authored custom profile must not be
+  // able to widen a governed write.
+  if (!STEWARD_PROFILES.has(ctx.profile.name)) {
+    return {
+      ...err("permission_denied", "return_request is limited to the steward and benchmark profiles"),
+      decision: "filtered",
+      reason: `profile ${ctx.profile.name} is not steward-gated`,
+    };
+  }
+  const issueId = typeof args.issue_id === "string" ? args.issue_id.trim() : "";
+  const note = typeof args.note === "string" ? args.note : "";
+  if (!issueId) {
+    return err("invalid_argument", "issue_id (string) required — the batched request to hand back");
+  }
+  if (!note.trim()) {
+    return err(
+      "invalid_argument",
+      "note (string) required — say what evidence would unblock this request. A return with no note reads as " +
+        "'approved' to the next steward and tells them nothing about why it came back",
+    );
+  }
+  const outcome = await returnToQueue(ctx.deps.pool, { issueId, note });
+  if (!outcome.ok) {
+    // wrong_state is the interesting one and it is the common one: a
+    // request the caller already returned, or one the steward never
+    // delivered. Say which, rather than a bare failure.
+    return err(outcome.code === "not_found" ? "not_found" : "invalid_argument", outcome.detail);
+  }
+  const stored = outcome.issue.return_note ?? "";
+  return {
+    payload: {
+      issue_id: outcome.issue.issue_id,
+      status: outcome.issue.status,
+      // What was actually recorded, not what was sent. The note is
+      // scrubbed and length-bounded on the way in exactly as a
+      // rejection reason is (LED-R2) — so the caller is shown the
+      // stored text and told when it differs, rather than being left
+      // to assume its words survived. D-115's rule, applied to the
+      // one text this tool writes.
+      note: stored,
+      ...(stored !== note.trim()
+        ? {
+            note_altered: true,
+            note_altered_note:
+              "The note was scrubbed and length-bounded at storage, as every reader-facing ledger reason is. " +
+              "The stored text above is what the steward and the filer will read; say so if it lost something " +
+              "that mattered.",
+          }
+        : {}),
+      refs: refsEnvelope(ctx.ws),
+    },
+    resultMeta: { issue_id: outcome.issue.issue_id, status: outcome.issue.status },
+  };
+}
+
 const TOOL_IMPLS: Record<string, (ctx: CallContext, args: Record<string, unknown>) => Promise<ToolOutcome>> = {
   search_context: toolSearchContext,
   get_entity: toolGetEntity,
@@ -921,6 +1018,7 @@ const TOOL_IMPLS: Record<string, (ctx: CallContext, args: Record<string, unknown
   report_freshness: toolReportFreshness,
   flag_gap: toolFlagGap,
   list_gaps: toolListGaps,
+  return_request: toolReturnRequest,
 };
 
 // ---------------------------------------------------------------------------

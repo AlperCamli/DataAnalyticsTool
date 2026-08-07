@@ -8,7 +8,7 @@ This spec resolves capability-spec open decision **CI-B** (ruling M-1 below) and
 
 ## 1. Scope
 
-**In scope:** the session and enforcement model; common response envelopes (trust block, refs); the validation-token flow; the per-tool reference (parameters, responses, errors, gating) for all eleven tools; error taxonomy and rate limits; the audit contract; conformance tests.
+**In scope:** the session and enforcement model; common response envelopes (trust block, refs); the validation-token flow; the per-tool reference (parameters, responses, errors, gating) for all **twelve** tools (eleven until the §6.12 amendment added `return_request`); error taxonomy and rate limits; the audit contract; conformance tests.
 
 **Out of scope:** MCP transport mechanics (streamable HTTP + OAuth are platform-architecture facts), search index implementation, and skill behavior *around* the tools (skill specifications).
 
@@ -172,6 +172,25 @@ Steward-gated triage reads (fault-ledger spec §8): returns issues as `{issue_id
 
 **The finding this closes (B1-F8).** S1b told the session to read its batch over `/v1/dashboard/ledger` with a bearer token. A compiled setup bundle carries no credential (PA-1) and the MCP client's OAuth token is not reachable from the session's shell, so the instruction named a token that cannot exist — the loop's read half was unreachable in exactly the sessions it was written for. Widening the tool the session already holds is the fix; obtaining a token by other means would have been a workaround for a defect in the surface. **Not closed by this amendment:** the `batched → approved` **return** (S1b's third outcome) is a governed *write* with no session-reachable inlet — filed as B1-F9, not resolved here.
 
+### 6.12 `return_request(issue_id, note)` — S
+
+> **Added by amendment (D-118.3, 2026-08-07) — additive; closes finding B1-F9.** New tool, entered against register item **OD-5** on the `list_gaps` precedent (HLR §7.2: every tool proposal goes through the register, and the standing rule to resist adding tools is unchanged).
+
+Steward-gated **write** over the fault ledger: moves one `enrichment_request` issue from `batched` back to `approved` (ledger §4's `batched → approved` transition), clearing its `batch_id` and recording `return_note` / `returned_at`. Responds `{issue_id, status, note, note_altered?, refs}`.
+
+**Why a tool exists for this.** §6.11.1 made a delivered batch *readable* by the session that has to act on it. The enrich skill's third per-item outcome (skill spec §6 S1b: *undraftable, or the target doc refuses to be written*) is a **write**, and it had no session-reachable inlet — the transition lived in the schema, in the dashboard API and in the §4 diagram, and could be performed only with a bearer token on a command line. A compiled setup bundle carries no credential (PA-1) and the MCP client's OAuth token is not reachable from the session's shell, so the honest exit from a batch was one the skill could *say* and not *do*. That is finding B1-F9, and the alternative on the table — a *Return to queue* control on a `batched` card — is a new screen element and a different conversation.
+
+**It is not a new privilege.** The same write, through the same ledger function, behind the same gate the dashboard's `POST /v1/dashboard/ledger/issues/<id>/return` sits behind (dashboard spec §5.3). A second door onto a room the browser was already in.
+
+- **Gating** — steward/benchmark **server-resolved profile only**, enforced at dispatch *and* in the tool, exactly as `list_gaps` is (L-7/LED-R1, M-3). A non-steward profile is `permission_denied` and nothing moves.
+- **`note` is required and refused when blank.** A return with no note reads as `approved` to the next steward and tells them nothing about why it came back. Same rule the dashboard enforces, same reason a dismissal requires one.
+- **The note is scrubbed and length-bounded at storage** (LED-R2, `VERDICT_REASON_MAX`) exactly as a rejection reason is — it is reader-facing text on the filer's reply path, not an authored submission, so D-115's narrowing does not reach it. The response returns the **stored** text and sets `note_altered: true` when it differs from what was sent, so the caller is told rather than left assuming its words survived.
+- **Errors** — `not_found` (no such issue); `invalid_argument` for a blank note, a non-`enrichment_request` kind, or an issue that is not `batched` (the message names the state it is actually in, which makes the second-return case self-explaining).
+- **Rate limit** — the default `read` category (§7). A return is bounded by the batch it came from (≤10, SP-3); a category of its own would be machinery for a limit nothing can reach.
+- **Ledger state and nothing else.** No git call, no KB content — UI-11 governs this module whole. The request stays **open**, which is the truth: nobody has answered it.
+
+**What it does not do.** It does not reopen a `rejected` or `resolved` request, it does not re-verdict, and it does not touch the filer's own text. The one thing it writes that a human will read is the note.
+
 ## 7. Errors and limits
 
 Tool errors: `{code, message, detail?}` with codes `not_found | invalid_argument | permission_denied (profile-level only, per M-4) | revalidate_required | guardrail | upstream_error (job failed; job error embedded) | rate_limited`. Per-identity rate limits (defaults, configurable in `.contextlayer/`): 120 read calls/min, 20 validate/min, 6 execute/min, 4 publish/hour, 10 flag_gap/session. Limits exist for source protection, not licensing — messages say so.
@@ -200,6 +219,7 @@ One record per call: `{ts, subject, roles, profile, tool, args_digest, refs, dec
 | MT-12 | A JOIN of one visible and one hidden table is refused; an API request citing a hidden custom dimension is refused; the audit records `filtered` with the true reason in both | §6.6 amendment, M-4, M-8 |
 | MT-13 | A token issued while an object was visible is refused at `execute_sql` after the map hides it — caught by the §5 allow-set recheck, with the snapshot unmoved — and a token carrying no `objects` claim is not honoured | §5 amendment |
 | MT-14 | `flag_gap(kind: enrichment_request, proposal: …)` with a canary value and a markdown payload in the proposal: the stored `detail.proposal` is scrubbed and length-bounded exactly as `description` is, a client-supplied subject is ignored in favour of the server-resolved one, and the response is the unchanged `{issue_id, occurrences, routed_to}` | §6.10 amendment, LED-R2/R3 |
+| MT-16 | `return_request` as a steward on a delivered batch moves the issue `batched → approved`, clears its `batch_id`, stores the note, makes **no git call**, and drops it out of the next `list_gaps(status: "batched")`; the call is audited under the caller's own identity with the issue in `result_meta` and **no note text**; a reporter's call is `permission_denied` and moves nothing (and the refusal is audited); a blank note is `invalid_argument`; a second return names the state it is actually in; a note whose content the scrub removed comes back with `note_altered` | §6.12, D-118.3, B1-F9, LED-R2, M-8 |
 | MT-15 | `list_gaps(status: "batched")` as a steward returns the batched request with `filing.{by, at, description, proposal, value_flags}` — the words verbatim, the identity the server recorded (not one the body claims), the flags on that submission — and renders a markdown payload inert; the same call from a reporter profile is `permission_denied` and returns no issue; `status: "rejected"` is refused as an invalid argument | §6.11.1, LED-R3/R5, D-115, D-116.5 |
 
 ## 10. Amendments to other specs (additive)

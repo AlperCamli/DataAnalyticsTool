@@ -619,4 +619,165 @@ describe("ledger triage writes (§5.3) — inlets, verdicts, batches", () => {
       expect(ids).toContain(issueId);
     });
   });
+
+  // -- MT-16: the write half of the same surface -----------------------------
+  //
+  // Finding B1-F9, authorized as D-118.3. MT-15 made the batch readable
+  // by the session that must act on it; the third per-item outcome —
+  // hand it back — remained a governed write with no session-reachable
+  // inlet, so the skill could say "handed back" and never move the row.
+  // The test walks the whole way round: file → approve → deliver →
+  // return over MCP → the row is `approved` again, the note is on it,
+  // an audit row exists, and the next `list_gaps(status: "batched")`
+  // no longer offers it as work.
+
+  describe("MT-16: return_request hands a batched request back (§6.12, D-118.3)", () => {
+    async function batchedIssue(description: string): Promise<string> {
+      const issueId = await fileRequest(rig, reporter, { description });
+      expect(
+        (await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, { verdict: "approve" }))
+          .status,
+      ).toBe(200);
+      expect((await apiPost(rig, steward, "/v1/dashboard/ledger/batches", { max: 10 })).status).toBe(201);
+      return issueId;
+    }
+
+    it("moves batched → approved with the note, and audits the call", async () => {
+      const issueId = await batchedIssue("no doc says what a dormant account is");
+      const note = "belongs on the accounts doc, which is contaminated; waiting for it to be repaired to draft";
+
+      const gitBefore = rig.gitFingerprint();
+      const res = await callTool(rig, rig.token("steward"), "steward", "return_request", {
+        issue_id: issueId,
+        note,
+      });
+      expect(res.isError).toBe(false);
+      expect(res.payload.issue_id).toBe(issueId);
+      expect(res.payload.status).toBe("approved");
+      expect(String(res.payload.note)).toContain("waiting for it to be repaired");
+
+      // The row moved, and the note is on it where the next steward reads it.
+      const { rows } = await rig.core.pool.query<{
+        status: string;
+        batch_id: string | null;
+        return_note: string | null;
+        returned_at: string | null;
+      }>(`SELECT status, batch_id, return_note, returned_at FROM ledger_issues WHERE issue_id = $1`, [issueId]);
+      expect(rows[0]!.status).toBe("approved");
+      expect(rows[0]!.batch_id).toBeNull();
+      expect(rows[0]!.return_note).toContain("contaminated");
+      expect(rows[0]!.returned_at).toBeTruthy();
+
+      // It is a ledger-state write and nothing else: no git call, and the
+      // request stays open, which is the truth — nobody answered it.
+      expect(rig.gitFingerprint()).toBe(gitBefore);
+
+      // The batch no longer offers it as work.
+      const listed = await callTool(rig, rig.token("steward"), "steward", "list_gaps", {
+        status: "batched",
+        kind: "enrichment_request",
+        limit: 50,
+      });
+      const batchedIds = (listed.payload.issues as { issue_id: string }[]).map((i) => i.issue_id);
+      expect(batchedIds).not.toContain(issueId);
+
+      // M-8: the governed write is in the audit under the caller's own
+      // identity, with the issue in result_meta and no note text.
+      const { rows: audit } = await rig.core.pool.query<{
+        subject: string;
+        decision: string;
+        result_meta: Record<string, unknown>;
+      }>(
+        `SELECT subject, decision, result_meta FROM audit_records
+          WHERE tool = 'return_request' ORDER BY ts DESC LIMIT 1`,
+      );
+      expect(audit[0]!.subject).toBe(USERS.steward.username);
+      expect(audit[0]!.decision).toBe("allowed");
+      expect(audit[0]!.result_meta.issue_id).toBe(issueId);
+      expect(JSON.stringify(audit[0]!.result_meta)).not.toContain("contaminated");
+    });
+
+    it("a reporter's call is permission_denied and moves nothing", async () => {
+      const issueId = await batchedIssue("nobody has written down what a trial is");
+      const denied = await callTool(rig, rig.token("reporter"), "reporter", "return_request", {
+        issue_id: issueId,
+        note: "I would like this back please",
+      });
+      expect(denied.isError).toBe(true);
+      expect(denied.payload.code).toBe("permission_denied");
+
+      const { rows } = await rig.core.pool.query<{ status: string }>(
+        `SELECT status FROM ledger_issues WHERE issue_id = $1`,
+        [issueId],
+      );
+      expect(rows[0]!.status).toBe("batched");
+
+      // The refusal is in the audit too — a denied governed write is
+      // exactly the row an investigator wants.
+      const { rows: audit } = await rig.core.pool.query<{ decision: string }>(
+        `SELECT decision FROM audit_records WHERE tool = 'return_request' AND subject = $1
+          ORDER BY ts DESC LIMIT 1`,
+        [USERS.reporter.username],
+      );
+      expect(audit[0]!.decision).toBe("denied");
+    });
+
+    it("refuses a return with no note — the state change without the reason", async () => {
+      const issueId = await batchedIssue("the invoice numbering scheme is undocumented");
+      const bad = await callTool(rig, rig.token("steward"), "steward", "return_request", {
+        issue_id: issueId,
+        note: "   ",
+      });
+      expect(bad.isError).toBe(true);
+      expect(bad.payload.code).toBe("invalid_argument");
+      expect(String(bad.payload.message)).toContain("what evidence would unblock");
+
+      const { rows } = await rig.core.pool.query<{ status: string }>(
+        `SELECT status FROM ledger_issues WHERE issue_id = $1`,
+        [issueId],
+      );
+      expect(rows[0]!.status).toBe("batched");
+    });
+
+    it("a second return is refused, naming the state it is actually in", async () => {
+      const issueId = await batchedIssue("what counts as an active seat is not written down");
+      const first = await callTool(rig, rig.token("steward"), "steward", "return_request", {
+        issue_id: issueId,
+        note: "needs the finance team to say which seats they count",
+      });
+      expect(first.isError).toBe(false);
+
+      const second = await callTool(rig, rig.token("steward"), "steward", "return_request", {
+        issue_id: issueId,
+        note: "needs the finance team to say which seats they count",
+      });
+      expect(second.isError).toBe(true);
+      expect(second.payload.code).toBe("invalid_argument");
+      expect(String(second.payload.message)).toContain("approved");
+      expect(String(second.payload.message)).toContain("only a batched request can be returned");
+    });
+
+    it("an unknown issue is not_found, and a note that lost content says so", async () => {
+      const missing = await callTool(rig, rig.token("steward"), "steward", "return_request", {
+        issue_id: "00000000-0000-4000-8000-000000000000",
+        note: "nothing to return",
+      });
+      expect(missing.isError).toBe(true);
+      expect(missing.payload.code).toBe("not_found");
+
+      // D-115's rule on the one text this tool writes: the note is
+      // scrubbed at storage exactly as a rejection reason is, and the
+      // caller is shown what was actually recorded rather than left to
+      // assume their words survived.
+      const issueId = await batchedIssue("nobody documented the renewal window");
+      const res = await callTool(rig, rig.token("steward"), "steward", "return_request", {
+        issue_id: issueId,
+        note: 'needs the "renewal window" length in days, currently guessed at 30',
+      });
+      expect(res.isError).toBe(false);
+      expect(res.payload.note_altered).toBe(true);
+      expect(String(res.payload.note)).not.toContain("30");
+      expect(String(res.payload.note_altered_note)).toContain("what the steward and the filer will read");
+    });
+  });
 });

@@ -221,13 +221,20 @@ content somewhere else that happens to be writable.** Redirecting looks
 helpful and quietly splits the estate's meaning across two docs, one of
 which nobody asked about.
 
-Hand it back instead, naming the doc it is waiting for:
+Return it instead, naming the doc it is waiting for:
 
-> `<issue-id>` — belongs on `systems/supabase/public/subscriptions.md`,
-> which is `status: contaminated` (`refuse-unless-override`). Waiting for
-> that doc to be repaired to `draft`; the content goes in then.
+```
+return_request(
+  issue_id: "<issue-id>",
+  note: "belongs on systems/supabase/public/subscriptions.md, which is
+         status: contaminated (refuse-unless-override). Waiting for that
+         doc to be repaired to draft; the content goes in then."
+)
+```
 
 The request stays open, which is the truth: nobody has answered it yet.
+`return_request` moves it back to the approved worklist — it does **not**
+resolve it, and it does not reject it.
 
 ### The approved request is a citation — of the weakest useful kind
 
@@ -289,27 +296,35 @@ For each request in the batch, exactly one of:
 3. **Undraftable — or blocked.** You cannot write it without guessing (the
    request is too vague, names an object that does not exist, asks
    something the estate cannot answer), **or** the doc it belongs on
-   refuses to be written (contaminated). **Hand it back**, explicitly:
+   refuses to be written (contaminated). **Return it**, explicitly, and
+   in all three places:
 
-   - name it in the PR body's **Returned to the queue** section, with the
-     note that matters — *what evidence would unblock it*, specifically
-     enough that the person who asked can supply it;
+   ```
+   return_request(issue_id: "<issue-id>", note: "<what would unblock it>")
+   ```
+
+   - the **note** says *what evidence would unblock it*, specifically
+     enough that the person who asked can supply it. It is required, and
+     for a reason: a request that comes back without one reads as
+     `approved` to the next steward and tells them nothing about why;
+   - name it in the PR body's **Returned to the queue** section too. The
+     ledger note is for the next steward; the PR section is for the
+     reviewer reading this diff. Neither substitutes for the other — and
+     the PR body is the one that is not scrubbed, so if the tool tells you
+     `note_altered`, the full version goes there;
    - leave it out of the `CL-Resolves` trailers. That absence is what
-     keeps the request open;
-   - **tell the steward, in words, that it needs returning** — one line
-     naming the issue id and the note.
+     keeps the request open.
 
    Never guess it into prose nobody can source.
 
-   **Say "handed back", not "returned to the queue", unless you moved the
-   ledger row** — and you cannot: `batched → approved` is a governed write
-   with no tool on your side of the wire (finding B1-F9). The steward
-   moves it. Claiming a state change you did not make is the same class of
-   error as claiming a doc entered the KB when you only opened a PR.
-
-   The note is required, and it is required for a reason: a request that
-   comes back without one reads as `approved` to the next steward and
-   tells them nothing about why.
+   **Match the claim to the act.** With `return_request` in your tool
+   list, you moved the row and *"returned to the queue"* is true. **If it
+   is not in your tool list**, your profile does not grant it — then say
+   *"handed back"*, name the issue id and the note to the steward in
+   words, and let them move it. Claiming a state change you did not make
+   is the same class of error as claiming a doc entered the KB when you
+   only opened a PR. Do not go looking for another way to perform the
+   write; there isn't one, for the same reason there is no token to find.
 
 An honest skip beats a fabricated draft. That rule does not soften
 because a steward approved the request — approval means *worth drafting*,

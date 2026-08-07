@@ -99,7 +99,8 @@ roles: [steward, auditlite]
 skills: [enrich, review-sync]
 tools:
   allow: [search_context, get_entity, get_table, get_metric, get_lineage,
-          validate_sql, execute_sql:drill, report_freshness, flag_gap, list_gaps]
+          validate_sql, execute_sql:drill, report_freshness, flag_gap, list_gaps,
+          return_request]
 limits: { row_cap: 100000, timeout_s: 120 }
 `;
 

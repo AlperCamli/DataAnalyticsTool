@@ -144,10 +144,12 @@ Customers instantiate and customize these (dashboard CRUD → git commits under 
 |---|---|---|---|---|
 | **Reporter** | R1 | `report` | `validate_sql`, `execute_sql:<allowed systems>`, `publish_report:<allowed targets>`, `flag_gap` | Guided journey, tight limits (row cap, timeout), publish restricted to role-mapped workspaces |
 | **Explorer** | Analyst-grade users | none (unguided) | Same as Reporter; publish optional per customer | Ad-hoc investigation, higher limits, no state-machine guidance |
-| **Steward** | R2 | `enrich`, `review-sync`, `benchmark` | Full read + `validate_sql` + `execute_sql` + `list_gaps`; **no MCP write surface** | KB writes happen via git PRs in the Claude Code session itself |
-| **benchmark** (non-user) | CI / harness | `benchmark` | Read set + `validate_sql` + `execute_sql` + `list_gaps`; **no publish** | Audit-tagged; excluded from adoption metrics; not role-assignable to humans by default (skill spec SK-4) |
+| **Steward** | R2 | `enrich`, `review-sync`, `benchmark` | Full read + `validate_sql` + `execute_sql` + `list_gaps` + `return_request`; **no MCP write surface onto knowledge** | KB writes happen via git PRs in the Claude Code session itself |
+| **benchmark** (non-user) | CI / harness | `benchmark` | Read set + `validate_sql` + `execute_sql` + `list_gaps` + `return_request`; **no publish** | Audit-tagged; excluded from adoption metrics; not role-assignable to humans by default (skill spec SK-4) |
 
-The Steward ruling keeps the security story clean: the MCP surface remains read/execute/publish only; all knowledge mutation goes through git PRs.
+The Steward ruling keeps the security story clean: the MCP surface writes **no knowledge**; all knowledge mutation goes through git PRs.
+
+**Amendment (D-118.3, 2026-08-07) — what "no MCP write surface" always meant, said precisely.** The row read *no MCP write surface* while `flag_gap` — a write — had been in every profile since CP-4. The rule the sentence was reaching for is the one above it: **nothing on the MCP surface writes knowledge.** Ledger state is not knowledge; it is the record of who asked for some and what was decided, and it has been writable from a session since the ledger shipped. `return_request` (MCP spec §6.12) is the second such write and the last one this loop needs — it moves a delivered request back to the approved worklist with a note, so the enrich skill's honest exit from a batch is an act rather than a sentence (finding B1-F9). It writes no document, calls no git, and leaves the request open.
 
 ### 7.2 MCP tool surface
 
@@ -258,7 +260,7 @@ Ruling: the adapter's flags are recorded at onboarding, and the `report` skill r
 | OD-2 | Deterministic detector rule set (class 1) | **Partially resolved** — rules + defaults are ops configuration (fault-ledger spec §5); remaining open scope is threshold values | After first month of pilot audit data |
 | OD-3 | Freshness-warning threshold for P1 sync mode 3 | Snapshot age > 30 days ⇒ dashboard warning (configurable) | Per customer at onboarding |
 | OD-4 | Explorer profile publish rights | Off by default, per-customer opt-in | First customer request |
-| OD-5 | New MCP tools beyond §6 + `flag_gap` | Register exercised once — `list_gaps` approved (fault-ledger spec §12); otherwise none | Any proposal enters this register first |
+| OD-5 | New MCP tools beyond §6 + `flag_gap` | Register exercised **twice** — `list_gaps` approved (fault-ledger spec §12); `return_request` approved 2026-08-07 (D-118.3, MCP spec §6.12) as the write half of the same steward-gated triage surface, on finding B1-F9; otherwise none | Any proposal enters this register first |
 
 ## 11. Documentation roadmap — what descends from this document
 

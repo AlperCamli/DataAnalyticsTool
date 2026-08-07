@@ -6525,3 +6525,181 @@ occur (bundle residue, the `writeSetup`/archive mode difference left
 alone). **B1-F9 is filed with a recommendation and not fixed** — a
 `batched → approved` inlet is a new tool surface and nobody authorized
 one.
+
+## D-118 — B-1 closure demo authorization (owner ruling, 2026-08-07)
+
+Recorded verbatim as this session's task 0 and governing it.
+
+### 1. Context-bleed correction, and a fifth standing rule
+
+**The incident's cause is reclassified, not its ruling.** PR #42's
+cross-repo research was performed by **the development session** — full
+workspace, this repo's tools, this repo's `CLAUDE.md` — and not by a
+deployed steward session working from the compiled bundle. D-117's
+grounding boundary **stands exactly as ruled**: a request-driven doc is
+grounded in the request and the estate, and the reasoning that got there
+is untouched. What changes is the diagnosis of *how* the reach happened,
+and therefore what prevents the next one.
+
+**STANDING RULE ADOPTED (fifth), verbatim:**
+
+> **DEMO ENVIRONMENT FIDELITY** — gate demonstrations run from the
+> customer-shaped environment (the bundle's directory, the bundle's
+> tools), never from the development workspace. A demo run in the dev
+> repo proves the dev repo.
+
+This is the sharpest of the five, because it is the one that invalidates
+*evidence* rather than code. A green demo from the wrong directory is
+worse than no demo: it is a passing result recorded against a claim it
+never tested. Act 9 was run headless with the compiled bundle and was
+right to be — the reclassification says the *research* that fed PR #42
+came from elsewhere, which is the same defect wearing the shape of a
+correct-looking run.
+
+### The standing rules, as they now stand
+
+Five, and each was bought with a failure:
+
+| Rule | Bought by |
+|---|---|
+| **Fan-out**: a value that appears in two places will disagree in one of them | the D-84 class |
+| **Read-back**: a write is reported as it was read back from the store, never as it was submitted | A-3's claimed-registered-actually-absent shape |
+| **Removal** (D-113.2): a migration is complete when the old source is removed, not when the new one works | A4-F6 |
+| **Surface-machinery honesty** (D-114.2): every new user-facing surface gets an operator hour on real estate state before its gate closes | B1-F1..F4 |
+| **Demo environment fidelity** (new, D-118.1): a gate demonstration runs from the customer-shaped environment, never the dev workspace | PR #42's context bleed |
+
+Four and five are a pair, and they pull in opposite directions on
+purpose: the fourth says *put a person in front of the real product*, the
+fifth says *and make sure it is the real product they are in front of*.
+
+### 2. Demo path (a) adopted
+
+A **fresh request against a clean target doc**. `public.subscriptions`
+stays contaminated and its repair stays with **A-5** — this loop does not
+get to fix the estate in order to demonstrate itself. GATE-CHECK §1's
+path 1, at ~20 minutes plus one model call, rather than path 2.
+
+**The pricing question stays open**, in ledger issue
+`4c4ecb3d-fb41-4489-8d12-a13c0dd99a5f`, pending the owner's own Stripe
+check — the nine-cent disagreement between the application's
+`ANNUAL_TOTAL_PRICE`/`PLAN_VALUE_USD.annual` and the `99.99` in the
+original request. **The demo's request must not depend on it.** So the
+demo target is chosen for independence from that question as well as for
+a clean status: a request whose answer changes if Stripe says one thing
+rather than another is a request that cannot be honestly confirmed today.
+
+### 3. B1-F9 fix authorized — `return_request`
+
+A steward-gated MCP tool, `batched → approved`, with a note; the additive
+MCP-spec diff leads; the skill's deferral path uses it. This is the
+recommendation B1-F9 filed and the smaller of the two options it named
+(the other, a *Return to queue* control on a `batched` card, is a new
+screen element and a B-3 conversation).
+
+### 4. PR #42 closed; PR #43 verified
+
+PR #42 closed (done, at the time of the ruling). **PR #43 is MERGED** —
+verified this session at `2026-08-07T13:14:17Z`, *"docs: conventions
+state how changes land, and solo-operator mode (D-116.3)"*. It is
+therefore **not** an operator step; the demo's step list begins at the
+browser.
+
+### 5. Full preparation is the session's job
+
+The operator receives a **ready system** and a plain-language numbered
+step list. No docker, no compose, no env files, no MCP config at the
+operator's hands. Their entire terminal exposure is opening Claude Code
+in one named directory; everything else is browser clicks and prepared
+text to paste.
+
+---
+
+## D-118 as applied — task 0
+
+### D-118.3 as built — `return_request`
+
+**The tool.** `return_request(issue_id, note)`, MCP spec **§6.12**
+(new, additive; entered against register item **OD-5** on the `list_gaps`
+precedent, which is now exercised twice). It moves one
+`enrichment_request` from `batched` back to `approved`, clears its
+`batch_id`, and records `return_note` / `returned_at`.
+
+**It is not a new privilege, and the implementation is the argument for
+that.** It calls `returnToQueue` — the same ledger function the
+dashboard's `POST /v1/dashboard/ledger/issues/<id>/return` has called
+since D-114.12 — behind the same steward gate. `return_request` joins
+`list_gaps` in the existing `STEWARD_GATED` set rather than getting a
+mechanism of its own, because it is the write half of one triage surface
+and a second mechanism is a second thing to get wrong. Enforced twice
+(dispatch and tool body) for the reason `list_gaps` is: a mis-authored
+custom profile must not be able to widen a governed write.
+
+**Three decisions worth stating, because each could have gone the other
+way:**
+
+- **The note is required and refused when blank.** A return with no note
+  reads as `approved` to the next steward and tells them nothing about
+  why it came back. Same rule the dashboard enforces; same reason a
+  dismissal requires one.
+- **The note is scrubbed at storage, and the caller is told when that
+  changed it.** `returnToQueue` runs `scrubText` at `VERDICT_REASON_MAX`,
+  as it always has — a return note is reader-facing text on the filer's
+  reply path, so **D-115's narrowing does not reach it**, and widening it
+  here was not authorized and was not done. What *was* done is the other
+  half of D-115's principle, which costs nothing: the response returns
+  the **stored** text and sets `note_altered: true` when it differs from
+  what was sent. The skill is told to put the unscrubbed version in the
+  PR body, which nothing scrubs. Silently editing a note and returning
+  `200` is the exact shape B1-F6 was.
+- **No rate-limit category of its own** (§7 `read`, the default). A
+  return is bounded by the batch it came from, ≤10 by SP-3. A limit
+  nothing can reach is machinery pretending to be a control.
+
+**Tests: MT-16**, five of them in `core/test/dashboard-ledger.test.ts`,
+each failing without the tool. The round trip (file → approve → deliver →
+return over MCP) asserts the row is `approved` with `batch_id` cleared
+and the note on it, that it **drops out of the next
+`list_gaps(status: "batched")`**, that `gitFingerprint()` is unmoved, and
+that the audit row carries the caller's identity and the issue in
+`result_meta` **with no note text**. Plus: a reporter is
+`permission_denied` and **moves nothing** (and the refusal is audited —
+a denied governed write is exactly the row an investigator wants); a
+blank note is refused; a second return names the state the issue is
+actually in; a scrubbed note comes back flagged. Suite: **375 passed /
+4 skipped** (+5).
+
+**Specs touched, and nothing else.** MCP §6.12 + the MT-16 conformance
+row + §1's tool count (eleven → twelve, said rather than left stale);
+skill spec §6 S1b — B1-F9's "not fixed" paragraph now records that it
+*was*, CP-E5's ledger half returns to the skill, and AS-18's softened
+clause comes back as its own amendment promised it would; HLR §7.2 and
+register item OD-5.
+
+**One HLR sentence was wrong before this and is corrected rather than
+extended.** The profile table read *Steward … **no MCP write surface***
+while `flag_gap` — a write — had been in every profile since CP-4. The
+rule the sentence was reaching for is the one directly beneath it:
+**nothing on the MCP surface writes knowledge.** Ledger state is not
+knowledge; it is the record of who asked for some and what was decided.
+The row now says that, and says it of `return_request` too.
+
+**What is built and what is live are different things, and the
+difference is named.** The tool ships in the server. It is **not granted
+on the pilot's steward profile**, because profiles live in the customer
+KB (`.contextlayer/profiles/steward.yaml`) and a grant is a KB PR — one
+this session cannot merge, and one that would move the setup stamp and
+make the operator's freshly-compiled bundle stale in the middle of their
+own demo. So:
+
+- the demo does not exercise it, **by design and not by accident**: the
+  target doc is clean (task 2), so act 9's path is *draft*, not *defer*;
+- the skill handles both worlds explicitly — with the tool it returns and
+  says *returned*; without it, it hands back **in words** and says
+  *handed back*. The say/do rule was never about the tool's existence;
+- the live grant is a one-line KB profile PR, recommended as post-demo
+  work and deliberately **not filed** before the run, so nothing
+  unexpected is sitting in the KB's PR list when the operator gets to
+  step 6.
+
+Fence: exactly D-118.3's authorization plus its consequential references.
+Nothing in D-117, D-116 or the ledger's storage rules changed.
