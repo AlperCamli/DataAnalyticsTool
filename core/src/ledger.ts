@@ -9,6 +9,13 @@
  * scopes, generated titles, and descriptions are scrubbed of
  * value-shaped tokens and length-bounded before they ever land in a
  * row; LED-R5 neutralizes them again at every render point.
+ *
+ * D-115 narrowed that to *derived* text. The three kinds carrying a
+ * person's own words — enrichment_request, human_filed, result_disputed
+ * (`AUTHORED_KINDS`) — store description and proposal verbatim and
+ * record what the same patterns *found* as `value_flags`, shown to the
+ * filer and the steward. The scrub still runs on every generated title
+ * and on every detector-authored description, unchanged.
  */
 
 import { createHash, randomUUID } from "node:crypto";
@@ -67,6 +74,63 @@ export const ENRICHMENT_REQUEST = "enrichment_request";
 /** Inlet for the dashboard's human gap form (§4 registry, class 3). */
 export const HUMAN_FILED = "human_filed";
 
+/**
+ * D-115: the kinds whose text a *person* wrote, as opposed to text this
+ * server generated from their query terms. For these, LED-R2 no longer
+ * edits — it reports. Everything else keeps the D-66.5 scrub exactly.
+ *
+ * `benchmark_regression` is class 3 by kind and deliberately absent: the
+ * harness writes it, not a human, so the original threat model still
+ * fits it. The line is provenance, not detector class.
+ */
+export const AUTHORED_KINDS = new Set(["enrichment_request", "human_filed", "result_disputed"]);
+
+/** What a piece of authored text was found to contain (D-115). */
+export type ValueFlag = "email" | "uuid" | "digit_run" | "number" | "quoted" | "truncated";
+
+/**
+ * LED-R2's patterns, evaluated rather than applied. Same expressions as
+ * `scrubText` uses, so the flags name exactly what the old rule would
+ * have deleted — which is what makes the warning honest.
+ */
+export function flagValues(text: string): ValueFlag[] {
+  const flags: ValueFlag[] = [];
+  if (QUOTED_RE.test(text)) flags.push("quoted");
+  if (EMAIL_RE.test(text)) flags.push("email");
+  if (UUID_RE.test(text)) flags.push("uuid");
+  if (DIGIT_RUN_RE.test(text)) flags.push("digit_run");
+  if (NUMBER_RE.test(text)) flags.push("number");
+  // The regexes are /g, so `lastIndex` survives a call and the next test
+  // on the same expression resumes mid-string. Resetting is not optional.
+  for (const re of [QUOTED_RE, EMAIL_RE, UUID_RE, DIGIT_RUN_RE, NUMBER_RE]) re.lastIndex = 0;
+  return flags;
+}
+
+/**
+ * Bound authored text without editing it (D-115). The cap still exists —
+ * an unbounded column is a different problem — but a bound that bites
+ * silently is the same defect this ruling removes, so it reports.
+ */
+export function boundText(text: string, max: number): { text: string; truncated: boolean } {
+  return text.length <= max ? { text, truncated: false } : { text: text.slice(0, max), truncated: true };
+}
+
+/**
+ * The storage decision for one field, in one place: authored text keeps
+ * its words and gains flags; derived text is scrubbed as it always was.
+ */
+export function storeText(
+  kind: string,
+  text: string,
+  max: number,
+): { text: string; flags: ValueFlag[] } {
+  if (!AUTHORED_KINDS.has(kind)) return { text: scrubText(text, max), flags: [] };
+  const bounded = boundText(text, max);
+  const flags = flagValues(bounded.text);
+  if (bounded.truncated) flags.push("truncated");
+  return { text: bounded.text, flags };
+}
+
 /** LED-R2 storage scrub: value-shaped content never lands in the ledger. */
 export function scrubText(text: string, max: number): string {
   return text
@@ -114,6 +178,9 @@ export interface LedgerEventResult {
   issueId: string;
   occurrences: number;
   routedTo: string;
+  /** D-115: what this submission was found to contain. Empty for every
+   * derived kind, whose text is scrubbed and so has nothing to report. */
+  valueFlags: ValueFlag[];
 }
 
 async function routeFor(client: pg.PoolClient, kind: string): Promise<string> {
@@ -132,15 +199,26 @@ async function routeFor(client: pg.PoolClient, kind: string): Promise<string> {
 export async function recordEvent(pool: pg.Pool, input: LedgerEventInput): Promise<LedgerEventResult> {
   const fingerprint = fingerprintOf(input.kind, input.scope);
   const ts = input.ts ?? new Date();
+  // The title is generated from the scope this server derived — never
+  // authored — so D-66.5's scrub applies to it under every kind.
   const title = scrubText(`${input.kind}: ${input.scopeLabel ?? input.scope}`, TITLE_MAX);
-  const description = input.description ? scrubText(input.description, DESCRIPTION_MAX) : null;
-  // LED-R2 for the §4 amendment's proposal payload, enforced *here* —
-  // at storage, on the one path both inlets share (the dashboard's
-  // request form and flag_gap) — so no inlet can carry an unscrubbed or
-  // unbounded value into a row, whatever it passes.
+  // D-115: description and proposal are handled *here*, at storage, on
+  // the one path both inlets share (the dashboard's request form and
+  // flag_gap), so neither inlet can diverge. For an authored kind the
+  // words are kept and the value patterns are reported; for anything
+  // derived, LED-R2 scrubs exactly as it did.
+  const valueFlags = new Set<ValueFlag>();
+  let description: string | null = null;
+  if (input.description) {
+    const stored = storeText(input.kind, input.description, DESCRIPTION_MAX);
+    description = stored.text;
+    for (const f of stored.flags) valueFlags.add(f);
+  }
   const detail = { ...(input.detail ?? {}) };
   if (typeof detail.proposal === "string") {
-    detail.proposal = scrubText(detail.proposal, PROPOSAL_MAX);
+    const stored = storeText(input.kind, detail.proposal, PROPOSAL_MAX);
+    detail.proposal = stored.text;
+    for (const f of stored.flags) valueFlags.add(f);
   }
   const client = await pool.connect();
   try {
@@ -181,8 +259,8 @@ export async function recordEvent(pool: pg.Pool, input: LedgerEventInput): Promi
       `INSERT INTO ledger_events
          (event_id, ts, detector_class, kind, fingerprint, system, object_fqn,
           subject, session_id, profile, audit_ref, kb_ref, snapshot_ref,
-          description, detail, issue_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          description, detail, issue_id, value_flags)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       [
         randomUUID(),
         ts,
@@ -200,6 +278,7 @@ export async function recordEvent(pool: pg.Pool, input: LedgerEventInput): Promi
         description,
         JSON.stringify(detail),
         issue.issue_id,
+        [...valueFlags],
       ],
     );
     await client.query(
@@ -214,6 +293,11 @@ export async function recordEvent(pool: pg.Pool, input: LedgerEventInput): Promi
       issueId: issue.issue_id,
       occurrences: issue.occurrences,
       routedTo,
+      // D-115: returned so the inlet can tell the filer what their own
+      // submission was found to contain, at the moment they send it.
+      // Both inlets relay it — the form renders it, `flag_gap` puts it
+      // in the tool response for the agent to say out loud.
+      valueFlags: [...valueFlags],
     };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
@@ -291,6 +375,9 @@ export interface TriageIssue extends GapIssue {
    * than guessing at it (§4: `batched → approved`, note recorded). */
   return_note: string | null;
   returned_at: string | null;
+  /** D-115: the union of what this issue's filings were found to
+   * contain, so the warning reaches the steward on the card itself. */
+  value_flags: ValueFlag[];
 }
 
 export interface TriageFilter {
@@ -355,7 +442,13 @@ export async function listTriageIssues(pool: pg.Pool, filter: TriageFilter): Pro
             i.verdict_reason, i.batch_id, i.resolution, i.return_note,
             to_jsonb(i.returned_at) #>> '{}' AS returned_at,
             (SELECT max(e.detector_class) FROM ledger_events e
-              WHERE e.issue_id = i.issue_id) AS detector_class
+              WHERE e.issue_id = i.issue_id) AS detector_class,
+            -- D-115: the union of what this issue's filings contain, so
+            -- a steward sees the warning on the card without opening the
+            -- stream. Per-event detail stays on the event.
+            (SELECT coalesce(array_agg(DISTINCT f), '{}')
+               FROM ledger_events e, unnest(e.value_flags) AS f
+              WHERE e.issue_id = i.issue_id) AS value_flags
        FROM ledger_issues i
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
       ORDER BY i.occurrences DESC, i.distinct_subjects DESC, i.last_seen DESC, i.issue_id DESC
@@ -380,6 +473,10 @@ export interface LedgerEventRow {
   description: string | null;
   detail: Record<string, unknown>;
   issue_id: string;
+  /** D-115: what this submission's own text was found to contain — a
+   * warning attached to the filing, not to the issue several people
+   * may share. */
+  value_flags: ValueFlag[];
   /** Issue-level context, so an event stream can be rendered alone. */
   issue_status: string;
   issue_kind: string;
@@ -424,7 +521,7 @@ export async function listEvents(
     `SELECT e.event_id, to_jsonb(e.ts) #>> '{}' AS ts,
             e.detector_class, e.kind, e.system, e.object_fqn,
             e.subject, e.session_id, e.profile, e.audit_ref, e.kb_ref,
-            e.description, e.detail, e.issue_id,
+            e.description, e.detail, e.issue_id, e.value_flags,
             i.status AS issue_status, i.kind AS issue_kind, i.routed_to
        FROM ledger_events e
        JOIN ledger_issues i ON i.issue_id = e.issue_id
@@ -447,7 +544,13 @@ export async function getIssue(pool: pg.Pool, issueId: string): Promise<TriageIs
             i.verdict_reason, i.batch_id, i.resolution, i.return_note,
             to_jsonb(i.returned_at) #>> '{}' AS returned_at,
             (SELECT max(e.detector_class) FROM ledger_events e
-              WHERE e.issue_id = i.issue_id) AS detector_class
+              WHERE e.issue_id = i.issue_id) AS detector_class,
+            -- D-115: the union of what this issue's filings contain, so
+            -- a steward sees the warning on the card without opening the
+            -- stream. Per-event detail stays on the event.
+            (SELECT coalesce(array_agg(DISTINCT f), '{}')
+               FROM ledger_events e, unnest(e.value_flags) AS f
+              WHERE e.issue_id = i.issue_id) AS value_flags
        FROM ledger_issues i WHERE i.issue_id = $1::uuid`,
     [issueId],
   );

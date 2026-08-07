@@ -369,3 +369,14 @@ ul.worklist li { padding: 0.2rem 0; display: flex; gap: 0.5rem; flex-wrap: wrap;
 .disposition p { margin: 0.2rem 0; }
 ul.worklist li.stacked { flex-direction: column; align-items: flex-start; gap: 0.1rem; }
 .panel h4 { margin: 0.8rem 0 0.35rem; font-size: 0.95rem; display: flex; align-items: baseline; gap: 0.4rem; }
+
+/* D-115: what the value patterns found in text a person authored. A
+   notice, not an error — the text was stored exactly as written, and the
+   steward is the one who decides whether it belongs in the KB. Amber
+   rather than red for that reason: nothing here failed. */
+.value-flags {
+  margin-top: 0.45rem; padding: 0.45rem 0.75rem; font-size: 0.86rem;
+  border-left: 3px solid var(--amber, #b8860b); background: var(--bg);
+  border-radius: 0 0.35rem 0.35rem 0; color: var(--muted);
+}
+.value-flags strong { color: var(--fg); }

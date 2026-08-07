@@ -1,0 +1,26 @@
+-- D-115: authored text is stored verbatim and its value patterns are
+-- reported rather than deleted (fault-ledger §3.3 amendment).
+--
+-- Found live on the pilot as B1-F6: a reporter submitted subscription
+-- prices through the request form, LED-R2's scrub removed every numeral
+-- at storage, the steward approved a sentence with its payload gone, and
+-- nothing anywhere said so. The original rule was written for text this
+-- server *generates* from query terms; it had been applied unchanged to
+-- the one field whose whole purpose is words a person chose to write.
+--
+-- The flags are what the scrub would have deleted, recorded instead of
+-- acted on: email | uuid | digit_run | number | quoted | truncated.
+-- They are shown to the filer at submission and to the steward on the
+-- queue — a warning both humans can act on, never a refusal.
+--
+-- On the event rather than the issue: one issue can carry events from
+-- several people (dedup is the point — occurrences=11 is eleven filings),
+-- and "this submission contains an email address" is a fact about one
+-- submission, not about the issue they share. Read surfaces aggregate.
+ALTER TABLE ledger_events ADD COLUMN value_flags text[] NOT NULL DEFAULT '{}';
+
+-- Existing rows predate the ruling and were scrubbed on the way in, so
+-- an empty array is the truthful value for them: nothing was flagged
+-- because nothing was kept to flag. Deliberately not backfilled — the
+-- deleted values are unrecoverable (B1-F6), and inventing a flag for a
+-- row whose text was already gutted would assert something false.

@@ -22,8 +22,9 @@
  * because the word "deliver" invites the other reading.
  *
  * **The proposal is quoted, never adopted** (D-114.8, DT-12). It renders
- * through `<Text>` like every server string — already scrubbed at storage
- * (LED-R2) and neutralized at the render boundary (LED-R5) — and it is
+ * through `<Text>` like every server string — neutralized at the render
+ * boundary (LED-R5), and since D-115 stored as the requester wrote it
+ * rather than scrubbed, with a notice naming what it contains — and it is
  * labelled as the requester's words rather than shown in the product's
  * own voice, because chrome reads as endorsement unless something says
  * otherwise.
@@ -64,6 +65,48 @@ const STATUS_NOTE: Record<string, string> = {
   resolved: "a merged pull request answered it",
   dismissed: "closed without a change",
 };
+
+/**
+ * D-115. What the value patterns FOUND, said plainly — the text itself
+ * is stored exactly as the person typed it. Before this ruling the same
+ * patterns deleted their matches at storage, which is how a reporter's
+ * subscription prices became a sentence with holes in it and nobody was
+ * told (B1-F6). A warning both humans can act on replaces an edit
+ * neither of them could see.
+ */
+const FLAG_WORDS: Record<string, string> = {
+  number: "numbers",
+  digit_run: "a long digit run (an id, account or card number shape)",
+  email: "an email address",
+  uuid: "a UUID",
+  quoted: "quoted text",
+  truncated: "more text than the field holds — the end was cut",
+};
+
+/* The prop values are deliberately NOT role names: DT-2 asserts the
+   shipped bundle contains no role string, because a client that knows a
+   role is a client that could decide with it. This picks wording, not
+   permission — "author" wrote the text, "reviewer" is reading it. */
+function ValueFlags({ flags, audience }: { flags: string[]; audience: "author" | "reviewer" }) {
+  if (!flags || flags.length === 0) return null;
+  const words = flags.map((f) => FLAG_WORDS[f] ?? f);
+  return (
+    <div className="value-flags">
+      <strong>Contains {words.join(", ")}.</strong>{" "}
+      {audience === "author" ? (
+        <>
+          Stored exactly as you wrote it — nothing was removed. A steward reads it before anything
+          is drafted from it, so send only what you are content for your data team to read.
+        </>
+      ) : (
+        <>
+          Stored as the filer wrote it. Read it before approving: you are the person who decides
+          whether this belongs in the knowledge base.
+        </>
+      )}
+    </div>
+  );
+}
 
 function StatusPill({ issue }: { issue: Issue }) {
   return (
@@ -398,6 +441,8 @@ function IssueCard({
         <Text value={STATUS_NOTE[issue.status] ?? issue.status} />
       </div>
 
+      <ValueFlags flags={issue.value_flags} audience="reviewer" />
+
       {/* D-106.5: a rejected request refiled reopens, and its prior
           verdict is deliberately kept. "Rejected before, refiled by N
           more" is the sentence the steward needs, so it is written. */}
@@ -517,14 +562,21 @@ function FileForm({ csrf, onFiled }: { csrf: string | null; onFiled: () => void 
   const [proposal, setProposal] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [filed, setFiled] = useState<{ issue_id: string; occurrences: number; routed_to: string } | null>(null);
+  const [filed, setFiled] = useState<
+    { issue_id: string; occurrences: number; routed_to: string; value_flags?: string[] } | null
+  >(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
     setFiled(null);
-    const res = await api.post<{ issue_id: string; occurrences: number; routed_to: string }>(
+    const res = await api.post<{
+      issue_id: string;
+      occurrences: number;
+      routed_to: string;
+      value_flags?: string[];
+    }>(
       kind === "request" ? "/v1/dashboard/ledger/requests" : "/v1/dashboard/ledger/gaps",
       {
         description,
@@ -616,6 +668,7 @@ function FileForm({ csrf, onFiled }: { csrf: string | null; onFiled: () => void 
           <Text value={filed.occurrences} /> occurrence(s), routed to{" "}
           <Text value={filed.routed_to} />.
           {filed.occurrences > 1 && " Somebody had already asked for this — your filing added to it."}
+          <ValueFlags flags={filed.value_flags ?? []} audience="author" />
         </div>
       )}
     </form>

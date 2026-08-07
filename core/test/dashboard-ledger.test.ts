@@ -127,54 +127,118 @@ describe("ledger triage writes (§5.3) — inlets, verdicts, batches", () => {
 
   // -- LED-R2 scrub + bounds + LED-R5 render ---------------------------------
 
-  describe("proposal scrub and bounds (LED-R2 at storage, LED-R5 at render)", () => {
-    it("stores a hostile proposal scrubbed, and serves it inert", async () => {
+  describe("authored text is kept and flagged; derived text is still scrubbed (D-115)", () => {
+    it("stores an authored proposal verbatim, flags what it contains, and still serves it inert", async () => {
       const issueId = await fileRequest(rig, reporter, {
         description: "the payments doc omits chargeback handling",
         proposal: NASTY_PROPOSAL,
       });
 
-      // LED-R2 at storage: value-shaped tokens never land in the row.
-      const { rows } = await rig.core.pool.query<{ detail: { proposal: string } }>(
-        `SELECT detail FROM ledger_events WHERE issue_id = $1`,
-        [issueId],
-      );
+      // D-115 at storage: the person's words are kept, all of them. The
+      // ruling that changed this was bought by B1-F6 — a reporter's
+      // subscription prices deleted at storage, the steward approving a
+      // sentence with its payload gone, and nobody told at any point.
+      const { rows } = await rig.core.pool.query<{
+        detail: { proposal: string };
+        value_flags: string[];
+      }>(`SELECT detail, value_flags FROM ledger_events WHERE issue_id = $1`, [issueId]);
       const stored = rows[0]!.detail.proposal;
-      expect(stored).not.toContain("ops@example.com");
-      expect(stored).not.toContain("swordfish"); // quoted literal
-      expect(stored).not.toContain("abc123456789"); // id-shaped digit run
-      expect(stored).not.toContain("42");
-      expect(stored.length).toBeLessThanOrEqual(PROPOSAL_MAX);
+      expect(stored).toBe(NASTY_PROPOSAL);
+      expect(stored).toContain("ops@example.com");
+      expect(stored).toContain("swordfish");
+      expect(stored).toContain("abc123456789");
+      expect(stored).toContain("42");
 
-      // LED-R5 at render: markdown/HTML metacharacters are inert.
+      // ...and the patterns that used to delete now report. This is the
+      // whole of the exchange: a warning two humans can act on, in place
+      // of an edit neither of them could see.
+      expect([...rows[0]!.value_flags].sort()).toEqual(
+        ["digit_run", "email", "number", "quoted"].sort(),
+      );
+
+      // LED-R5 at render is UNCHANGED and matters more now, not less:
+      // verbatim storage means the render boundary is the only thing
+      // between a hostile submission and a steward's browser.
       const view = await apiGet(rig, reporter, `/v1/dashboard/ledger/issues/${issueId}`);
       expect(view.status).toBe(200);
-      const served = (view.json.events as { detail: { proposal: string } }[])[0]!.detail.proposal;
-      expect(served).not.toContain("<script");
-      expect(served).not.toContain("**");
-      expect(served).not.toContain("](");
-      expect(served).toContain("&lt;script");
+      const event = (view.json.events as { detail: { proposal: string }; value_flags: string[] }[])[0]!;
+      expect(event.detail.proposal).not.toContain("<script");
+      expect(event.detail.proposal).not.toContain("**");
+      expect(event.detail.proposal).not.toContain("](");
+      expect(event.detail.proposal).toContain("&lt;script");
+      // The filer's own copy of the warning rides the event.
+      expect(event.value_flags).toContain("email");
+
+      // And the steward reads it on the issue itself, without opening
+      // the stream — the union across every filing on that issue.
+      const list = await apiGet(rig, steward, `/v1/dashboard/ledger?status=all&limit=100`);
+      const issue = (list.json.issues as { issue_id: string; value_flags: string[] }[]).find(
+        (i) => i.issue_id === issueId,
+      )!;
+      expect(issue.value_flags).toContain("email");
     });
 
-    it("bounds an oversized proposal at 2000, decoupled from description (D-106.4)", async () => {
+    it("tells the filer what their submission contains, at the moment they file it", async () => {
+      // The half B1-F6 was actually about. The old rule edited silently;
+      // a filer who is not told cannot re-send what was removed.
+      const res = await apiPost(rig, reporter, "/v1/dashboard/ledger/requests", {
+        description: "weekly subscription is 4.99 dollars, monthly 14.99",
+      });
+      expect(res.status).toBe(201);
+      expect(res.json.value_flags).toContain("number");
+
+      const { rows } = await rig.core.pool.query<{ description: string }>(
+        `SELECT description FROM ledger_events WHERE issue_id = $1`,
+        [res.json.issue_id],
+      );
+      // The pilot's own sentence, and the exact thing that was lost.
+      expect(rows[0]!.description).toContain("4.99");
+      expect(rows[0]!.description).toContain("14.99");
+    });
+
+    it("a derived kind is still scrubbed — LED-R2's threat model is untouched", async () => {
+      // class 2: the *agent* wrote this description from a session, which
+      // is the case D-66.5 was written for. The line is provenance, not
+      // detector class or field name.
+      const result = await callTool(rig, rig.token("reporter"), "reporter", "flag_gap", {
+        kind: "missing_doc",
+        description: "no doc for the ledger table holding balance 4321.55 for ops@example.com",
+        object: "supabase.public.orders",
+      });
+      expect(result.isError).toBe(false);
+      const { rows } = await rig.core.pool.query<{ description: string; value_flags: string[] }>(
+        `SELECT description, value_flags FROM ledger_events WHERE issue_id = $1`,
+        [result.payload.issue_id],
+      );
+      expect(rows[0]!.description).not.toContain("4321.55");
+      expect(rows[0]!.description).not.toContain("ops@example.com");
+      // Nothing to warn about: the values are gone, as they always were.
+      expect(rows[0]!.value_flags).toEqual([]);
+    });
+
+    it("bounds an oversized proposal at 2000 and says that it did", async () => {
       const issueId = await fileRequest(rig, reporter, {
         description: "the inventory doc is missing entirely",
         proposal: "overlong ".repeat(400), // ~3600 chars
       });
-      const { rows } = await rig.core.pool.query<{ detail: { proposal: string } }>(
-        `SELECT detail FROM ledger_events WHERE issue_id = $1`,
-        [issueId],
-      );
+      const { rows } = await rig.core.pool.query<{
+        detail: { proposal: string };
+        value_flags: string[];
+      }>(`SELECT detail, value_flags FROM ledger_events WHERE issue_id = $1`, [issueId]);
       expect(rows[0]!.detail.proposal.length).toBeLessThanOrEqual(PROPOSAL_MAX);
+      // D-115: a bound that bites silently is the same defect the ruling
+      // removed, so truncation reports itself like everything else.
+      expect(rows[0]!.value_flags).toContain("truncated");
       // D-106.4: the alias is gone by intent. Suggested content carries
       // enum decodings and structure sketches; a description does not.
       expect(PROPOSAL_MAX).toBe(2000);
       expect(DESCRIPTION_MAX).toBe(500);
     });
 
-    it("keeps a long structural proposal intact — the point of the wider bound", async () => {
-      // What a real proposal looks like: an enum decoded line by line.
-      // Under the old 500-char alias this arrived truncated mid-table.
+    it("keeps an enum decoding intact — the content the wide bound was for", async () => {
+      // Under D-106.4 this survived the *length* bound and was then
+      // gutted by the scrub: `0 = pending` became `= pending`, which is
+      // the exact contradiction D-115 resolves.
       const enumSketch = Array.from(
         { length: 40 },
         (_, i) => `status_${String.fromCharCode(97 + (i % 26))}${i} means the order is in stage ${i}`,
@@ -190,15 +254,14 @@ describe("ledger triage writes (§5.3) — inlets, verdicts, batches", () => {
         [issueId],
       );
       const stored = rows[0]!.detail.proposal;
-      expect(stored.length).toBeGreaterThan(DESCRIPTION_MAX);
-      // The tail survived — the old bound cut this proposal in a third.
-      expect(stored).toContain("status_n39");
-      // Nothing about the scrub relaxed: the bare stage numbers still go.
-      expect(stored).toContain("means the order is in stage");
-      expect(/stage \d/.test(stored)).toBe(false);
+      expect(stored).toBe(enumSketch);
+      // The stage numbers ARE the decoding. Before D-115 this assertion
+      // was inverted, and that inversion is what made the field useless.
+      expect(/stage \d/.test(stored)).toBe(true);
+      expect(stored).toContain("stage 39");
     });
 
-    it("MT-14: flag_gap carries the same proposal treatment from a session", async () => {
+    it("MT-14: flag_gap carries the same treatment, and relays the warning to the agent", async () => {
       const result = await callTool(rig, rig.token("reporter"), "reporter", "flag_gap", {
         kind: "enrichment_request",
         description: "sessions have no documented retention rule",
@@ -208,10 +271,13 @@ describe("ledger triage writes (§5.3) — inlets, verdicts, batches", () => {
         subject: "somebody-else",
       });
       expect(result.isError).toBe(false);
-      // The response shape is unchanged by the amendment.
+      // D-115 widens the response: the agent is told what the user's
+      // submission contains so it can say so out loud, which is the
+      // session-side half of the same warning the form renders.
       expect(Object.keys(result.payload).sort()).toEqual(
-        ["issue_id", "occurrences", "refs", "routed_to"].sort(),
+        ["issue_id", "occurrences", "refs", "routed_to", "value_flags", "value_flags_note"].sort(),
       );
+      expect(result.payload.value_flags).toContain("email");
 
       const { rows } = await rig.core.pool.query<{
         subject: string;
@@ -226,8 +292,7 @@ describe("ledger triage writes (§5.3) — inlets, verdicts, batches", () => {
       expect(rows[0]!.kind).toBe("enrichment_request");
       // §4: a human submission, recorded class 3 as result_disputed is.
       expect(rows[0]!.detector_class).toBe(3);
-      expect(rows[0]!.detail.proposal).not.toContain("ops@example.com");
-      expect(rows[0]!.detail.proposal).not.toContain("swordfish");
+      expect(rows[0]!.detail.proposal).toBe(NASTY_PROPOSAL);
       expect(rows[0]!.detail.proposal.length).toBeLessThanOrEqual(PROPOSAL_MAX);
     });
   });

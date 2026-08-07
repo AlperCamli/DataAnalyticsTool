@@ -376,6 +376,22 @@ Relay `occurrences` when it is greater than 1 — *"you're the third person
 to ask for this"* is worth saying, and it is the argument that gets the
 request approved.
 
+**And relay `value_flags` if the response carries them** (D-115). They
+name what the server found in the text — numbers, an email address, a
+long digit run — and the submission was **stored exactly as written**, so
+this is a notice and not a rejection:
+
+> Filed as written. It contains numbers and an email address; a steward
+> reads it before anything is drafted, so it is worth knowing what you
+> sent.
+
+Say it plainly and move on. Do **not** offer to re-file it without the
+values, do not edit their words, and do not treat the flags as an error —
+the whole point of the ruling behind them is that what belongs in the
+knowledge base is the steward's call, not yours. The one case worth a
+sentence of your own is `truncated`: the field's bound cut the end off,
+and only the user can decide what to re-send.
+
 **What this is not.** You are not writing to the knowledge base and you
 must not say you are. A request is *worth drafting* at best until a human
 merges a reviewed diff; the honest sentence is "I've filed it", never

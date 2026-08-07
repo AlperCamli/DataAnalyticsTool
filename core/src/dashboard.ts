@@ -28,7 +28,11 @@
  * reproduce. Ledger text is the opposite case and is treated so: §5.3
  * requires server-scrubbed output, so titles, descriptions, rejection
  * reasons and proposals leave here already LED-R2-scrubbed (at storage)
- * and LED-R5-neutralized (here, at the render boundary).
+ * and LED-R5-neutralized (here, at the render boundary). D-115 narrowed
+ * the storage half: text a *person* authored (enrichment_request,
+ * human_filed, result_disputed) is stored verbatim and carries
+ * `value_flags` naming what it was found to contain. The neutralization
+ * here is unchanged and matters more for it, not less.
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -547,6 +551,10 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
     returned: issue.returned_at
       ? { at: issue.returned_at, note: issue.return_note === null ? null : neutralize(issue.return_note) }
       : null,
+    // D-115: what this issue's filings were found to contain, so the
+    // steward reads the warning on the card rather than discovering it
+    // in a diff. The text itself is stored as the person wrote it.
+    value_flags: issue.value_flags ?? [],
   });
 
   app.get("/v1/dashboard/ledger", async (req, reply) => {
@@ -654,6 +662,10 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
       issue_status: event.issue_status,
       issue_kind: event.issue_kind,
       routed_to: event.routed_to,
+      // D-115: what this one submission was found to contain. On the
+      // event, not the issue: "this filing has an email in it" is a fact
+      // about one person's words, and an issue can hold eleven filings.
+      value_flags: event.value_flags ?? [],
     };
   };
 
@@ -782,6 +794,10 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
       issue_id: result.issueId,
       occurrences: result.occurrences,
       routed_to: result.routedTo,
+      // D-115: the filer is told, at the moment of filing, what their
+      // own submission was found to contain. Stored as written — this
+      // is a warning they can act on, never an edit made behind them.
+      value_flags: result.valueFlags,
     });
   });
 
@@ -800,6 +816,10 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
       issue_id: result.issueId,
       occurrences: result.occurrences,
       routed_to: result.routedTo,
+      // D-115: the filer is told, at the moment of filing, what their
+      // own submission was found to contain. Stored as written — this
+      // is a warning they can act on, never an edit made behind them.
+      value_flags: result.valueFlags,
     });
   });
 

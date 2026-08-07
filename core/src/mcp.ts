@@ -809,8 +809,10 @@ async function toolFlagGap(ctx: CallContext, args: Record<string, unknown>): Pro
     kbRef: ctx.ws.headSha,
     snapshotRef: refsEnvelope(ctx.ws).snapshot_ref,
     description,
-    // Stored as `detail.proposal`; `recordEvent` runs the LED-R2 scrub
-    // and the same length bound `description` gets, at storage.
+    // Stored as `detail.proposal`. For an authored kind `recordEvent`
+    // keeps the words and reports what they contain (D-115); for a
+    // derived kind it scrubs, as LED-R2 always did. Either way the same
+    // length bound applies, at storage.
     ...(proposal !== null ? { detail: { proposal } } : {}),
   });
   return {
@@ -818,6 +820,17 @@ async function toolFlagGap(ctx: CallContext, args: Record<string, unknown>): Pro
       issue_id: result.issueId,
       occurrences: result.occurrences,
       routed_to: result.routedTo,
+      // D-115: the filer is told what their own submission was found to
+      // contain, at the moment of filing. The skill relays this — a
+      // warning the person can act on beats a silent edit they cannot.
+      ...(result.valueFlags.length > 0
+        ? {
+            value_flags: result.valueFlags,
+            value_flags_note:
+              "Stored as written. Tell the user their submission contains " +
+              `${result.valueFlags.join(", ")} and that a steward will read it.`,
+          }
+        : {}),
       refs: refsEnvelope(ctx.ws),
     },
     resultMeta: { issue_id: result.issueId, occurrences: result.occurrences },

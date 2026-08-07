@@ -6089,3 +6089,106 @@ no MCP response-shape change — additive and probably right, still a spec
 surface), and **no §9 acceptance scenario** was added for the
 volunteered-knowledge clause, which is why the clause states its own
 evidence gap in prose instead.
+
+## D-115 — authored text is flagged, never edited (owner ruling, 2026-08-07)
+
+**Issued during the B-1 gate demo, on the evidence of B1-F6** — which the
+demo produced in the most direct way available: the operator's reporter
+filed a knowledge request carrying the app's subscription prices, and the
+ledger stored their sentence with every numeral deleted.
+
+> typed: "…we have a weekly subscription **4.99** dollars…"
+> stored: "…we have a weekly subscription dollars…"
+
+The steward then approved a request whose payload was gone, and **nobody
+was told at any point** — not the filer at submission, not the steward at
+verdict. The values are unrecoverable: the scrub runs at insert, there is
+no pre-scrub column, and the filing writes no audit row (B1-F7), so no
+copy was ever made anywhere.
+
+### The ruling, in the owner's terms
+
+> "The numbers should travel in the requests safely and they should be
+> added to the KB if a reporter sends it and the steward should decide if
+> it will be added or not. **It is not our business to decide that.**"
+
+And, on what to do with the patterns instead of applying them:
+
+> "Instead of stripping we should add a warning to the request so that
+> the steward can see the warning… so do not strip, just warn the steward
+> and the reporter, but do not block it."
+
+Both halves adopted. **A product that silently removes what somebody
+typed has already decided the question the steward exists to decide.**
+
+### What changed
+
+1. **LED-R2 narrows to *derived* text** (fault-ledger §3.3 amendment).
+   The D-66.5 rule was written for text the machine produces — query
+   terms lifted out of a session, and the titles and descriptions
+   generated from them — and was then applied unchanged to the one field
+   whose purpose is words a person chose to write. Generated titles and
+   every detector-authored description are scrubbed exactly as before;
+   **the threat model is untouched everywhere it actually applies.**
+2. **The line is provenance, not field name or detector class.** Three
+   kinds carry a person's own words — `enrichment_request`,
+   `human_filed`, `result_disputed` — and store `description` and
+   `proposal` verbatim through both inlets. `benchmark_regression` is
+   class 3 and deliberately excluded: the harness writes it, not a human.
+3. **Detection still runs and now reports**: `email`, `uuid`,
+   `digit_run`, `number`, `quoted`, plus `truncated` when a length bound
+   bites — because a bound that bites silently is the same defect. The
+   flags reach **both** humans: the filer in the POST response and the
+   `flag_gap` payload (with a note telling the agent to say it out loud),
+   the steward on the queue card. **Nothing is refused and nothing is
+   rewritten.**
+4. **On the event, not the issue.** One issue can hold eleven filings
+   from eleven people; "this submission contains an email address" is a
+   fact about one of them. Read surfaces aggregate the union.
+
+### What now carries the protection
+
+Not one of the real defences relaxes, and verbatim storage raises the
+stakes on all of them: **LED-R5** inert rendering (the only thing between
+a hostile submission and a steward's browser — re-asserted on the
+verbatim payload), **M-4** visibility filtering, **LED-R3** server-set
+identity, the length bounds, **DT-12** keeping requester text out of a PR
+diff, and the steward's verdict — a human reading the words before
+anything is drafted from them. The v1 stance is now stated rather than
+implied: an authored proposal is **intentional disclosure by its author
+to their own data team**.
+
+### The contradiction this resolves
+
+**D-106.4 widened `proposal` to 2000 characters, four days before the
+demo, with the stated reason that "suggested content legitimately carries
+enum decodings and structure sketches."** An enum decoding is
+`0 = pending, 1 = paid`. The scrub deleted the codes and left `= pending,
+= paid`. Two amendments to the same section, in the same fortnight, one
+making room for content the other removed — and the regression test for
+the wide bound asserted `/stage \d/` was **false**, encoding the defect
+as intended behaviour. That assertion is now inverted, which is the
+sharpest single statement of what changed.
+
+### Evidence
+
+`core/test/dashboard-ledger.test.ts` — the hostile payload stored byte
+for byte and flagged `digit_run, email, number, quoted` while still
+serving inert; the pilot's own "4.99 / 14.99" sentence surviving with the
+filer told at 201; **a class-2 `missing_doc` still scrubbed, with empty
+flags**, which is the assertion that keeps the narrowing honest;
+truncation reporting itself; the enum decoding intact; and MT-14's
+widened response shape. Migration `0015_value_flags.sql`.
+
+*Caught by a test, and worth recording:* the first cut passed
+`audience="steward"` to the warning component, which put a role name in
+the shipped bundle and **failed DT-2**. The prop is now `author` /
+`reviewer` — it picks wording, never permission — and the test was not
+touched. DT-2 exists for exactly the case where a role string arrives for
+an innocent reason.
+
+*Fence.* This is outside D-114.3's three authorized amendments and was
+taken on the owner's explicit ruling above, spec amended first per the
+project's amendment process. B1-F7 (the unaudited filing inlet) and
+B1-F8 (S1b's unreachable token) are **filed, not fixed** — neither is
+this ruling's subject.

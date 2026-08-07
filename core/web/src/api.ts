@@ -227,6 +227,9 @@ export interface Issue {
   resolution: Record<string, unknown> | null;
   disposition: { enrichable: boolean; actor: string; next_act: string; why: string };
   returned: { at: string; note: string | null } | null;
+  /** D-115: what this issue's filings were found to contain. The text is
+   * stored as written; this is the warning, not a record of an edit. */
+  value_flags: string[];
 }
 
 export interface IssueList {
@@ -247,6 +250,7 @@ export interface LedgerEvent {
   description: string | null;
   detail: Record<string, unknown>;
   routed_to: string;
+  value_flags: string[];
 }
 
 export interface IssueDetail {
