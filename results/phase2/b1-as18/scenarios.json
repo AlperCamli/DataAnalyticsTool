@@ -1,0 +1,77 @@
+{
+  "generated_at": "2026-08-07T13:01:16.053293Z",
+  "model_id": "claude-opus-5",
+  "fixture": {
+    "base": "http://127.0.0.1:59100",
+    "execution": false
+  },
+  "verdict": "PASS",
+  "scenarios": [
+    {
+      "scenario": "AS-18 enrich queue-driven batch (S1b)",
+      "skill": "enrich",
+      "profile": "steward",
+      "passed": true,
+      "session_id": "223bc4f8-7f87-4579-bebd-10385413a042",
+      "cost_usd": 1.1523914999999998,
+      "audit_tools": [
+        "list_gaps",
+        "get_table",
+        "search_context",
+        "get_table",
+        "get_table",
+        "get_table",
+        "get_table",
+        "search_context"
+      ],
+      "assertions": [
+        {
+          "name": "AS-18: a drafted doc cites `customer-provided, <name>, <date>`",
+          "ok": true,
+          "detail": "sources per doc: [['customer-provided, rene-reporter, 2026-08-07', 'machine sibling: systems/drill/shop/orders.schema.md (snapshot sha256:2af8bf2cafdc4791e15b3e397701c05c5f2bce0df8db01b08a86674bed30cf0c)', 'view definition: drill.reporting.v_order_totals (snapshot sha256:2af8bf2cafdc4791e15b3e397701c05c5f2bce0df8db01b08a86674bed30cf0c)']]"
+        },
+        {
+          "name": "CP-E5: the proposal-only draft claims no grounding it did not have",
+          "ok": true,
+          "detail": "sources graded exactly customer-provided"
+        },
+        {
+          "name": "AS-18: the citation names the filer the LEDGER recorded, not the request body",
+          "ok": true,
+          "detail": "ledger subject='rene-reporter'; sources=[['customer-provided, rene-reporter, 2026-08-07', 'machine sibling: systems/drill/shop/orders.schema.md (snapshot sha256:2af8bf2cafdc4791e15b3e397701c05c5f2bce0df8db01b08a86674bed30cf0c)', 'view definition: drill.reporting.v_order_totals (snapshot sha256:2af8bf2cafdc4791e15b3e397701c05c5f2bce0df8db01b08a86674bed30cf0c)']]"
+        },
+        {
+          "name": "DT-12: no requester text appears verbatim in the diff",
+          "ok": true,
+          "detail": "the drafts cite the submission without quoting it"
+        },
+        {
+          "name": "AS-18: request \u2192 doc mapping and exactly one CL-Resolves, for the satisfied request",
+          "ok": true,
+          "detail": "mapping present; one trailer; returned item named"
+        },
+        {
+          "name": "CP-E3: no `status: verified` written by the skill",
+          "ok": true,
+          "detail": "drafts land as draft \u2014 certification is the human merging the diff"
+        },
+        {
+          "name": "AS-18/B1-F9: the skill hands the undraftable one back and does not claim it returned it",
+          "ok": true,
+          "detail": "the report names the item as needing a steward's return"
+        },
+        {
+          "name": "the return inlet moves it to `approved` with its note (harness-performed \u2014 B1-F9)",
+          "ok": true,
+          "detail": "status='approved', batch_id=None, note='no object named and no metric doc matches; unblocked by naming which table or metric this is about'"
+        },
+        {
+          "name": "AS-18: the returned request appears in no CL-Resolves trailer",
+          "ok": true,
+          "detail": "its absence from the trailers is what keeps it open"
+        }
+      ],
+      "agent_result": "Done. Both files are in `out/`.\n\n**The batch** (`list_gaps(status: \"batched\", kind: \"enrichment_request\")`, the only channel this mode has) \u2014 two requests, both filed by `rene-reporter` at `2026-08-07T12:57:09Z`, neither carrying `value_flags`, so no truncation to work around:\n\n| Request | Asks for | Outcome |\n|---|---|---|\n| `c5423c1f-\u2026` `drill.shop.orders` discount | what the `discount` column holds and how it relates to `net` | drafted \u2192 `out/orders.md` |\n| `b5ebc4fd-\u2026` \"the churn number\" | churn, written down somewhere findable | **handed back** |\n\n**Drafted \u2014 `out/orders.md`** (`systems/drill/shop/orders.md`). Purposes live in front-matter (CP-E4); the body carries only what a one-liner can't. Grounding splits cleanly in two:\n\n- The two claims the request was actually about \u2014 `discount` is money not a rate, `net` is stored post-deduction \u2014 rest on `customer-provided, rene-reporter, 2026-08-07` and nothing else. No DDL, migration, or app source for `drill` exists in this working copy, so that's S1b outcome (2): cited at exactly that tier, not dressed up. The doc's first warning says so in its own voice.\n- Everything structural comes from the snapshot: PK, the FK to `shop.customers.id`, `created_at DEFAULT now()`, and the absence of any check constraint \u2014 which is what makes the deduction a convention rather than an invariant.\n\nThe most useful thing in the doc is something the request didn't ask for but the machine facts settled: **the reporting rollups ignore both columns.** `v_order_totals` computes `items_total` as `sum(qty * price)` over `order_items` and never reads `orders.net` or `orders.discount`; `v_net_sales` aggregates that. If the customer's convention holds, per-customer reporting net sales is a pre-discount figure and will exceed `sum(orders.net)` wherever a discount is non-zero. That's observed from view SQL, not inferred.\n\n`status` was deliberately left with **no** purpose \u2014 `text`, default `'new'`, no check constraint, so `'new'` is the only grou"
+    }
+  ]
+}

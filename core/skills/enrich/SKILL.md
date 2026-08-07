@@ -54,6 +54,52 @@ got wrong.
 
 ---
 
+## S0 — Your working copy (do this first)
+
+You write documents into a git clone of the KB and open a pull request
+from it. **You provision that clone yourself**, at one fixed path:
+
+```bash
+# The remote is named in your CLAUDE.md ("Knowledge base"). It is also
+# available from the core: curl -s $CL_CORE_URL/healthz | grep kb_remote
+KB=~/cl-steward/kb
+[ -d "$KB/.git" ] || git clone "$KB_REMOTE" "$KB"
+git -C "$KB" checkout main && git -C "$KB" pull --ff-only
+git -C "$KB" status --porcelain          # must be empty before you start
+```
+
+Four things about this, each of which has cost somebody an hour:
+
+- **`~/cl-steward/kb`, not somewhere under `~/Desktop` or `~/Documents`.**
+  Those directories are OS-protected on macOS: a session reaching into
+  them stalls on a consent dialog nobody is watching. One fixed path also
+  means the next session finds the clone rather than making a second one.
+- **Authentication is yours, not the bundle's.** Your setup bundle carries
+  no credential and never will (PA-1). The clone uses your own git
+  credential helper — the same one your `git push` already uses. If the
+  clone asks for a password, that is a git configuration problem to fix
+  in the open, not something to route around.
+- **A dirty or diverged working copy stops you.** Say what is uncommitted
+  and let the person decide. Never `reset --hard` somebody's work to make
+  a batch run.
+- **Pull before every batch.** Drafting against a stale main is how you
+  produce a PR whose re-render conflicts with a merge from yesterday.
+
+**And the toolchain, which lives in the clone too.** S4 asks you to
+re-render and validate before opening the PR, and the library that does
+both is vendored in the KB itself — the same wheel KB CI installs, so
+what you run locally is what the pull request will be judged by:
+
+```bash
+python3 -m venv "$KB/.venv" && "$KB/.venv/bin/pip" -q install "$KB"/.github/vendor/*.whl
+"$KB/.venv/bin/python" -m generator.validate "$KB"      # sanity: 0 errors before you start
+```
+
+If `.github/vendor/` is missing or its wheel will not install, **say so
+and stop before drafting**: a batch you cannot validate is a batch you
+cannot honestly open a PR for, and discovering that after writing ten
+documents wastes the run.
+
 ## S1 — Scope (checkpoint CP-E1)
 
 Pick a bounded batch, **default ≤ 10 objects** (SP-3). Priority order:
@@ -105,27 +151,83 @@ batch came from and two rules that apply per item.
 
 ### Getting the batch
 
-The requests live in the fault ledger and are read through the governed
-API as **you**, with your own token — the same identity the MCP tools
-use. Two calls:
+**One call, over the channel you are already authenticated on:**
 
-```bash
-# The delivered work list: enrichment_request issues stamped `batched`.
-curl -sS -H "authorization: Bearer $CL_TOKEN" \
-  "$CL_CORE_URL/v1/dashboard/ledger?status=batched&kind=enrichment_request"
-
-# Per request: the event stream, which carries who asked, when, and the
-# proposal text they submitted.
-curl -sS -H "authorization: Bearer $CL_TOKEN" \
-  "$CL_CORE_URL/v1/dashboard/ledger/issues/<issue-id>"
 ```
+list_gaps(status: "batched", kind: "enrichment_request")
+```
+
+Each issue comes back with the filing behind it:
+
+```
+filing: { by, at, description, proposal, value_flags }
+```
+
+- `by` and `at` are **what the ledger recorded** — the server set them at
+  filing time and no client can supply them. They are the name and date
+  your citation uses.
+- `description` and `proposal` are the person's own words, stored as they
+  wrote them.
+- `value_flags` says what detection found in that submission (`number`,
+  `email`, `quoted`, `truncated`, …). It is a **warning, not a verdict**:
+  the values are all there. Where a flag says `truncated`, the submission
+  hit a length bound — say so in the PR body rather than drafting from
+  half a sentence as if it were whole.
 
 All requests sharing one `batch_id` are one batch. At most ten
 (SP-3 unchanged). If the queue hands you more, you were given more than
 one batch — do one.
 
+**There is no other way in, and this is deliberate.** An earlier version
+of this page told you to `curl` the dashboard's ledger API with a bearer
+token. **You do not have one**: your setup bundle carries no credential,
+and the token your MCP connection uses is held by the client, not by your
+shell. If `list_gaps` is not in your tool list, your profile does not
+grant it — say so and stop. Do not go looking for a token; there isn't
+one to find, and inventing one is a governance bypass rather than a
+workaround.
+
 **State the batch first, as in S1**: which requests, what each asks for,
 and what you expect to be able to ground. That is still CP-E1.
+
+### Where the evidence comes from in this mode — and where it does not
+
+**Read the request and the estate. Nothing else.** This is the one place
+the skill's usual instinct is wrong, so it is stated before the drafting
+rules rather than after them (owner ruling D-117):
+
+| Allowed | Not allowed |
+|---|---|
+| the request's own words (`filing.description`, `filing.proposal`) | the customer's **application source**, or any repository |
+| the snapshot and machine sibling (`get_table`) | files elsewhere on the machine |
+| existing KB docs, entity docs, conventions | searching for a second source to corroborate or contradict |
+
+S2's evidence list below is for batches **you** scoped, where tracking a
+migration down is the whole job. A request-driven item is different: the
+person asking *is* the source, and a doc grounded in something the estate
+cannot see is a claim no drift check will ever re-examine.
+
+**If the request is not specific enough to draft from, ask.** If there is a
+human in this session, ask them — plainly, in one question. If there is
+not, hand the item back with the question as its note. **A question is a
+legitimate outcome of a batch.** Guessing is not, and neither is going
+looking.
+
+### If the doc that should carry it cannot be written, wait
+
+A request usually points at one obvious doc. When that doc is
+**`contaminated`** (or otherwise refuses to be built on), **do not put the
+content somewhere else that happens to be writable.** Redirecting looks
+helpful and quietly splits the estate's meaning across two docs, one of
+which nobody asked about.
+
+Hand it back instead, naming the doc it is waiting for:
+
+> `<issue-id>` — belongs on `systems/supabase/public/subscriptions.md`,
+> which is `status: contaminated` (`refuse-unless-override`). Waiting for
+> that doc to be repaired to `draft`; the content goes in then.
+
+The request stays open, which is the truth: nobody has answered it yet.
 
 ### The approved request is a citation — of the weakest useful kind
 
@@ -167,38 +269,47 @@ requester text appears verbatim in the batch PR's diff.
 
 For each request in the batch, exactly one of:
 
-1. **Grounded beyond the proposal.** You found DDL, a customer doc, usage
-   evidence. Cite what you found, graded normally, and cite the request
-   alongside it. Normal drafting.
+1. **Draftable from the request against the estate's own facts.** The
+   request says what a column means or what a value is, the snapshot
+   confirms the column exists and the machine sibling agrees, and the doc
+   can be written. This is the normal case in this mode, and the citation
+   is the request — plus the estate's own facts where they carry part of
+   the claim. **Not** a hunt for a stronger source: see the scope rule
+   above.
 
-2. **Groundable no further than the proposal.** Nothing corroborates it
-   and nothing contradicts it. Draft it **citing exactly that provenance
-   and nothing better** — `customer-provided, <name>, <date>` alone. Do
+2. **Groundable no further than the proposal.** Which, in this mode, is
+   most of the time and is **fine**. Draft it **citing exactly that
+   provenance and nothing better** — `customer-provided, <name>, <date>`
+   alone. Do
    not dress it up with "inferred from column names" to make the sources
    list look sturdier; that is a claim you did not earn, and a reviewer
    reading a two-source list trusts the doc more than a one-source list
    deserves.
 
-3. **Undraftable.** You cannot write it without guessing — the request is
-   too vague, names an object that does not exist, or asks for something
-   the estate cannot answer. **Return it to the queue**, with a note
-   saying what evidence would unblock it:
+3. **Undraftable — or blocked.** You cannot write it without guessing (the
+   request is too vague, names an object that does not exist, asks
+   something the estate cannot answer), **or** the doc it belongs on
+   refuses to be written (contaminated). **Hand it back**, explicitly:
 
-   ```bash
-   curl -sS -X POST -H "authorization: Bearer $CL_TOKEN" \
-     -H "content-type: application/json" \
-     -d '{"note": "no object named and no metric doc matches; unblocked by naming which table or metric this is about"}' \
-     "$CL_CORE_URL/v1/dashboard/ledger/issues/<issue-id>/return"
-   ```
+   - name it in the PR body's **Returned to the queue** section, with the
+     note that matters — *what evidence would unblock it*, specifically
+     enough that the person who asked can supply it;
+   - leave it out of the `CL-Resolves` trailers. That absence is what
+     keeps the request open;
+   - **tell the steward, in words, that it needs returning** — one line
+     naming the issue id and the note.
 
-   That moves it back to `approved` and clears its batch stamp, so the
-   next batch picks it up when the evidence arrives. Also leave it out of
-   the trailers and name it in the PR body's returned section. Never
-   guess it into prose nobody can source.
+   Never guess it into prose nobody can source.
 
-   The note is required, and it is required for a reason: a return
-   without one reads as `approved` to the next steward and tells them
-   nothing about why it came back.
+   **Say "handed back", not "returned to the queue", unless you moved the
+   ledger row** — and you cannot: `batched → approved` is a governed write
+   with no tool on your side of the wire (finding B1-F9). The steward
+   moves it. Claiming a state change you did not make is the same class of
+   error as claiming a doc entered the KB when you only opened a PR.
+
+   The note is required, and it is required for a reason: a request that
+   comes back without one reads as `approved` to the next steward and
+   tells them nothing about why.
 
 An honest skip beats a fabricated draft. That rule does not soften
 because a steward approved the request — approval means *worth drafting*,
@@ -296,11 +407,12 @@ the same doc.
 ## S4 — Self-check
 
 Run the KB CI validation locally **before** opening the PR. Two commands,
-both from the KB clone root:
+both from the KB clone root, using the venv S0 provisioned from the
+clone's own vendored wheel:
 
 ```bash
-python -m generator.render .contextlayer/snapshots/<system>.json --out .
-python -m generator.validate .
+.venv/bin/python -m generator.render .contextlayer/snapshots/<system>.json --out .
+.venv/bin/python -m generator.validate .
 ```
 
 The render is the **regeneration duty**: your front-matter purposes only
@@ -353,14 +465,42 @@ request → doc mapping**, as its own section, before the trailers:
 | `<issue-id>` how are refunds counted? | `systems/supabase/public/refunds.md` | customer-provided + app DDL |
 | `<issue-id>` what does status=2 mean? | `systems/supabase/public/orders.md` | customer-provided only |
 
-### Returned to the queue
+### Handed back — needs returning to the queue
 
 - `<issue-id>` "the churn number" — no object named and no metric doc
   matches; unblocked by naming which table or metric this is about.
+  **Still `batched`: the steward has to return it** (no session-side
+  inlet — see the honesty rule above).
 
 CL-Resolves: <issue-id-of-the-first>
 CL-Resolves: <issue-id-of-the-second>
 ```
+
+### Then check that CI actually reported
+
+**A pull request with no check is not a pull request that passed.** After
+opening it, from the working copy:
+
+```bash
+python3 .claude/skills/enrich/ci_gate.py <pr-number>
+```
+
+It waits for a check run on the PR's head commit, and if none appears it
+causes one (close + reopen — the same lever a person would pull) and
+waits again. Read its exit code before you say a word about the PR being
+ready:
+
+| Exit | Means | What you say |
+|---|---|---|
+| 0 | a check ran and passed | the PR is ready to review, with the run URL |
+| 1 | a check ran and failed | the diff is wrong; fix it, do not hand it over |
+| 2 | **no check ever reported** | say exactly that, and that it must not be merged on this evidence |
+
+Exit 2 is not a failure of your work and must not be reported as one —
+nor as a success. It happened on this project's own KB (PR #40, D-116.4):
+the run was simply absent at open time, and the absence looked precisely
+like a pass. Relay the run URL when there is one; a bare "CI is green" is
+a claim the reader cannot check.
 
 **One trailer per request the batch actually satisfies, and no others.**
 A returned item's absence from the trailers is what keeps it open — that

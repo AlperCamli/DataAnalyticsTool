@@ -103,6 +103,69 @@ describe("profile compilation", () => {
     expect(setup.warnings).toEqual([]);
   });
 
+  it("D-116.7 / B1-F5: a steward bundle names the KB remote and the working-copy path", async () => {
+    // The finding: S3–S5 said "from the KB clone root" and nothing ever
+    // put a clone anywhere, or said where one goes, or what to clone.
+    const skillsRoot = await scratchSkills({
+      enrich: "# enrich\nbody\n",
+      report: "# report\nbody\n",
+    });
+    const raw = YAML.parse(REPORTER) as Record<string, unknown>;
+    raw.skills = ["enrich"];
+    const setup = await compileProfile("steward", raw, {
+      publicUrl: "https://ctx.acme.internal",
+      skillsRoot,
+      kbRemote: "https://github.example/acme/kb.git",
+    });
+    expect(setup.claudeMd).toContain("https://github.example/acme/kb.git");
+    expect(setup.claudeMd).toContain("~/cl-steward/kb");
+    // And the address is not a credential: PA-1 is untouched.
+    expect(setup.claudeMd).not.toMatch(/token|password|ghp_/i);
+
+    // A reporter has no working copy, so the section is absent rather
+    // than telling them where a clone they will never make would go.
+    const reporter = await compileProfile("reporter", YAML.parse(REPORTER), {
+      publicUrl: "https://ctx.acme.internal",
+      skillsRoot,
+      kbRemote: "https://github.example/acme/kb.git",
+    });
+    expect(reporter.claudeMd).not.toContain("~/cl-steward/kb");
+
+    // A core with no remote configured says so — a named path that
+    // cannot be cloned is worse than the honest sentence.
+    const unconfigured = await compileProfile("steward", raw, {
+      publicUrl: "https://ctx.acme.internal",
+      skillsRoot,
+      kbRemote: null,
+    });
+    expect(unconfigured.claudeMd).toContain("no KB remote configured");
+    // PA-2: and it is a different setup, so it stamps differently.
+    expect(unconfigured.stamp).not.toBe(setup.stamp);
+  });
+
+  it("keeps build residue out of the bundle (determinism, and the stamp)", async () => {
+    // Found while adding enrich/ci_gate.py: importing a skill-local Python
+    // tool — which this repo's own pytest suite does — leaves a
+    // __pycache__ beside it, and the walk was taking everything. A
+    // machine-specific .pyc in the archive moves the setup stamp for a
+    // reason no operator can see, on a bundle documented as
+    // byte-identical per profile state.
+    const skillsRoot = await scratchSkills({ enrich: "# enrich\n" });
+    await mkdir(path.join(skillsRoot, "enrich", "__pycache__"), { recursive: true });
+    await writeFile(path.join(skillsRoot, "enrich", "__pycache__", "t.cpython-312.pyc"), "\0\0binary");
+    await writeFile(path.join(skillsRoot, "enrich", "helper.py"), "print('shipped')\n");
+    await writeFile(path.join(skillsRoot, "enrich", ".DS_Store"), "junk");
+
+    const raw = YAML.parse(REPORTER) as Record<string, unknown>;
+    raw.skills = ["enrich"];
+    const setup = await compileProfile("steward", raw, {
+      publicUrl: "https://ctx.acme.internal",
+      skillsRoot,
+    });
+    const shipped = setup.skills[0]!.files.map((f) => f.path);
+    expect(shipped).toEqual(["helper.py"]);
+  });
+
   it("writes the layout Claude Code reads", async () => {
     const skillsRoot = await scratchSkills({ report: "# report\n" });
     const setup = await compileProfile("reporter", YAML.parse(REPORTER), {

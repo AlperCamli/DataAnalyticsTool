@@ -48,6 +48,7 @@ import type { KbReader, KbState } from "./kbread.js";
 import {
   ENRICHMENT_REQUEST,
   FLAG_GAP_KINDS,
+  LIST_GAPS_STATUSES,
   listIssues,
   normalizeQueryTerms,
   recordEvent,
@@ -231,11 +232,16 @@ const TOOL_DEFS: { name: string; description: string; inputSchema: Record<string
   },
   {
     name: "list_gaps",
-    description: "Steward-gated triage reads over the fault ledger issues.",
+    description:
+      "Steward-gated triage reads over the fault ledger issues. Each issue carries the most recent filing behind it — " +
+      "the words the person wrote, and the identity and timestamp the server recorded for them, which is what a citation " +
+      "may name. Use status 'batched' to read a delivered knowledge-request batch, and 'approved' for the approved worklist.",
     inputSchema: {
       type: "object",
       properties: {
-        status: { type: "string", enum: ["open", "triaged"], default: "open" },
+        // §6.11.1 (D-116.5): the verdict statuses are filterable;
+        // `rejected`/`resolved` are not, because neither is work.
+        status: { type: "string", enum: [...LIST_GAPS_STATUSES], default: "open" },
         kind: { type: "string" },
         system: { type: "string" },
         limit: { type: "number", default: 20 },
@@ -848,8 +854,20 @@ async function toolListGaps(ctx: CallContext, args: Record<string, unknown>): Pr
       reason: `profile ${ctx.profile.name} is not steward-gated`,
     };
   }
+  // §6.11.1: an unsupported status is refused rather than silently
+  // read as `open`. `rejected` is the one a caller is most likely to
+  // try, and answering it with the open queue would be a lie about
+  // which rows it just read.
+  const status = typeof args.status === "string" ? args.status : "open";
+  if (!(LIST_GAPS_STATUSES as readonly string[]).includes(status)) {
+    return err(
+      "invalid_argument",
+      `status must be one of ${LIST_GAPS_STATUSES.join(", ")}; a rejected or resolved request is ` +
+        "not work, and the dashboard's ledger read is the full-history surface",
+    );
+  }
   const issues = await listIssues(ctx.deps.pool, {
-    status: typeof args.status === "string" ? args.status : "open",
+    status,
     ...(typeof args.kind === "string" ? { kind: args.kind } : {}),
     ...(typeof args.system === "string" ? { system: args.system } : {}),
     limit: Number(args.limit ?? 20) || 20,
@@ -866,11 +884,24 @@ async function toolListGaps(ctx: CallContext, args: Record<string, unknown>): Pr
         kind: issue.kind,
         title: neutralize(issue.title),
         ...(issue.object_fqn ? { object_fqn: issue.object_fqn } : {}),
+        status: issue.status,
         occurrences: issue.occurrences,
         distinct_subjects: issue.distinct_subjects,
         first_seen: issue.first_seen,
         last_seen: issue.last_seen,
         links: issue.links,
+        // §6.11.1 (D-116.5): the filing behind the issue — inert text
+        // (LED-R5), the server's own identity and timestamp (LED-R3),
+        // and D-115's flags travelling with the words they describe.
+        filing: issue.filing
+          ? {
+              by: issue.filing.by,
+              at: issue.filing.at,
+              description: issue.filing.description === null ? null : neutralize(issue.filing.description),
+              ...(issue.filing.proposal !== null ? { proposal: neutralize(issue.filing.proposal) } : {}),
+              value_flags: issue.filing.value_flags ?? [],
+            }
+          : null,
       })),
       refs: refsEnvelope(ctx.ws),
     },
@@ -1002,7 +1033,13 @@ export function registerMcp(app: FastifyInstance, deps: McpDeps): void {
     // report its profile already permitted. The notice below is the
     // signal that was missing.
     const notice = setupNotice(
-      freshnessOf(presentedStamp, await currentStamp(ws, profileName, rawProfile, cfg.mcp.publicUrl)),
+      freshnessOf(
+        presentedStamp,
+        // Same inputs as the download compiles from, including the KB
+        // remote (D-116.7) — a stamp computed from different inputs than
+        // the bundle would report staleness that is not there.
+        await currentStamp(ws, profileName, rawProfile, cfg.mcp.publicUrl, cfg.sync.gitRemote || null),
+      ),
       cfg.mcp.publicUrl,
     );
 

@@ -517,4 +517,106 @@ describe("ledger triage writes (§5.3) — inlets, verdicts, batches", () => {
       expect((res.json.count as number)).toBeLessThanOrEqual(rig.core.cfg.dashboard.batchMax);
     });
   });
+
+  // -- MT-15: the batch is readable over the channel a session has ----------
+  //
+  // Finding B1-F8. S1b told the session to read its batch from
+  // `/v1/dashboard/ledger` with a bearer token; a compiled bundle carries
+  // no credential (PA-1) and the MCP client's token is not reachable from
+  // the session's shell, so the instruction named a token that cannot
+  // exist. The fix is the tool the session already holds (D-116.5), so
+  // the test is: file → approve → deliver → read it back with `list_gaps`,
+  // and get everything a citation needs.
+
+  describe("MT-15: list_gaps reads the delivered batch (§6.11.1, D-116.5)", () => {
+    it("returns the filing verbatim, inert, with the identity the server recorded", async () => {
+      const proposal =
+        'A refund is counted in the month the credit note is issued, not the order month. ' +
+        NASTY_PROPOSAL;
+      const issueId = await fileRequest(rig, reporter, {
+        description: "nothing says which month a refund lands in",
+        proposal,
+      });
+      expect(
+        (await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, { verdict: "approve" }))
+          .status,
+      ).toBe(200);
+      const batch = await apiPost(rig, steward, "/v1/dashboard/ledger/batches", { max: 10 });
+      expect(batch.status).toBe(201);
+
+      const listed = await callTool(rig, rig.token("steward"), "steward", "list_gaps", {
+        status: "batched",
+        kind: "enrichment_request",
+        limit: 50,
+      });
+      expect(listed.isError).toBe(false);
+      const issues = listed.payload.issues as {
+        issue_id: string;
+        status: string;
+        filing: { by: string; at: string; description: string; proposal?: string; value_flags: string[] };
+      }[];
+      const mine = issues.find((i) => i.issue_id === issueId);
+      expect(mine, "the batched request is readable over MCP").toBeTruthy();
+      expect(mine!.status).toBe("batched");
+
+      // What citation needs: whose words, and when — from the ledger, not
+      // from the body of the request (LED-R3).
+      expect(mine!.filing.by).toBe(USERS.reporter.username);
+      expect(mine!.filing.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+      // The words themselves: nothing deleted (D-115 — an authored
+      // proposal is flagged, never edited). The email and the number are
+      // still there; LED-R5 has defused the metacharacters around them,
+      // which is a different operation from removing content and this
+      // pair of assertions is what tells them apart.
+      expect(mine!.filing.proposal).toContain("credit note is issued");
+      expect(mine!.filing.proposal).toContain("42");
+      expect(mine!.filing.proposal).toContain("ops&#64;example.com");
+      expect(mine!.filing.proposal).not.toContain("<script>");
+      expect(mine!.filing.description).not.toContain("<script>");
+      // The stored row is the un-neutralized original — the escaping is a
+      // property of this render point, not of the ledger.
+      const { rows: stored } = await rig.core.pool.query<{ detail: { proposal: string } }>(
+        `SELECT detail FROM ledger_events WHERE issue_id = $1`,
+        [issueId],
+      );
+      expect(stored[0]!.detail.proposal).toBe(proposal);
+
+      // … and the warning travels with the words.
+      expect(mine!.filing.value_flags).toContain("email");
+      expect(mine!.filing.value_flags).toContain("number");
+    });
+
+    it("a reporter's call is still permission_denied, and returns no issue", async () => {
+      const denied = await callTool(rig, rig.token("reporter"), "reporter", "list_gaps", {
+        status: "batched",
+      });
+      expect(denied.isError).toBe(true);
+      expect(denied.payload.code).toBe("permission_denied");
+      expect(denied.payload).not.toHaveProperty("issues");
+    });
+
+    it("`rejected` is refused rather than silently read as the open queue", async () => {
+      const bad = await callTool(rig, rig.token("steward"), "steward", "list_gaps", {
+        status: "rejected",
+      });
+      expect(bad.isError).toBe(true);
+      expect(bad.payload.code).toBe("invalid_argument");
+      expect(String(bad.payload.message)).toContain("not work");
+    });
+
+    it("`approved` reads the worklist a batch has not yet claimed", async () => {
+      const issueId = await fileRequest(rig, reporter, {
+        description: "the dunning schedule is written down nowhere",
+      });
+      await apiPost(rig, steward, `/v1/dashboard/ledger/issues/${issueId}/verdict`, { verdict: "approve" });
+      const listed = await callTool(rig, rig.token("steward"), "steward", "list_gaps", {
+        status: "approved",
+        kind: "enrichment_request",
+        limit: 50,
+      });
+      const ids = (listed.payload.issues as { issue_id: string }[]).map((i) => i.issue_id);
+      expect(ids).toContain(issueId);
+    });
+  });
 });

@@ -226,6 +226,13 @@ Per the D-101.2 amendment, the same module carries the **knowledge-request queue
 
 **`list_gaps` tool (MCP; L-7):** `list_gaps(status=open|triaged, kind?, system?, limit=20)` → issues as `{issue_id, kind, title, object_fqn?, occurrences, distinct_subjects, first_seen, last_seen, links}`. Read-only; allowlisted in the Steward (and `benchmark`) profile templates only; visibility-filtered — an issue attributed to an object the caller's role cannot see is omitted (M-4 consistently applied). This is the enrich skill's S1 priority-1 input, straight from the session.
 
+**Amendment (D-116.5, 2026-08-07) — `approved`/`batched` filterable, and the filing behind the issue.** The tool's own spec section is now normative for its shape: **MCP spec §6.11.1**. Two consequences for the rules named here:
+
+- **LED-R7 is unchanged where it is a rule about `distinct_subjects`**: that field stays a count, and nothing in a response says which people are behind it. Its second half — *"individual identities are reachable solely via `audit_ref`"* (security review #1) — **is narrowed to match the surface that already ships**: the dashboard's issue view has named the filer of an event to a steward since D-114, on the reasoning that a steward reads every audit row's subject under D-102.2 and withholding it on one surface is theatre. `list_gaps` was the inconsistent surface, and it was the one the enrich skill reads. Non-steward profiles are refused as before.
+- **LED-R5 applies to the newly returned text**, as it already did to `title` — the queue, `list_gaps`, and any PR body citing it, unchanged.
+
+The **write** half of the same loop — the `batched → approved` return in the §4 diagram — has no session-reachable inlet and is *not* addressed here (finding B1-F9).
+
 ## 9. Loop closure (L-5)
 
 A KB PR whose body carries one or more `CL-Resolves: <issue-id>` trailers resolves those issues on merge: the core (git-provider webhook it already has for CI triggers) sets `resolved`, `resolved_by: pr`, `resolution: {kind, pr_url}`. The enrich skill writes the trailer automatically for every batch item that originated from the ledger (amendment, §12). Post-merge events on the same fingerprint reopen per L-4 — which is precisely the test of whether the repair actually worked, measured by the same instrument that found the problem.

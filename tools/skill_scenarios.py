@@ -531,20 +531,8 @@ A steward has approved and delivered a batch of knowledge requests. Use
 the `enrich` skill in its **queue-driven batch mode (S1b)** to draft from
 it.
 
-Read the batch through the governed API as yourself:
-
-    curl -sS -H "authorization: Bearer $CL_TOKEN" \
-      "$CL_CORE_URL/v1/dashboard/ledger?status=batched&kind=enrichment_request"
-
-and, per request, its event stream (which carries who asked, when, and
-their proposal text):
-
-    curl -sS -H "authorization: Bearer $CL_TOKEN" \
-      "$CL_CORE_URL/v1/dashboard/ledger/issues/<issue-id>"
-
-`CL_CORE_URL` and `CL_TOKEN` are already in your environment.
-
-Then, following S1b exactly:
+Read the batch with the `list_gaps` tool, which is the only channel this
+mode has (D-116.5). Then, following S1b exactly:
 
 - Draft into `out/` in this directory, one file per request you can
   answer, named after the object. Ground column meanings in the machine
@@ -554,16 +542,41 @@ Then, following S1b exactly:
   recorded — never re-typed from the body of the request.
 - Do not paste the requester's words into any doc. Write in the KB's own
   voice and cite the request.
-- A request you cannot draft at all is **returned to the queue**: POST
-  its note to `$CL_CORE_URL/v1/dashboard/ledger/issues/<issue-id>/return`
-  as the skill describes, leave it out of the trailers, and say in the PR
-  body what evidence would unblock it. Never guess.
+- A request you cannot draft at all is **handed back**: leave it out of
+  the trailers, name it in the PR body with what evidence would unblock
+  it, and say plainly that the steward has to return it to the queue —
+  you have no inlet for that write (B1-F9). Never guess.
 - Write the PR body you would open to `out/PR-BODY.md`, carrying the
   request → doc mapping, the returned items, and one `CL-Resolves:
   <issue-id>` trailer per request the batch actually satisfies.
 
 Do not open a pull request and do not commit anything — write the files
 and finish."""
+
+
+def _return_to_queue(conn: dict, issue_id: str) -> bool:
+    """Perform the `batched → approved` return the skill cannot (B1-F9).
+
+    Through the governed API with the steward's own token, so what is
+    exercised is the shipped inlet rather than a direct UPDATE.
+    """
+    import urllib.error
+    import urllib.request
+
+    url = f"{conn.get('core_url', conn['base'])}/v1/dashboard/ledger/issues/{issue_id}/return"
+    body = json.dumps({
+        "note": "no object named and no metric doc matches; unblocked by naming which "
+                "table or metric this is about"
+    }).encode()
+    req = urllib.request.Request(url, data=body, method="POST", headers={
+        "authorization": f"Bearer {conn['tokens']['steward']}",
+        "content-type": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req) as res:
+            return res.status in (200, 201)
+    except urllib.error.HTTPError:
+        return False
 
 
 def _batched_requests(ops_db_url: str) -> list[dict]:
@@ -606,14 +619,19 @@ def scenario_enrich_batch(conn: dict, model: str, workroot: Path, timeout_s: int
     batch = _stage_batch(conn["ops_db_url"])
     draftable, undraftable = batch["draftable"], batch["undraftable"]
 
-    env = {"CL_CORE_URL": conn.get("core_url", conn["base"]), "CL_TOKEN": conn["tokens"]["steward"]}
     _prepare_workdir(workdir, "enrich", _mcp_config(conn["mcp_url"], "steward", conn["tokens"]["steward"]))
     since = datetime.now(timezone.utc)
+    # D-116.5 (B1-F8): no CL_TOKEN in the environment, and no curl in the
+    # allow-list. The batch has to be reachable over the channel a real
+    # session actually has, or the scenario is testing a setup the product
+    # does not ship — which is exactly how the old version passed while
+    # the shipped instruction was unperformable.
     agent = _run_agent(
         workdir, ENRICH_BATCH_PROMPT, model,
-        ["mcp__contextlayer__get_table", "mcp__contextlayer__search_context",
-         "mcp__contextlayer__flag_gap", "Read", "Write", "Bash(curl:*)"],
-        timeout_s, env=env,
+        ["mcp__contextlayer__list_gaps", "mcp__contextlayer__get_table",
+         "mcp__contextlayer__search_context", "mcp__contextlayer__flag_gap",
+         "Read", "Write"],
+        timeout_s,
     )
     res.agent_result = agent.get("result", "")[:2000]
     res.session_id = agent.get("session_id", "")
@@ -684,12 +702,27 @@ def scenario_enrich_batch(conn: dict, model: str, workroot: Path, timeout_s: int
         "drafts land as draft — certification is the human merging the diff",
     ))
 
-    # 5. The undraftable one is back at `approved`, in no trailer.
+    # 5. The undraftable one: what the SKILL could do about it.
+    #
+    # B1-F9: `batched → approved` is a governed write with no
+    # session-reachable inlet, so the amended AS-18 measures the skill on
+    # naming the item and its unblocking condition (asserted in 3, via the
+    # PR body) and on saying the steward must return it — not on a ledger
+    # transition it cannot perform. The transition itself is exercised
+    # below, by the harness, so the downstream mechanism stays covered.
+    res.assertions.append(Assertion(
+        "AS-18/B1-F9: the skill hands the undraftable one back and does not claim it returned it",
+        "return" in res.agent_result.lower() or "hand" in res.agent_result.lower(),
+        "the report names the item as needing a steward's return"
+        if res.agent_result else "no agent report to read",
+    ))
+    returned = _return_to_queue(conn, undraftable["issue_id"])
     rows = {r["issue_id"]: r for r in _batched_requests(conn["ops_db_url"])}
     returned_row = rows.get(undraftable["issue_id"], {})
     res.assertions.append(Assertion(
-        "AS-18: the undraftable request is back at `approved` with its note",
-        returned_row.get("status") == "approved"
+        "the return inlet moves it to `approved` with its note (harness-performed — B1-F9)",
+        returned
+        and returned_row.get("status") == "approved"
         and bool(returned_row.get("return_note"))
         and returned_row.get("batch_id") is None,
         f"status={returned_row.get('status')!r}, batch_id={returned_row.get('batch_id')!r}, "

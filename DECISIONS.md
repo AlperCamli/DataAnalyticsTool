@@ -6192,3 +6192,336 @@ taken on the owner's explicit ruling above, spec amended first per the
 project's amendment process. B1-F7 (the unaudited filing inlet) and
 B1-F8 (S1b's unreachable token) are **filed, not fixed** — neither is
 this ruling's subject.
+
+## D-116 — operator decisions + B-1 gate closure authorization (owner ruling, 2026-08-07)
+
+Recorded as issued. Clause 1 is a standing governance principle and is
+quoted rather than paraphrased, because paraphrasing it would be the
+first thing it forbids.
+
+1. **THE OPERATOR IS THE SOURCE OF TRUTH** (standing). Where an operator
+   decision conflicts with a standing ruling, sessions **realize the
+   operator's decision**; the cost is stated once, honestly, in
+   DECISIONS — never resisted, never silently absorbed.
+2. **PRICES: confirmed correct by the operator.** The batched request
+   stands — no deletion, no re-file. Provenance in any drafted doc:
+   `customer-confirmed, Alper, 2026-08-06`, because the figures were
+   session-typed during the D-115 fix and confirmed accurate by the
+   owner; the citation says so rather than attributing the typing to the
+   reporter. One line in the batch PR body records this.
+3. **SOLO-OPERATOR CERTIFICATION RULED OPENLY:** with one human holding
+   write access, **bypass-merge IS the certification act**. The record
+   stops pretending otherwise — playbook and KB conventions state
+   solo-operator mode plainly, and each bypass merge is the steward's
+   named act. Register trigger filed: a second human with write access
+   restores required-review; revisit then, not before.
+4. **KB-CI TRIGGER DEFECT** (PR #40 arrived as `CreateEvent`, no
+   `PushEvent`, no `pull_request` run): fix authorized — branch delivery
+   must produce CI runs, and **a merge with no reported check is only
+   acceptable when the check demonstrably ran.** Small conformance test.
+5. **B1-F8 FIX AUTHORIZED** (MCP-spec additive amendment, diff leads):
+   `list_gaps` accepts `approved|batched`, and returns description,
+   proposal and filer identity + filed date — what citation needs. The
+   loop then runs over the session's one authenticated channel and the
+   bearer-token question dissolves. Steward/benchmark gating stands;
+   LED-R7's counts-only rule (about `distinct_subjects`) is untouched.
+6. **B1-F7 FIX AUTHORIZED:** the two ledger POST inlets call the existing
+   governance-audit helper — one row per governed act now includes the
+   act that puts content in.
+7. **B1-F5 FIX AUTHORIZED:** the skill self-provisions its KB working
+   copy (standard path `~/cl-steward/kb`, from the `kb_remote` the bundle
+   carries), TCC-safe; specifics proposed in ≤5 lines. The bundle's
+   CLAUDE.md states the path.
+8. **MINOR:** the `enrichment_request` disposition string becomes a real
+   user-facing sentence, not an internal diagnostic.
+9. Acts 9–11, AS-18 behavioural evidence, same-day extraction,
+   FINDINGS.md (F5–F8), clause-by-clause gate check → **B-1 closed
+   honestly, or the failing clause named.**
+
+### D-116 as applied
+
+**Clause 4 — what the evidence actually says, which is not what the
+diagnosis said.** The authorization stands and the fix shipped, but the
+cause is recorded correctly because the wrong cause would have produced
+the wrong fix. Read from the GitHub API this session:
+
+| Time (UTC) | Event |
+|---|---|
+| 22:59:44 | `CreateEvent` branch `enrich/subscriptions-plan-code` |
+| 22:59:45 | PR #40 opened — **no workflow run** |
+| 23:06:23 / 23:06:27 | closed / reopened *by hand* — the operator's workaround |
+| 23:17:04 | `pull_request` run #31130430999 starts (**17m19s after opening**) |
+| 23:17:21 | it concludes `success` |
+| 23:17:59 | merged — 38 seconds after the first check went green |
+| 23:18:33 | a second `pull_request` run on the same head sha |
+
+Two corrections fall out. **A new branch legitimately produces a
+`CreateEvent` and no `PushEvent`** — GitHub does not emit one for branch
+creation, and every other PR in this KB (#36–#39, #41) shows the same
+pair while getting its run within ~3 seconds. So the delivery was not
+malformed. And the run was **late, not absent**: both runs eventually
+arrived, against an unmoved head sha, and the merge did in fact happen
+after a green check. What was true is the part that matters and is
+exactly what clause 4 names: **nothing in the path distinguished "no
+check yet" from "no check ever", and the absence was indistinguishable
+from a pass.** A person who had merged at 23:05 would have merged
+unchecked and never known.
+
+So the fix is not to change how branches are delivered — it is to make
+somebody look, mechanically: **`core/skills/enrich/ci_gate.py`**, shipped
+in the bundle beside the skill. It resolves the PR's *head sha* (a branch
+moves; a check run belongs to a commit), waits for a run, and if none has
+appeared within a grace window **causes one exactly once** by closing and
+reopening the PR — the same lever the operator pulled by hand, which
+fires `pull_request` without needing `workflow` token scope or a change
+to `kb-ci.yml`. Its exit codes are the point: **2 = no check ever
+reported** is deliberately not 1 = a check ran and failed. Both block a
+merge; only one is a defect in the diff, and collapsing them is how a
+gate gets ignored. `tests/test_ci_gate.py` covers all three paths with a
+stubbed `gh` and a stubbed clock, including that the remediation happens
+once and says so. KB spec §9 now carries the rule; the skill's S5 carries
+the step and the sentence *"the absence of a check is not a pass."*
+
+**Clause 5 — `list_gaps` widened; the loop's read half is reachable.**
+MCP spec **§6.11.1** leads (additive), with **MT-15** added to §9. The
+filter takes `approved|batched`; `rejected`/`resolved` are deliberately
+not filterable and are **refused rather than silently read as `open`** —
+this tool feeds work to a steward or a skill, and neither of those is
+work. Each issue now carries `filing: {by, at, description, proposal?,
+value_flags}` — **the most recent** filing, named as a single filing
+rather than flattening two events into one row, because the pilot case
+that produced this amendment has a first filing whose values the
+pre-D-115 scrub deleted and a refiling that carries them. `by`/`at` are
+server-set (LED-R3), so *"never re-typed from the body of the request"*
+stops being a rule to remember and becomes the shape of the data.
+
+Two things named rather than glossed:
+
+- **`value_flags` is a fifth field, beyond the four clause 5 lists.** It
+  is here because **D-115 clause 3** already requires the flags to reach
+  every human who reads the words, and returning the text without its
+  warning would re-open that defect on a new surface. Stated so the
+  addition is visible rather than smuggled.
+- **LED-R7's second half is narrowed, and this is the amendment.** The
+  rule as written by security review #1 says `distinct_subjects` is a
+  count *and* "individual identities are reachable solely via
+  `audit_ref`". The count half is untouched, as clause 5 directs. The
+  identity half was **already** untrue of the dashboard: its issue view
+  has named the filer of an event to a steward since D-114, on the
+  reasoning that a steward reads every audit row's subject anyway
+  (D-102.2) and withholding it on one surface is theatre. `list_gaps` was
+  the surface that disagreed — and it was the one the enrich skill reads.
+  The ledger spec §8 amendment records this in those terms.
+
+The skill's **S1b** now reads its batch through `list_gaps` and nothing
+else: the `curl`+`$CL_TOKEN` instructions are deleted, and the page says
+why in the imperative — *your setup bundle carries no credential, the
+MCP client's token is not in your shell, do not go looking for one.*
+
+**Clause 6 — the filing inlets are audited.** `dashboard.ledger.file.
+human_filed` and `dashboard.ledger.file.enrichment_request`, one row per
+filing, through the existing helper. `result_meta` carries
+`{issue_id, occurrences, value_flags}` — the fact of the act and what
+detection found, never the words, whose home is the ledger event under
+the ledger's own retention (L-8/LED-R6). Dashboard spec §5.1 amended.
+Worth stating plainly why this asymmetry mattered: D-114.1 covered every
+act that *changes* a request and omitted the act that *creates* one, so
+when the pre-D-115 scrub deleted the values out of a submission there was
+no record of the filing anywhere outside the row that had just been
+damaged. That is one of the reasons D-115 could say the values were
+unrecoverable.
+
+**Clause 7 — the working copy, as proposed in five lines and applied.**
+`~/cl-steward/kb`; cloned from the `kb_remote` the compiled bundle now
+names, `git pull --ff-only` after; **outside `~/Desktop` and
+`~/Documents`** because a working copy a session cannot reach without a
+consent dialog is a defect wearing a permissions costume; git auth is the
+operator's own credential helper and **the bundle still carries no
+credential** (PA-1, still asserted by canary); a dirty or diverged copy
+**stops** the skill rather than resetting somebody's work. `compileProfile`
+takes an optional `kbRemote` and emits a *Knowledge base* section only for
+bundles whose skills actually write documents — a reporter is not told
+where a clone they will never make would go — and a core with no remote
+configured **says so** instead of naming a path that cannot be cloned.
+
+*One thing S0 gained beyond the five lines, and it is the same defect:*
+S4 asks for a local render + validate, and **the library that does both
+was never provisioned either**. It is vendored in the KB itself
+(`.github/vendor/*.whl`, the same wheel KB CI installs), so S0 now builds
+a venv from the clone's own wheel and stops before drafting if it cannot.
+Provisioning a working copy that cannot run its own self-check would have
+closed half of B1-F5.
+
+*Consequence, stated because it will be seen:* the CLAUDE.md changed, so
+**every bundle compiled before today reports `stale`** at connection.
+That is the PA-2 mechanism working, not a fault.
+
+**Clause 8 — the disposition sentence.** `enrichment_request` had no row
+in the kind→disposition table, so the one lifecycle this product models
+end to end described itself to a steward as *"this core has no
+disposition recorded for the kind 'enrichment_request'"*. It now says
+what the verdict does and what approving does **not** do (no KB write,
+the merge still certifies), and it stays out of `ENRICHABLE_KINDS` —
+a request reaches a skill through a verdict and a delivered batch, never
+by being scraped off the queue. **No new rendering was added** (the fence
+forbids new screens, and the verdict panel already carries this text);
+what changed is the string every API caller receives.
+
+*Found while adding a skill-local Python tool, and fixed:* `readSkill`
+walked **everything** beside `SKILL.md`, so a `__pycache__` left by this
+repo's own pytest run rode into the compiled bundle — a machine-specific
+binary blob inside an archive documented as byte-identical per profile
+state, moving the setup stamp for a reason no operator could see. The
+`report` skill already had one. Now excluded (`__pycache__`, `*.pyc`,
+dotfiles), with a test. It is a hygiene fix rather than a spec change,
+and it makes an already-asserted property true.
+
+## D-117 — a request-driven doc is grounded in the request and the estate (owner ruling, 2026-08-07)
+
+**Issued during act 9's review, on the evidence of the pull request act 9
+opened.** The owner read PR #42 and rejected it, in these terms:
+
+> "I will reject this PR because there is information from the CV Builder
+> code base which we don't want because it is cheting for a test like
+> this. Instead when a public table wants to be enriched based on a
+> request the system should only add the requested information to the KB
+> and maybe ask questions to get more detail about it but it shouldn't get
+> information from other sources. Also the if we can't update the public
+> table's context since it is contaminated we can add this context later
+> when it is drafted or verified."
+
+Adopted in both halves.
+
+### What changed
+
+1. **Scope of evidence in queue-driven batch mode** (skill spec §6 S1b
+   amendment, and the shipped skill). A request is answered from **the
+   request** and **the estate's own facts** — the snapshot, the machine
+   sibling, existing KB docs. Not from the customer's application source,
+   not from any repository, not from files elsewhere on the machine, and
+   **not by going looking for a second source at all.** S2's evidence
+   ladder still governs batches the skill scopes for itself; it does not
+   govern this mode.
+2. **A question is a legitimate outcome of a batch.** Where the request is
+   not specific enough to draft from, the skill asks — the human in the
+   session if there is one, otherwise by handing the item back with the
+   question as its note.
+3. **A blocked target is deferred, never redirected.** If the doc that
+   should carry the knowledge is `contaminated` (the case here:
+   `public.subscriptions`, `refuse-unless-override`), the content does not
+   go onto some other doc that happens to be writable. The item is handed
+   back naming the doc it waits for, and the knowledge lands when that doc
+   is repaired to `draft` or `verified`. The request stays open, which is
+   the truth — nobody has answered it.
+
+### The cost, stated once (D-116.1) and not re-litigated
+
+Request-driven docs now land at the **weakest tier of the P4 ladder by
+construction**, even when stronger evidence sits a directory away. And a
+second source is also what catches a request that is simply *wrong*.
+
+This run is the demonstration, in both directions. Reading the
+application's own pricing constants found a **nine-cent disagreement** with
+the confirmed figures — `ANNUAL_TOTAL_PRICE = "$99.90"` and
+`PLAN_VALUE_USD.annual = 99.9` (last changed 2026-06-28) against the
+`99.99` in the request. Under this ruling that check does not happen and
+the KB records `99.99` with nothing to flag. Immaterial to a plan-mix
+report; material to a reconciliation against Stripe, and material in the
+other direction too — **if `99.99` is right, the pricing page has been
+displaying the wrong price since June.**
+
+Against which: a KB claim sourced from a private codebase is **invisible to
+every drift mechanism this product has** — no snapshot covers it, no
+contamination scan reaches it, and nothing will notice when it goes stale.
+And a demonstration that reaches outside the estate is not a demonstration
+of the estate, which is the owner's word for it: *cheating for a test like
+this.* Both are right, and the ruling is the owner's to make.
+
+**What the cost does not include:** the discrepancy itself is not lost.
+`flag_gap` filed it into the ledger during act 9 —
+`4c4ecb3d-fb41-4489-8d12-a13c0dd99a5f` (the annual-price conflict) and
+`0ddd0983-973b-49a3-9e3b-caa476c52b8c` (`public.subscriptions` asserting
+`plan_code ∈ {free, pro}`, which the application contradicts) — and those
+issues survive the pull request's rejection, routed to the data team. The
+ledger path for out-of-estate findings is untouched: **notice it, file it,
+do not document it.**
+
+### Consequences for the B-1 gate, recorded here rather than discovered later
+
+- **PR #42 is rejected on its content.** The doc it carried is discarded
+  with it.
+- **The one live request is now blocked, not draftable.** Its natural home
+  is `public.subscriptions`, which is `contaminated` (32 of 38 human docs
+  carry the same estate-wide `stat_changed: checks` marker from `users`),
+  so under clause 3 it defers. The batch produces no document until that
+  contamination is repaired — which is act 5b's work, not this loop's.
+- Therefore **D-101.5's end-to-end demonstration cannot complete today**,
+  and B-1's gate stays open on that clause. Named in the gate check rather
+  than softened: see `results/phase2/b1/GATE-CHECK.md`.
+- The governance half of the batch PR — the `conventions.md` solo-operator
+  section D-116.3 requires — was moved to **KB PR #43** so it does not die
+  with the rejection.
+
+### D-116.9 as applied — the gate, and what it turns on
+
+**Acts 9 ran; the gate stays open on one named clause.** Clause-by-clause
+evidence: `results/phase2/b1/GATE-CHECK.md`. Findings: **B1-F5..F12** in
+`results/phase2/b1/FINDINGS.md`. Same-day extraction through the governed
+APIs, committed beside them: `audit.json` (200 rows, 37 today, every one
+carrying its `setup_stamp`), `kb-health.json`, `ledger.json`,
+`ledger-events.json`, `filing-audit-fixture.json`.
+
+**Act 9 ran headless with the *compiled* steward bundle** against the live
+core — which is itself the D-116.7 evidence: the bundle's CLAUDE.md named
+the remote and `~/cl-steward/kb`, and the session's first act was to check
+out `main` and `pull --ff-only`. It read its batch with `list_gaps` and
+nothing else, drafted, re-rendered (`written 1 · unchanged 40`), validated
+`0 errors, 0 warnings`, opened **KB PR #42** with one `CL-Resolves`
+trailer and D-116.2's provenance line, ran `ci_gate.py` (exit 0, a
+`pull_request` run **3 seconds** after opening), and **handed it over
+unmerged**, saying so. One model call, $4.27.
+
+Then the owner rejected it, which is **D-117** above.
+
+**The failing clause, unsoftened: D-101.5's end-to-end demonstration.**
+Request → verdict → batch → PR all happened; the PR is rejected on its
+content, and under D-117 the request it was for now **defers** (its home
+doc is contaminated), so there is nothing to merge and the last two steps
+— merge as R2, the requester sees the resolution — are undone. Two short
+paths close it (GATE-CHECK §1); neither is a build.
+
+**A second clause is honest only as *tested, not demonstrated*:**
+reject-with-reason and the rejection half of F-10's badge. The runbook
+asked for three requests so a rejection would be exercised; one was filed
+and approved. The tests are green; **a passing test is not a
+demonstration** (D-78), and nothing in the record says otherwise.
+
+**AS-18's behavioural half: RUN, PASS 9/9** (`results/phase2/b1-as18/`).
+The verdict line matters less than the tool trail — `list_gaps → get_table
+→ search_context → …`, **no shell tool in the allow-list and no token in
+the environment.** Getting there needed the scenario's prompt rewritten
+off `curl` and its `CL_TOKEN` removed, which is the point: the old version
+handed the agent a credential the product gives nobody, and that is
+precisely how it passed while B1-F8 sat in the shipped skill. Its sources
+came out as the request plus the machine sibling plus a view definition —
+already the shape D-117 now requires.
+
+**Two more findings from running the page** (both fixed): **B1-F11** — the
+runbook's AS-18 command could not run at all, because the standalone
+fixture launcher needs `CORE_TEST_DATABASE_URL` and the page never
+supplied it (the launcher's own comment says it "always" does), which is
+consistent with the page admitting neither AS-18 route had been run.
+**B1-F10** — the bundle-residue defect, recorded above.
+
+**Suites:** core **370 passed / 4 skipped / 30 files** (+8); python **799
+passed / 14 skipped / 1 failed** (+7 — `tests/test_ci_gate.py`). The
+failure is `test_no_contamination_in_current_kb`: estate state, failing at
+entry, documented in the runbook's prerequisites, and now also what stands
+between the gate and its second closing path.
+
+*Fence.* Exactly the D-116.4/.5/.6/.7/.8 changes, plus **D-117** on the
+owner's ruling during the act, plus two hygiene fixes named where they
+occur (bundle residue, the `writeSetup`/archive mode difference left
+alone). **B1-F9 is filed with a recommendation and not fixed** — a
+`batched → approved` inlet is a new tool surface and nobody authorized
+one.

@@ -100,7 +100,7 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | FL-D | Causal cross-issue linking | Open | Manual `links` only | Frequent causal clusters in triage |
 | FL-E | `distinct_subjects` privacy stance | **Closed** | D-66.5: counts-only affirmed (LED-R7); LED-R2 scrub + LED-R5 render neutralization amended into ledger spec §3.3/§10 and built at CP-4 | — |
 
-## Onboarding playbook (OB-1..4)
+## Onboarding playbook (OB-1..6)
 
 | ID | Item | Status | Default | Revisit trigger |
 |---|---|---|---|---|
@@ -108,6 +108,8 @@ Totals at v1.0: 48 items — 45 open, 1 partial (OD-2), 1 closed (CI-B), 1 stand
 | OB-2 | Entity draft authorship (skill vs R5) | Open | Skill-drafted, R5-paired, customer-certified | After 2–3 onboardings |
 | OB-3 | Staged drift drill as shipped fixture | **Closed** | Sync-orchestrator spec §12.2: the drill fixture is a shipped artifact (that spec's §9), built as a CP-3 task — `fixtures/drill/` + `core/test/sync-drill.test.ts` (SO-4/SO-8). The spec declared this Closed and said "master register updated"; the master row was never actually changed — reconciled here (D-96.4 bookkeeping batch). **Note the scope:** what closes is the *fixture*, not the playbook's gate item 7, whose human half (R2 runs `review-sync` → repair PR → docs re-verified) has never been rehearsed and is blocked on `review-sync` being built (D-96.3c, Track A-1) | — |
 | OB-4 | Onboarding duration targets | Open | Measure first three; no promises before data. **D-96.3g: BUILD the per-step instrumentation (Track A-6)** — "cannot close" is not an acceptable state for a gate item the playbook cites; the instrumentation was never built (CP-0 task 0.3). A-6's gate arms it via a timed scratch-estate rehearsal and updates this row to "armed, awaiting onboarding #2" | Third onboarding (targets); A-6 (instrumentation) |
+| OB-5 | Profile↔database-role pairing (playbook §14, filed by D-72.5) | Open | A deployment obligation stated in the playbook, not a mechanical gate item: the KB visibility map is the gate, the database role is the wall, and nothing checks that the wall matches the gate. *Added here by D-116.3's bookkeeping — the playbook-local row existed and the master register had none* | First customer with more than one execute-granted profile |
+| OB-6 | Required code-owner review on KB `main` vs solo-operator bypass-merge | Open | **Solo-operator mode (D-116.3, playbook §11.1):** with one human holding write access, required-review cannot be satisfied and the bypass merge **is** the certification act. Protection and KB CI stay required — including D-116.4's rule that the check must demonstrably have run — and the record says so plainly rather than leaving a pattern of administrator overrides to be read as a governance failure. The customer's own `conventions.md` states the mode | **A second human holds write access to the KB.** Restore required-review then, and not before |
 
 ## Sync orchestration (SO-*)
 

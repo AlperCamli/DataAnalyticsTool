@@ -104,13 +104,32 @@ describe("FL-5 / LED-R1 — list_gaps gating", () => {
     expect(liteFqns).toContain("drill.shop.orders");
   });
 
-  it("LED-R7: distinct_subjects is a count — no subject identifiers anywhere in the response", async () => {
+  it("LED-R7: distinct_subjects is a count, and the only identity in the response is the author of the filing it returns", async () => {
     const result = await callTool(rig, rig.token("steward"), "steward", "list_gaps", {});
-    const text = JSON.stringify(result.payload);
-    expect(text).not.toContain(USERS.reporter.username);
-    expect(text).not.toContain(USERS.steward.username);
-    const issue = (result.payload.issues as { distinct_subjects: unknown }[])[0]!;
+    const issues = result.payload.issues as {
+      distinct_subjects: unknown;
+      filing: { by: string | null } | null;
+    }[];
+    const issue = issues[0]!;
     expect(typeof issue.distinct_subjects).toBe("number");
+
+    // The rule as D-116.5 scopes it: `distinct_subjects` names nobody,
+    // and an identity appears only where it is the recorded author of
+    // text in the same response. The dashboard's issue view has shown a
+    // steward that same subject since D-114; `list_gaps` was the surface
+    // that disagreed. Every name in the payload must be one of those
+    // authors — a subject appearing anywhere else is the leak this
+    // asserts against.
+    const authors = new Set(issues.map((i) => i.filing?.by).filter(Boolean));
+    for (const username of [USERS.reporter.username, USERS.steward.username]) {
+      if (JSON.stringify(result.payload).includes(username)) {
+        expect(authors).toContain(username);
+      }
+    }
+    // And the aggregate is never decorated with the people behind it.
+    for (const i of issues) {
+      expect(Object.keys(i)).not.toContain("subjects");
+    }
   });
 });
 

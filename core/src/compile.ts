@@ -131,7 +131,33 @@ export interface CompileOptions {
   publicUrl: string;
   /** Override for tests; defaults to the core image's skills dir. */
   skillsRoot?: string;
+  /**
+   * The KB repository the session's steward-side skills clone (D-116.7,
+   * finding B1-F5). A URL, never a credential — the session
+   * authenticates to git with its own helper, and rule 2 above still
+   * holds: the KB *workspace* is not a parameter here, only the address
+   * of the repo the person already has access to.
+   *
+   * Absent (a core with no sync remote configured) is stated in the
+   * CLAUDE.md rather than papered over: a named path that cannot be
+   * cloned is worse than the honest sentence.
+   */
+  kbRemote?: string | null;
 }
+
+/**
+ * Where the steward-side skills keep their KB clone (D-116.7).
+ *
+ * Fixed, and deliberately outside `~/Desktop` and `~/Documents`: those
+ * are OS-protected on macOS, and a working copy a session cannot reach
+ * without a consent dialog is a defect wearing a permissions costume.
+ * One path also means a second session finds the clone instead of making
+ * a second one.
+ */
+export const KB_WORKING_COPY = "~/cl-steward/kb";
+
+/** The skills that open PRs against the KB, and therefore need a clone. */
+const KB_WRITING_SKILLS = new Set(["enrich", "review-sync"]);
 
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
@@ -158,8 +184,17 @@ async function readSkill(skillsRoot: string, name: string): Promise<CompiledSkil
   const walk = async (sub: string): Promise<void> => {
     for (const entry of await readdir(path.join(dir, sub), { withFileTypes: true })) {
       const rel = sub ? `${sub}/${entry.name}` : entry.name;
+      // Build residue is not part of the skill. `__pycache__` appears the
+      // moment anything imports a skill-local Python tool — including this
+      // repo's own test suite — and it would otherwise ride into the
+      // archive: a machine-specific binary blob inside a bundle whose
+      // whole claim is that two compiles of one profile state are
+      // byte-identical, moving the setup stamp for a reason no operator
+      // could see. Found while adding `enrich/ci_gate.py`; `report`
+      // already had it.
+      if (entry.name === "__pycache__" || entry.name.startsWith(".")) continue;
       if (entry.isDirectory()) await walk(rel);
-      else if (rel !== "SKILL.md") {
+      else if (rel !== "SKILL.md" && !rel.endsWith(".pyc")) {
         files.push({ path: rel, content: await readFile(path.join(dir, rel), "utf-8") });
       }
     }
@@ -213,6 +248,12 @@ export async function compileProfile(
   const fragment = typeof context?.claude_md_fragment === "string" ? context.claude_md_fragment.trim() : "";
   const limits = (raw.limits ?? {}) as { row_cap?: number; timeout_s?: number };
 
+  // Only the bundles whose skills actually write documents carry the KB
+  // section (D-116.7). A reporter has no working copy and no business
+  // being told where one would go.
+  const kbRemote = opts.kbRemote ?? null;
+  const needsKb = skills.some((s) => KB_WRITING_SKILLS.has(s.name));
+
   const claudeMd = [
     `# ${displayName}`,
     "",
@@ -234,6 +275,32 @@ export async function compileProfile(
     "",
     ...(skills.length
       ? ["## Skills", "", ...skills.map((s) => `- \`${s.name}\` — see \`.claude/skills/${s.name}/SKILL.md\``), ""]
+      : []),
+    // D-116.7 (B1-F5): the skills that write documents need a git clone
+    // of the KB, and until now nothing told the session where to put one
+    // or what to clone. Both facts belong in the file the session reads
+    // first — a skill that has to ask the user for its own repository
+    // address has already lost the run.
+    ...(needsKb
+      ? [
+          "## Knowledge base",
+          "",
+          ...(kbRemote
+            ? [
+                `This deployment's knowledge base is \`${kbRemote}\`.`,
+                "",
+                "Skills that write documents (`enrich`, `review-sync`) keep a git clone",
+                `at \`${KB_WORKING_COPY}\` and provision it themselves: clone on first`,
+                "use, `git pull --ff-only` after. Authentication is your own git",
+                "credential helper — this bundle carries no credential, and never will.",
+              ]
+            : [
+                "This core has **no KB remote configured**, so the document-writing",
+                "skills have nothing to clone. That is a deployment gap, not something",
+                "to work around — tell your operator before starting a drafting batch.",
+              ]),
+          "",
+        ]
       : []),
     ...(fragment ? ["## From your profile", "", fragment, ""] : []),
     // PA-2, the July-29 lesson stated where the session will read it:

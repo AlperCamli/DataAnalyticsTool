@@ -60,6 +60,8 @@ Conformance for each includes the negative: a reporter's call cannot return anot
 
 Every existing consumer filters by `tool`, so none re-reads differently; asserted by test rather than by review. One consequence, recorded so a future evidence extraction does not read it as corruption: **audit-window row counts now include governance rows**, correctly attributed to the acting subject.
 
+**Amendment (D-116.6, 2026-08-07) — the filing inlets are governed acts too (finding B1-F7).** The list above covered every act that *changes* a request and omitted the act that *creates* one: both ledger POST inlets — `dashboard.ledger.file.human_filed` and `dashboard.ledger.file.enrichment_request` — now write a row apiece, same shape, same `decision`. The asymmetry was not theoretical. When the pre-D-115 scrub deleted the values out of a reporter's submission, **the filing had left no audit row at all**, so no record of the act existed anywhere outside the ledger row whose content had just been damaged — one of the reasons D-115 could state that the values were unrecoverable. `args` is digested as everywhere else and `result_meta` carries `{issue_id, occurrences, value_flags}`: the fact of the filing and what detection found in it, never the text, whose home is the ledger event under the ledger's own retention (L-8/LED-R6). The MCP inlet (`flag_gap`) already wrote its row per call and is unchanged.
+
 Not done, and not needed for the closure: a separate governance-write table (the other candidate below), and any retro-fill of writes that predate this.
 
 **B-4's gate no longer inherits a blocking clause here.** The original filing is kept below because the reasoning is the record.

@@ -18,28 +18,39 @@ Ops, drift review, triage), **acts 6–11** are the knowledge-request loop
 
 ## 0. Where this run stands
 
-You have already run part of this page — that first hour is what produced
-findings **B1-F1..F4**, and the four fixes are in the build you are about
-to run against. Extracted from the live pilot through the governed read
-APIs, **2026-08-06 19:30**:
+You have run most of this page. The first hour produced findings
+**B1-F1..F4**; acts 5.2 through 8 produced **B1-F5..F8**, one of which
+(B1-F6, the deleted prices) became an owner ruling of its own — **D-115**.
+The fixes for all of them are in the build you are about to run against.
+Read from the live pilot through the governed APIs, **2026-08-07 15:xx**:
 
 | Act | State | Evidence |
 |---|---|---|
-| 1 — sign in | done | — |
-| 2 — KB Health | done | 5 sources; **ga4 stale** (17d against a 3d threshold), **gsc stale** (6.3d); supabase fresh; Looker Studio / Power BI correctly *not sync sources*. Docs **2 verified / 6 draft / 34 contaminated** of 42 |
-| 3 — Ops / dead letter | **done** | `dead_letter: {open: 3, superseded: 8}` — the 11 rows resolved into 3 real problems and 8 pieces of history, which is B1-F2's first half working |
-| 4 — drift queue | done | `drift_prs: {available: true, prs: []}` — the empty-and-says-why state, **which is the pass** |
-| 5.1 — read the queue | done | 10 issues: **6 open, 4 dismissed** (yours, with reasons) |
-| **5.2 — acknowledge** | **not started** | **0 triaged.** Of the 6 open: **4 `capability_gap`**, 1 `missing_doc`, 1 `coverage_gap` |
-| **5.3–11** | **not started** | the knowledge-request queue is **empty** — 0 `enrichment_request` rows. Act 6 creates the demo's data |
+| 1–4 | done | recorded in the table below this one; clauses met |
+| 5.1 — read the queue | done | 14 issues now: 6 open · 4 dismissed · 1 triaged · 2 resolved · 1 batched |
+| 5.2 — acknowledge | **done** | 1 `capability_gap` triaged — B1-F4's *"this one needs a person"*, with D-81 quoted on the card |
+| 5.3 / 5b — a contaminated doc | **done** | `missing_doc` **resolved** by KB PR #40 (`subscriptions.plan_code`), drafted over a live contamination flag under explicit override |
+| 6 — submit a request | **done** | 1 `enrichment_request`, filed by `reporter`, occurrences **2** — the second filing is B1-F6's proof (see below) |
+| 7 — the verdict | **done, approve only** | approved by `alper`. **No request was rejected** — the reject-with-reason half of the loop is *unexercised live*; it has tests, not a demo |
+| 8 — deliver the batch | **done** | `batch-61e70bc8-69ff-45fc-b628-9f756c8ec88c`, 1 request |
+| 9 — the skill drafts | **done 2026-08-07 by the session** | see act 9 — run headless with the compiled steward bundle against the live core |
+| **10 — merge as R2** | **yours, and next** | the batch PR is open and waiting |
+| **11 — the resolution reaches the filer** | **yours, after the merge** | |
 
-So: **restart the stack (act 0), then start at 5.2.** Acts 1–4 are worth
-a glance on the way past — the screens changed under you when B1-F1..F3
-landed — but their clauses are recorded above and do not need re-running.
+**The one act that is still nobody's and should be somebody's:** act 7's
+**rejection**. The runbook asked for three requests so a rejection would be
+exercised; one was filed. Two minutes in the browser closes it — file a
+request you would genuinely decline, reject it with a reason, then sign in
+as that filer and read the reason in **What came back**. Until then, that
+clause is honest as *"tested, not demonstrated"* and is recorded that way
+in the gate check.
 
-**One number to have in your head before 5.2:** four of your six open
-issues are `capability_gap`. That is the kind B1-F4 is about, and act 5.2
-asks you to acknowledge one on purpose.
+**On the batched request, and worth having in your head before act 10:**
+the issue holds **two** filings of the same sentence. The first (09:46) was
+stored with every numeral deleted; the second (10:46), after D-115 landed,
+carries **4.99 / 14.99 / 3.75 / 99.99 / 1.92** intact and is flagged
+`number`. `list_gaps` returns the **latest** filing, so the skill drafted
+from the intact one.
 
 ---
 
@@ -603,53 +614,128 @@ exists. The trigger hands over a work list. That is all it does.
 
 *Record:* the batch id.
 
-### Act 9 — the enrich skill drafts
+### Act 9 — the enrich skill drafts — **RUN 2026-08-07, by the session**
 
 **This act is a Claude Code session, by design** — authoring intelligence
-lives in the customer's session (RA-1), not in the product.
+lives in the customer's session (RA-1), not in the product. It has now
+been run once, headless, with the **compiled steward bundle** against the
+live pilot. What follows is both the record of that run and the procedure
+if you want to run it again.
 
-In a Claude Code session with the steward setup bundle:
+Three things changed under this act since the page first described it, and
+each was a defect the act found by being attempted:
+
+- **B1-F8** — the page told the session to `curl` the ledger API with
+  `$CL_TOKEN`. **There is no such token in a real session**: the bundle
+  carries no credential (PA-1) and the MCP client's token is not in the
+  shell. The batch is now read with the tool the session already holds:
+  `list_gaps(status: "batched", kind: "enrichment_request")`, which
+  returns each request's filing — the words, and the filer identity and
+  date **as the server recorded them**, which is what the citation uses.
+- **B1-F5** — nothing had told the session where its KB clone goes. The
+  skill now provisions one at **`~/cl-steward/kb`** from the remote the
+  bundle names, and builds its validation venv from the KB's own vendored
+  wheel.
+- **B1-F9** — a request the skill cannot draft is **handed back in
+  words**, not returned: `batched → approved` has no session-reachable
+  inlet, so the skill names it in the PR body and tells you it needs
+  returning. Filed, not fixed; the recommendation is a `return_request`
+  MCP tool.
+
+The prompt was the skill's own entry point plus the one thing the ledger
+cannot say — **D-116.2's provenance ruling**, that the subscription
+figures are the owner's confirmed values and are cited
+`customer-confirmed, Alper, 2026-08-06` rather than to the reporter whose
+identity carries the filing, with that decision recorded in the PR body:
 
 ```
-Use the enrich skill in queue-driven batch mode. A batch has been
-delivered — read it from the governed ledger API and draft from it.
+A steward has approved and delivered a batch of knowledge requests. Use
+the `enrich` skill in its queue-driven batch mode (S1b), following the
+skill exactly, end to end: provision your working copy, read the batch,
+draft what you can ground, re-render and validate, and open one pull
+request against the KB.
 ```
 
-The skill reads the batch through `/v1/dashboard/ledger?status=batched`
-as you, drafts what it can ground, and:
+**Check these before act 10, in the PR:** the mapping section exists; one
+`CL-Resolves` trailer per request actually satisfied and no others; the
+provenance line is present and explains itself; and — new, per D-116.4 —
+**the PR reports a CI check that ran.** The skill runs
+`ci_gate.py <pr>` for exactly this and distinguishes *failed* from
+*never reported*; if it reports exit 2, that is a stop, not a pass.
 
-- cites each approved request as `customer-provided, <name>, <date>`,
-  taken from **what the ledger recorded**, never re-typed from the
-  request body;
-- writes in the KB's voice and does not paste the requester's words;
-- **returns the vague request to the queue** with a note saying what
-  evidence would unblock it, and leaves it out of the trailers;
-- opens one PR carrying the request→doc mapping and one `CL-Resolves`
-  trailer per request it actually satisfied.
-
-**Check three things before you go further.** In the PR: the mapping
-section exists; there is exactly one trailer, for the answered request;
-the returned one is named with its reason and appears in no trailer. Back
-in **Gap Triage**, the vague request now reads *approved* with a "came
-back from a batch" note — approved work waiting for evidence, not failed
-work.
-
-*Alternative, if you want AS-18's machine evidence instead of or as well
-as this:*
+*Alternative, for AS-18's machine evidence rather than the product
+demonstration:*
 
 ```bash
-cd core && node_modules/.bin/vite-node test/fixture-deployment.ts -- \
-    --out /tmp/cl-fixture.json
+# The launcher needs a postgres and the variable that points at it —
+# without CORE_TEST_DATABASE_URL it dies on "Vitest failed to access its
+# internal state" (finding B1-F11; the command on this page used to omit
+# both, which is why nobody had run it).
+docker run -d --rm --name cl-as18-pg -e POSTGRES_PASSWORD=pg \
+    -p 127.0.0.1:55432:5432 postgres:16
+cd core && CORE_TEST_DATABASE_URL="postgres://postgres:pg@127.0.0.1:55432/postgres" \
+    node_modules/.bin/vite-node test/fixture-deployment.ts -- --out /tmp/cl-fixture.json
 cd .. && .venv/bin/python -m tools.skill_scenarios \
-    --connection /tmp/cl-fixture.json --model claude-opus-4-8 \
+    --connection /tmp/cl-fixture.json --model claude-opus-5 \
     --out results/phase2/b1-as18 --only enrich-batch
 ```
 
 That runs the same skill against the fixture deployment with a staged
-batch and asserts every AS-18 clause mechanically. It costs a model call
-and is the checkpoint's conformance evidence for AS-18; the live act
-above is the product demonstration. **Neither substitutes for the other,
-and neither has been run by the session that wrote this page.**
+batch — two requests, one groundable only to its proposal and one
+undraftable — and asserts every AS-18 clause mechanically. It costs a
+model call. **Neither substitutes for the other**: the fixture run proves
+the clauses, the live act proves the mode is performable at all, which is
+the thing B1-F8 showed it was not.
+
+**Run 2026-08-07: PASS, 9 of 9** (`results/phase2/b1-as18/scenarios.json`).
+The line worth reading is not the verdict but the tool trail —
+`list_gaps → get_table → search_context → get_table …`, with **no shell
+tool in the allow-list and no token in the environment.** The previous
+version of this scenario handed the agent a bearer token the product gives
+nobody, which is exactly how it passed while B1-F8 sat in the shipped
+skill.
+
+### Act 9's outcome, 2026-08-07 — **the PR was rejected, and the rule changed**
+
+Recorded here because the page above describes the act and this is what it
+produced. The session opened **KB PR #42** (one doc, one `CL-Resolves`, CI
+green in 3 seconds, `ci_gate.py` exit 0) and the owner **rejected it** on
+its content:
+
+> "there is information from the CV Builder code base which we don't want
+> because it is cheting for a test like this."
+
+That is now **ruling D-117**, and it changes S1b: a request-driven doc is
+grounded in **the request and the estate's own facts** — snapshot, machine
+sibling, existing KB docs — and nowhere else. No application source, no
+other repositories, no hunting for a second source. Where the request is
+too thin to draft from, the skill **asks**. And where the doc that should
+carry the knowledge is `contaminated`, the item **waits for that doc** and
+is not redirected onto a writable neighbour.
+
+**What that means for the batch in front of you.** The pricing request's
+home is `systems/supabase/public/subscriptions.md`, which is
+`contaminated` — so under D-117 it defers, and this batch drafts nothing
+until that doc is repaired. Two ways forward, either of which closes the
+loop; both are in `GATE-CHECK.md` §1:
+
+1. file a request whose target doc is uncontaminated, approve it, deliver,
+   re-run act 9 — the shortest path to a merged enrich PR;
+2. repair `public.subscriptions` first (act 5b), then re-deliver this batch
+   — answers the question actually asked.
+
+**One thing worth keeping from the rejected PR**, and it is in the ledger
+rather than the diff, so it survived: the app's own constant says the
+annual price is **$99.90** (`ANNUAL_TOTAL_PRICE`, and
+`PLAN_VALUE_USD.annual = 99.9`, last changed 2026-06-28) against the
+**$99.99** in the request. Filed as `4c4ecb3d-fb41-4489-8d12-a13c0dd99a5f`.
+If $99.99 is right, **the pricing page has been showing the wrong price
+since June**; if $99.90 is, the ledger figure is a typo. Only the Stripe
+Price behind `STRIPE_ANNUAL_PRICE_ID` settles it.
+
+The governance half of that PR — `conventions.md`'s solo-operator section
+— was moved to **KB PR #43** so it did not die with the rejection. That
+one is yours to merge whenever you like; it touches no document content.
 
 ### Act 10 — merge as R2 — **STOP**
 
@@ -668,9 +754,24 @@ Check specifically:
   that is the CP-E5 violation the rule exists to catch, and it is a
   finding worth recording rather than merging past.
 
+And one mechanical check before you press anything: **the PR must show a
+CI check that ran and passed.** An absent check is not a passing one —
+PR #40 sat for seventeen minutes with no run at all, looking exactly as it
+would have if KB CI had been green (D-116.4). If the checks area is empty,
+close and reopen the PR to fire one and wait for it.
+
 If it is right, **merge it under your own name**. That merge is the
 certification act (KB-7). Nothing in this product can perform it, and
 that is the single most important line in the whole dashboard spec.
+
+**And on this deployment, that merge is a bypass merge** — you are the
+only human with write access, so required review cannot be satisfied and
+GitHub will say so. That is now ruled and written down rather than left to
+look like a governance failure: **solo-operator mode**, D-116.3, playbook
+§11.1, and the KB's own `conventions.md` says it in the customer's words.
+The bypass *is* the certification act; what it is not is a second pair of
+eyes, and nothing in the record claims one. When a second person gets
+write access, required review comes back.
 
 ### Act 11 — the requester sees the resolution
 

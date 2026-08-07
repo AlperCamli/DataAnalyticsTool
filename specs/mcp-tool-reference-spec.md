@@ -150,9 +150,27 @@ The enum's `enrichment_request` is the kind that carries the verdict lifecycle (
 
 The response shape, the rate limit (§7), and the K-FAIL discipline are all unchanged: a proposal never substitutes for naming the gap, and the filer is told the same three things every filer is told — recorded, already-known-or-not, and who was notified.
 
-### 6.11 `list_gaps(status=open|triaged, kind?, system?, limit=20)` — S
+### 6.11 `list_gaps(status=open|triaged|approved|batched, kind?, system?, limit=20)` — S
 
-Steward-gated triage reads (fault-ledger spec §8): returns issues as `{issue_id, kind, title, object_fqn?, occurrences, distinct_subjects, first_seen, last_seen, links}`. Read-only; visibility-filtered per M-4 (issues attributed to objects the caller's role cannot see are omitted). This is the enrich skill's scope-selection priority-1 input (skill spec §6 S1).
+Steward-gated triage reads (fault-ledger spec §8): returns issues as `{issue_id, kind, title, object_fqn?, occurrences, distinct_subjects, first_seen, last_seen, links}` plus, per §6.11.1, the returned filing. Read-only; visibility-filtered per M-4 (issues attributed to objects the caller's role cannot see are omitted). This is the enrich skill's scope-selection priority-1 input (skill spec §6 S1) and — for `status=batched` — its **only** input in queue-driven batch mode (§6 S1b).
+
+#### 6.11.1 Amendment (D-116.5, 2026-08-07) — the verdict statuses, and the filing behind the issue
+
+**Additive.** Two changes, and one finding they close.
+
+**(a) `status` accepts the verdict lifecycle.** The filter enum gains `approved` and `batched` (ledger §4: `open → approved | rejected(reason)`, `approved → batched → resolved`). Default remains `open`. `rejected` and `resolved` are deliberately *not* filterable here: this tool exists to feed work to a steward or a skill, and a rejected or resolved request is not work. The dashboard's ledger read (dashboard spec §5.3) remains the full-history surface.
+
+**(b) Each issue carries the filing its text came from**, as `filing: {by, at, description, proposal?, value_flags}`:
+
+- `by` / `at` — the **subject and timestamp the server recorded on that event** (LED-R3), which is what a citation is allowed to say. A request whose body claims to speak for the finance team does not thereby come from the finance team.
+- `description` / `proposal` — the words a person wrote, stored verbatim for the authored kinds (LED-R2 as narrowed by D-115) and rendered inert here exactly as everywhere else (**LED-R5**).
+- `value_flags` — what detection found in that submission (D-115 clause 3). Returning the text without the warning that travels with it would re-open, on this surface, the defect D-115 closed on the other two: the flags reach every reader of the words, not only the browser's queue card.
+
+**Which filing.** The **most recent** one, and the shape says so by naming a single filing rather than flattening two events into one row. An issue can hold many filings (`occurrences` says how many); the latest is the one whose text is current — the pilot case that produced this amendment had a first filing whose values a pre-D-115 scrub had deleted and a refiling that carried them. Where a steward needs the whole stream, that is the dashboard's issue view, which has always served it.
+
+**LED-R7 is untouched.** Its rule is that the *queue* reports how many distinct subjects and never which — a rule about `distinct_subjects`, an aggregate over people who did not file the text being returned. `filing.by` is the author of the words in the same response, to a steward-gated caller, and the enrich skill cannot cite a filer it is not told (skill spec §6 S1b: the citation names what the ledger recorded). Non-steward profiles are refused as before, and the refusal is profile-level (M-3), tested.
+
+**The finding this closes (B1-F8).** S1b told the session to read its batch over `/v1/dashboard/ledger` with a bearer token. A compiled setup bundle carries no credential (PA-1) and the MCP client's OAuth token is not reachable from the session's shell, so the instruction named a token that cannot exist — the loop's read half was unreachable in exactly the sessions it was written for. Widening the tool the session already holds is the fix; obtaining a token by other means would have been a workaround for a defect in the surface. **Not closed by this amendment:** the `batched → approved` **return** (S1b's third outcome) is a governed *write* with no session-reachable inlet — filed as B1-F9, not resolved here.
 
 ## 7. Errors and limits
 
@@ -182,6 +200,7 @@ One record per call: `{ts, subject, roles, profile, tool, args_digest, refs, dec
 | MT-12 | A JOIN of one visible and one hidden table is refused; an API request citing a hidden custom dimension is refused; the audit records `filtered` with the true reason in both | §6.6 amendment, M-4, M-8 |
 | MT-13 | A token issued while an object was visible is refused at `execute_sql` after the map hides it — caught by the §5 allow-set recheck, with the snapshot unmoved — and a token carrying no `objects` claim is not honoured | §5 amendment |
 | MT-14 | `flag_gap(kind: enrichment_request, proposal: …)` with a canary value and a markdown payload in the proposal: the stored `detail.proposal` is scrubbed and length-bounded exactly as `description` is, a client-supplied subject is ignored in favour of the server-resolved one, and the response is the unchanged `{issue_id, occurrences, routed_to}` | §6.10 amendment, LED-R2/R3 |
+| MT-15 | `list_gaps(status: "batched")` as a steward returns the batched request with `filing.{by, at, description, proposal, value_flags}` — the words verbatim, the identity the server recorded (not one the body claims), the flags on that submission — and renders a markdown payload inert; the same call from a reporter profile is `permission_denied` and returns no issue; `status: "rejected"` is refused as an invalid argument | §6.11.1, LED-R3/R5, D-115, D-116.5 |
 
 ## 10. Amendments to other specs (additive)
 

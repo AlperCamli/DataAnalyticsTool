@@ -188,12 +188,28 @@ The KB is a **git repository on the customer's own git server** (locked decision
 |---|---|---|---|---|
 | Agents & business users (per department/role) | **Role-scoped live projection** via the MCP server — each role sees a filtered slice computed at read time | Always current (merged HEAD + latest snapshot); trust blocks computed live | None (read surface) | `roles.yaml` visibility + profile allowlists, enforced server-side (M-3/M-4) |
 | Departmental flavor | **Profile CLAUDE.md fragment** — conventions, preferred metrics, tone | Versioned in the KB repo itself | Via profile PRs | Platform-architecture §5 |
-| Stewards (editors) | **Git-native working copies**, incl. sparse-checkout clones of just their department's directories | Git-current; pulls like any repo | **PR-only** back to the central repo | Ordinary git + KB CI + branch protection |
+| Stewards (editors) | **Git-native working copies**, incl. sparse-checkout clones of just their department's directories | Git-current; pulls like any repo | **PR-only** back to the central repo | Ordinary git + KB CI + branch protection (see §11.1 for the solo-operator case) |
 | Offline sites / no-MCP teams (edge case) | **Compiled read-only bundle** — a generated export of a role's projection, stamped with `kb_ref` + `generated_at`, carrying an expiry warning | Frozen at compile time; self-declares its age | None; never a write surface, never valid for execution decisions (validation always runs against the live snapshot) | Generated artifact, same philosophy as the profile-compiled setup |
 
 **Why not physical partial copies served to agents:** a copy is stale the moment sync merges a drift PR — reintroducing the disease the product cures; contamination flags never reach it; visibility enforcement degrades from read-time (auditable, revocable) to distribution-time (neither); and trust blocks are *uncomputable* locally (`hash_match` requires the latest snapshot). The hybrid intuition is right — departments should see a scoped, relevant slice — and rows 1–2 deliver exactly that while keeping the slice virtual, fresh, and enforced. Row 3 covers the legitimate "local partial copy" for people who *edit*; row 4 covers the rare case where a live connection genuinely cannot exist.
 
 The compiled bundle (row 4) is new surface: recorded as **Open Decision OB-1** — build only when a real offline consumer appears; the format is a compilation target of existing content, so deferring costs nothing.
+
+### 11.1 Solo-operator mode (ruling D-116.3, 2026-08-07)
+
+**When one human holds write access to the KB, that human's bypass merge *is* the certification act.** Said plainly here because the alternative is a record that pretends otherwise.
+
+Row 3 above and ruling D-47 describe `main` protected with **KB CI plus code-owner review required**, and every merge therefore carrying a second person's name. On a single-steward deployment — the pilot, and any first customer before their second data-team hire — there is no second person, so every merge is an administrator bypassing a review requirement that cannot be satisfied. Three ways to write that down, and only one of them is honest:
+
+1. Leave required-review on and bypass it each time, recording nothing. The audit trail then shows a protection rule being overridden repeatedly by the same account, which reads as a governance failure and is *indistinguishable from one*.
+2. Turn protection off. The mechanical guard (**KB CI must pass**) goes with it, which is the half that catches real defects.
+3. **What this ruling adopts:** keep protection and CI required, state that the deployment is in solo-operator mode, and treat each bypass merge as **the steward's own named certification act** — the same act KB-7 always meant, performed by the only person who can perform it.
+
+What holds under (3), unchanged: **KB CI must be green** and the check must *demonstrably have run* (D-116.4 — an absent check is not a pass); the merge is a human reading a diff, never a button in this product (UI-6/UI-11); and the merging identity is recorded in git, which is what makes it *named*. What does not hold, and is not claimed: a second pair of eyes. Nothing in the record should imply one.
+
+**Revisit trigger (register item OB-6, normative):** the moment a **second human holds write access**, required-review is restored and this section stops applying. Not before — a policy relaxed for a team of one that stays relaxed for a team of two is how the review requirement quietly becomes decorative.
+
+Onboarding consequence: **step 2 (KB repo bootstrap) records which mode the customer is in**, and the customer's `conventions.md` says so in its own words, so a steward reading their own knowledge base learns it there rather than from this document.
 
 ## 12. Step 8 — Golden benchmark baseline
 
@@ -236,3 +252,4 @@ The gate is a checklist, every item mechanically verifiable:
 | OB-3 | Staged drift drill (gate item 7) as a shipped fixture vs per-customer improvisation | Ship a standard drill fixture (test schema + scripted change) with the product | Build during phase 4 (sync engine) |
 | OB-4 | Onboarding duration targets per topology class | Measure the first three; no promises before data | Third onboarding |
 | OB-5 | Profile↔database-role pairing: a profile granting `execute_sql` must be paired with a database role scoped no wider than that profile's visible surface (filed by D-72.5; origin security review #2 F2) | Stated as a deployment obligation, not yet a mechanical gate item — D-71.1 makes the KB visibility map govern the execution surface, but the map is our gate and the database role is the wall, and nothing today checks that the wall matches the gate | Next playbook revision for wording; **load-bearing at the first customer with more than one execute-granted profile**, where the two surfaces can first diverge |
+| OB-6 | Required code-owner review on KB `main` vs solo-operator bypass-merge (§11.1, ruling D-116.3) | **Solo-operator mode**: protection and KB CI stay required, review cannot be satisfied by one human, and each bypass merge is that steward's named certification act — stated in the playbook and in the customer's own `conventions.md` rather than left as an unexplained pattern of overrides | **A second human holds write access to the KB.** Restore required-review then, and not before |

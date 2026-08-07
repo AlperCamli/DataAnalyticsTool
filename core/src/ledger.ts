@@ -319,9 +319,41 @@ export interface GapIssue {
   first_seen: string;
   last_seen: string;
   links: Record<string, unknown>;
+  /**
+   * The most recent filing on this issue (MCP §6.11.1, D-116.5): who the
+   * *server* recorded as its author, when, and the words they wrote.
+   *
+   * One filing rather than a flattened pair of events, because an issue
+   * can hold many and mixing "who asked first" with "whose text this is"
+   * is how a citation ends up naming the wrong person. `occurrences`
+   * says how many there were; the dashboard's issue view serves the
+   * whole stream.
+   *
+   * Null only where an issue somehow has no events, which the schema
+   * does not permit — the type admits it so a caller cannot forget.
+   */
+  filing: GapFiling | null;
 }
 
-/** list_gaps reads (§8): counts only (LED-R7); the caller applies the
+export interface GapFiling {
+  by: string | null;
+  at: string;
+  description: string | null;
+  proposal: string | null;
+  /** D-115: the warning travels with the text it is about. */
+  value_flags: ValueFlag[];
+}
+
+/**
+ * The statuses `list_gaps` may filter on (MCP §6.11.1). `rejected` and
+ * `resolved` are absent deliberately: this read feeds work to a steward
+ * or a skill, and neither of those is work. The dashboard's ledger read
+ * is the full-history surface.
+ */
+export const LIST_GAPS_STATUSES = ["open", "triaged", "approved", "batched"] as const;
+
+/** list_gaps reads (§8): counts only for *subjects behind an aggregate*
+ * (LED-R7 — `distinct_subjects` names nobody); the caller applies the
  * visibility filter (LED-R2) and render neutralization (LED-R5). */
 export async function listIssues(
   pool: pg.Pool,
@@ -331,22 +363,37 @@ export async function listIssues(
   const where: string[] = [];
   const status = filter.status ?? "open";
   params.push(status);
-  where.push(`status = $${params.length}`);
+  where.push(`i.status = $${params.length}`);
   if (filter.kind) {
     params.push(filter.kind);
-    where.push(`kind = $${params.length}`);
+    where.push(`i.kind = $${params.length}`);
   }
   if (filter.system) {
     params.push(filter.system);
-    where.push(`system = $${params.length}`);
+    where.push(`i.system = $${params.length}`);
   }
   params.push(Math.min(filter.limit ?? 20, 100));
   const { rows } = await pool.query<GapIssue>(
-    `SELECT issue_id, kind, title, object_fqn, system, status, occurrences,
-            distinct_subjects, first_seen, last_seen, links
-       FROM ledger_issues
+    `SELECT i.issue_id, i.kind, i.title, i.object_fqn, i.system, i.status,
+            i.occurrences, i.distinct_subjects,
+            to_jsonb(i.first_seen) #>> '{}' AS first_seen,
+            to_jsonb(i.last_seen)  #>> '{}' AS last_seen,
+            i.links,
+            -- The latest filing, rendered by Postgres so the timestamp is
+            -- the stored one rather than a JS Date's truncation of it.
+            (SELECT jsonb_build_object(
+                      'by', e.subject,
+                      'at', to_jsonb(e.ts) #>> '{}',
+                      'description', e.description,
+                      'proposal', e.detail->>'proposal',
+                      'value_flags', to_jsonb(e.value_flags))
+               FROM ledger_events e
+              WHERE e.issue_id = i.issue_id
+              ORDER BY e.ts DESC, e.event_id DESC
+              LIMIT 1) AS filing
+       FROM ledger_issues i
       WHERE ${where.join(" AND ")}
-      ORDER BY occurrences DESC, last_seen DESC, issue_id
+      ORDER BY i.occurrences DESC, i.last_seen DESC, i.issue_id
       LIMIT $${params.length}`,
     params,
   );
@@ -901,6 +948,26 @@ export const DISPOSITIONS: Record<string, Disposition> = {
     actor: "you, deciding",
     next_act: "read it and decide which of the above it really is",
     why: "a free-form filing carries no kind of its own",
+  },
+  // D-116.8: a knowledge request had no row here, so the card showed the
+  // fallback's diagnostic — "this core has no disposition recorded for
+  // the kind 'enrichment_request'" — to a steward looking at the one kind
+  // whose whole lifecycle the product does model. The sentence a person
+  // reads has to be about their request, not about the table's coverage.
+  enrichment_request: {
+    // Not `enrichable` in the S1 sense: this kind arrives already
+    // triaged by a person, and it reaches a skill through a verdict and
+    // a delivered batch (§4) rather than by a skill picking it up.
+    enrichable: false,
+    actor: "you first, then the enrich skill on the batch you deliver",
+    next_act:
+      "read what they asked for and decide whether it is worth drafting: approve it into the worklist, " +
+      "or reject it with a reason the person who asked will read. Approved requests go to the enrich " +
+      "skill as a batch, which drafts a PR you review and merge",
+    why:
+      "somebody asked for knowledge the estate does not have (§4 verdict lifecycle, D-101). Approving " +
+      "means worth drafting and writes nothing to the knowledge base; the document arrives as a diff " +
+      "and the merge is still the certification act (UI-11/KB-7)",
   },
   other: {
     enrichable: false,

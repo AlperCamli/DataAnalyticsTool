@@ -1,0 +1,40 @@
+{
+ "api_version": "1",
+ "scope": {
+  "subject": null,
+  "role_scope": "all"
+ },
+ "rows": [
+  {
+   "ts": "2026-08-07T13:01:45.417467+00:00",
+   "tool": "dashboard.ledger.file.enrichment_request",
+   "roles": [
+    "reporter"
+   ],
+   "kb_ref": "ba2f108e9ab522210f0bde4af809c3f064950344",
+   "profile": "reporter",
+   "subject": "rene-reporter",
+   "audit_id": "47422dfe-3037-4e52-be7a-3bf0a979fd88",
+   "decision": "allowed",
+   "session_id": null,
+   "args_digest": "5d99d56bae69f80b23ad84b556dc51dc5648181e215227c78e4642e4d25feff0",
+   "duration_ms": 0,
+   "result_meta": {
+    "issue_id": "28a30626-6447-48aa-8c9a-fda87b6b8e00",
+    "occurrences": 1,
+    "value_flags": [
+     "number"
+    ]
+   },
+   "setup_stamp": "unstamped",
+   "snapshot_ref": null,
+   "statement_text": null,
+   "decision_reason": null
+  }
+ ],
+ "page": {
+  "limit": 50,
+  "order": "desc",
+  "next_cursor": null
+ }
+}

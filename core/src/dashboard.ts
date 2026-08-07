@@ -779,6 +779,36 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
     });
   }
 
+  /**
+   * One audit row per filing (D-116.6, finding B1-F7).
+   *
+   * D-114.1 widened the contract to "one row per governed act" and
+   * covered the acts that *change* a request — verdict, batch, return —
+   * but not the act that puts content into it. That asymmetry cost
+   * something concrete: when the pre-D-115 scrub deleted the values out
+   * of a submission, there was no row anywhere recording that the filing
+   * had happened, so no copy of it existed to recover (D-115).
+   *
+   * `args` is digested by the audit writer, so the row records **that**
+   * this subject filed **this** issue, never the text — the text's home
+   * is the ledger event, under the ledger's own retention (L-8/LED-R6).
+   */
+  const auditFiling = (
+    viewer: Viewer,
+    kind: string,
+    result: { issueId: string; occurrences: number; valueFlags: string[] },
+  ) =>
+    governanceAudit(viewer, `dashboard.ledger.file.${kind}`, { issue_id: result.issueId }, {
+      decision: "allowed",
+      resultMeta: {
+        issue_id: result.issueId,
+        occurrences: result.occurrences,
+        // The flags, not the words: an investigator asking "was anybody
+        // told this submission had an email in it?" gets an answer.
+        value_flags: result.valueFlags,
+      },
+    });
+
   app.post("/v1/dashboard/ledger/gaps", async (req, reply) => {
     const viewer = await viewerFor(req, reply, { write: true });
     if (!viewer) return reply;
@@ -789,6 +819,7 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
       return handle(reply, err);
     }
     const result = await fileEvent(viewer, HUMAN_FILED, inlet);
+    await auditFiling(viewer, HUMAN_FILED, result);
     return reply.code(201).send({
       api_version: API_VERSION,
       issue_id: result.issueId,
@@ -811,6 +842,7 @@ export function registerDashboard(app: FastifyInstance, deps: DashboardDeps): vo
       return handle(reply, err);
     }
     const result = await fileEvent(viewer, ENRICHMENT_REQUEST, inlet);
+    await auditFiling(viewer, ENRICHMENT_REQUEST, result);
     return reply.code(201).send({
       api_version: API_VERSION,
       issue_id: result.issueId,

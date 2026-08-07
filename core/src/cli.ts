@@ -444,9 +444,13 @@ async function runCompile(args: string[]): Promise<number> {
   const kbDir = flag("kb");
   const publicUrl = flag("url");
   const outDir = flag("out") ?? `./contextlayer-${profileName ?? "profile"}`;
+  // D-116.7: the KB address the document-writing skills clone. Defaults
+  // to the sync remote this core is configured with, because that is the
+  // KB it serves; a compile run outside a configured core can pass it.
+  const kbRemote = flag("kb-remote") ?? process.env.SYNC_GIT_REMOTE ?? null;
 
   if (!profileName || !kbDir || !publicUrl) {
-    console.error("usage: cli.js compile PROFILE --kb DIR --url URL [--out DIR]");
+    console.error("usage: cli.js compile PROFILE --kb DIR --url URL [--out DIR] [--kb-remote URL]");
     return 2;
   }
 
@@ -466,7 +470,7 @@ async function runCompile(args: string[]): Promise<number> {
   const raw = YAML.parse(await readFile(file, "utf-8")) as Record<string, unknown>;
   let setup;
   try {
-    setup = await compileProfile(profileName, raw, { publicUrl });
+    setup = await compileProfile(profileName, raw, { publicUrl, kbRemote });
   } catch (err) {
     // F-7: a missing skill fails the compile and writes nothing. Report
     // it as an operator-actionable error, not a stack trace.

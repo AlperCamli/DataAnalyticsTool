@@ -240,6 +240,40 @@ describe("B-1 dashboard surfaces", () => {
       // steward gate worth having a record of.
     });
 
+    it("D-116.6 / B1-F7: filing a request leaves a row — the act that puts content in", async () => {
+      const issueId = await fileRequest(rig, reporter, "the trial-to-paid conversion window is undefined");
+
+      const rows = await auditRows("dashboard.ledger.file.enrichment_request");
+      const mine = rows.find((r) => r.subject === USERS.reporter.username && r.decision === "allowed");
+      expect(mine, "the filing is a governed act and is recorded as one").toBeDefined();
+      expect(mine!.session_id).toBeNull();
+      expect(mine!.setup_stamp).toBe("unstamped");
+      expect(mine!.args_digest).toMatch(/^[0-9a-f]{64}$/);
+
+      // The row points at the issue and says what detection found; it
+      // does not carry the words. B1-F7's cost was that no row existed at
+      // all when the values were scrubbed out of one (D-115) — the fix is
+      // a record of the act, not a second copy of the text.
+      const { rows: meta } = await rig.core.pool.query<{ result_meta: Record<string, unknown> }>(
+        `SELECT result_meta FROM audit_records
+          WHERE tool = 'dashboard.ledger.file.enrichment_request'
+            AND result_meta->>'issue_id' = $1`,
+        [issueId],
+      );
+      expect(meta).toHaveLength(1);
+      expect(meta[0]!.result_meta).toHaveProperty("occurrences");
+      expect(meta[0]!.result_meta).toHaveProperty("value_flags");
+      expect(JSON.stringify(meta[0]!.result_meta)).not.toContain("conversion window");
+
+      // The other inlet, same treatment — they differ only in kind.
+      const gap = await apiPost(rig, reporter, "/v1/dashboard/ledger/gaps", {
+        description: "the billing runbook is not in the KB",
+      });
+      expect(gap.status).toBe(201);
+      const gapRows = await auditRows("dashboard.ledger.file.human_filed");
+      expect(gapRows.some((r) => r.subject === USERS.reporter.username)).toBe(true);
+    });
+
     it("connection writes are audited — the gap §5.1 filed", async () => {
       const res = await apiPost(rig, steward, "/v1/dashboard/connections/audited_src", {});
       // The PUT below is the real act; this POST just proves the address
@@ -836,6 +870,25 @@ describe("B-1 dashboard surfaces", () => {
       // And the reason names the ruling, so nobody re-litigates it.
       expect(cap.why).toContain("D-81");
       expect(cap.actor).toContain("DBA");
+    });
+
+    it("D-116.8: a knowledge request's disposition is a sentence about the request, not about this table", async () => {
+      const { ENRICHABLE_KINDS, dispositionFor } = await import("../src/ledger.js");
+      const req = dispositionFor("enrichment_request");
+      // The defect: the kind fell through to the fallback, so the one
+      // lifecycle the product models end-to-end was described to a
+      // steward as "this core has no disposition recorded for the kind".
+      expect(req.why).not.toContain("no disposition recorded");
+      expect(req.next_act).not.toContain("decide what closes it");
+      // What it says instead: the verdict, and what approving does NOT do.
+      expect(req.next_act).toMatch(/approve/i);
+      expect(req.next_act).toMatch(/reject/i);
+      expect(req.why).toMatch(/certification|merge/i);
+      expect(req.actor).toContain("enrich skill");
+      // And it stays out of the S1 pickup list: a request reaches a skill
+      // through a verdict and a delivered batch, never by being scraped
+      // off the queue.
+      expect(ENRICHABLE_KINDS).not.toContain("enrichment_request");
     });
 
     it("B1-F4: the shipped enrich skill filters by kind, not by status alone", () => {

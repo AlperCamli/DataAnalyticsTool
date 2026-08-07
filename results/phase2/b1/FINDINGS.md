@@ -444,3 +444,298 @@ session's fence — proposed for the next task 0 with the other two.
 kind instead, which needs no change to an MCP tool's response shape.
 Adding the field would be additive and probably right; it is a spec
 surface, so it is flagged rather than taken.
+
+---
+
+# The knowledge-request loop (acts 6–11)
+
+The findings below come from the second half of the runbook — the
+D-101.5 loop — and from implementing the fixes D-116 authorized for them.
+F5–F8 were found by the operator on 2026-08-06/07; F9–F11 were found while
+fixing them, which is the pattern this checkpoint keeps producing.
+
+## B1-F5 — the skill had nowhere to write
+
+**Found 2026-08-06 by the operator, entering act 9.** The runbook says
+*"in a Claude Code session with the steward setup bundle"*, the skill's
+S3–S5 say *"both commands from the KB clone root"*, and **nothing told the
+session where that clone is or to make one.** A steward following the page
+into a fresh session reaches S3 with no working copy, S4 with nothing to
+validate, and S5 with nothing to push.
+
+*What "not provisioned" meant in practice, from this machine's own
+evidence:* `~/cl-steward/kb` **did** exist before today — its reflog shows
+an earlier session improvising a clone there and cutting KB PRs #40 and
+#41 from it. That is the failure mode, not its absence: a path invented by
+one session, written down nowhere, and unavailable to the next. D-116.7
+makes the improvisation the convention.
+
+The bundle made it worse than an omission. It carries `.mcp.json`,
+`CLAUDE.md` and skills — and **not the address of the knowledge base it
+serves**, which is on `/healthz` and nowhere a session reads. So a session
+that worked out that it needed a clone could not have known what to clone.
+
+### Fixed (D-116.7)
+
+`~/cl-steward/kb`, self-provisioned by the skill: clone on first use from
+the `kb_remote` the compiled bundle now names, `git pull --ff-only` after,
+and **stop** on a dirty or diverged copy rather than resetting somebody's
+uncommitted work. Four properties worth keeping:
+
+- **Outside `~/Desktop` and `~/Documents`.** Those are OS-protected on
+  macOS; a session reaching into them stalls on a consent dialog nobody is
+  watching. The convention that the pilot's own KB lives at `~/Desktop/kb`
+  is a *human's* convention and could not be the skill's.
+- **One fixed path**, so the second session finds the clone rather than
+  making a second one.
+- **No credential in the bundle** (PA-1, still canary-asserted): git auth
+  is the operator's own helper. Verified on this machine — a fresh clone
+  pushes without extra configuration.
+- **A reporter's bundle says none of this**, because a reporter has no
+  working copy. Absent, not merely inapplicable.
+
+*And the half the five-line proposal missed, which is the same defect:*
+S4 asks for a local render + validate and **the library that does both was
+not provisioned either**. It is vendored in the KB (`.github/vendor/*.whl`
+— the same wheel KB CI installs), so S0 now builds a venv from the clone's
+own wheel and refuses to draft if it cannot. A working copy that cannot
+run its own self-check is half a fix.
+
+**Test:** `core/test/compile.test.ts` — a steward bundle names the remote
+and the path, a reporter's does not, an unconfigured core says so in
+words, and the three stamp differently (PA-2).
+
+## B1-F6 — the ledger deleted the numbers out of a person's sentence
+
+**Found 2026-08-06/07 by the operator, on act 6, with the pilot's own
+subscription prices.** Recorded in full at **DECISIONS D-115**, which this
+file does not restate. The one-line shape:
+
+> typed: "…we have a weekly subscription **4.99** dollars…"
+> stored: "…we have a weekly subscription dollars…"
+
+The steward then approved a request whose payload was gone, and **nobody
+was told at any point.** Fixed by D-115 on the owner's ruling: LED-R2
+narrows to *derived* text, authored text is stored verbatim and its value
+patterns are **flagged to both humans**, nothing is refused and nothing is
+rewritten.
+
+**Live evidence that the fix landed, read out of the pilot ledger this
+session** — the same issue holds both filings, which is the clearest
+before/after this project has:
+
+| Filed | Stored | Flags |
+|---|---|---|
+| 09:46:59 (pre-fix) | "…weekly subscription **dollars**. monthly subscription is **dollar** which is per week…" | `{}` |
+| 10:46:15 (post-fix) | "…weekly subscription **4.99** dollars. monthly subscription is **14.99** dollar which is **3.75** per week, similarly annual subscription **99.99** dollars which is **1.92** dollars weekly." | `{number}` |
+
+Per **D-116.2** the figures are confirmed correct by the owner and the
+batched request stands — no deletion, no re-file — with the provenance
+line `customer-confirmed, Alper, 2026-08-06` in anything drafted from it,
+because the values were session-typed during the fix rather than by the
+reporter whose identity the filing carries.
+
+## B1-F7 — the act that put content in was the one act nobody audited
+
+**Found 2026-08-07 while writing D-115.** D-114.1 widened the audit
+contract to *"one row per governed act"* and enumerated the acts:
+connection writes, verdicts, batches, returns. Every one of them
+*changes* a request. **Filing one — the act that creates it — wrote no
+audit row at all.**
+
+That is not a bookkeeping complaint. When the pre-D-115 scrub deleted the
+values out of a submission, the only record of the filing anywhere was the
+ledger row whose content had just been damaged. No pre-scrub column, no
+audit row, no copy: it is one of the reasons D-115 could state flatly that
+the values were unrecoverable.
+
+### Fixed (D-116.6)
+
+Both inlets call the existing helper — `dashboard.ledger.file.human_filed`
+and `dashboard.ledger.file.enrichment_request`, one row per filing, denied
+included as everywhere else. `result_meta` carries
+`{issue_id, occurrences, value_flags}`: **the fact of the act and what
+detection found in it, never the text.** The words stay in the ledger
+event under the ledger's own retention (L-8/LED-R6) — a second copy in the
+audit table would be a privacy regression sold as an improvement. The MCP
+inlet (`flag_gap`) already wrote its row per call and is unchanged.
+
+**Test:** `core/test/dashboard-b1.test.ts` — filing a request leaves a row
+under the filer's identity with a digested args field; the row points at
+the issue; the request's own words are **not** in it; and the other inlet
+gets the same treatment.
+
+## B1-F8 — S1b told the session to use a token that cannot exist
+
+**Found 2026-08-06 by the operator, entering act 9.** The skill's
+queue-driven batch mode opened with:
+
+```bash
+curl -sS -H "authorization: Bearer $CL_TOKEN" \
+  "$CL_CORE_URL/v1/dashboard/ledger?status=batched&kind=enrichment_request"
+```
+
+**A compiled bundle carries no credential** (PA-1, deliberately, asserted
+by test), and the OAuth token the MCP client holds is not reachable from
+the session's shell. So `$CL_TOKEN` is empty in exactly the sessions this
+mode was written for, and the *first step of the mode* was unperformable
+for anybody following the page as written. The mode had never been run
+live; the fixture harness sets `CL_TOKEN` from the fixture IdP, which is
+precisely why AS-18 could pass while the shipped instruction could not be
+followed.
+
+### Fixed (D-116.5) — the tool, not a token
+
+MCP spec **§6.11.1** (additive, diff first): `list_gaps` filters
+`approved|batched`, and every issue carries the filing behind it —
+`filing: {by, at, description, proposal?, value_flags}`. One call, over
+the channel the session is already authenticated on:
+
+```
+list_gaps(status: "batched", kind: "enrichment_request")
+```
+
+`by`/`at` are server-set (LED-R3), so the citation rule — *never re-typed
+from the body of the request* — stops being a rule to remember and becomes
+the shape of the data. S1b now says so in the imperative: *if `list_gaps`
+is not in your tool list your profile does not grant it; say so and stop;
+do not go looking for a token.*
+
+**Verified live on the pilot** (post-rebuild, 2026-08-07): the batched
+request comes back over MCP as `filed_by: reporter`, `at:
+2026-08-07T10:46:15.807+00:00`, `value_flags: ['number']`, description
+carrying **4.99 / 14.99 / 3.75 / 99.99 / 1.92** intact; the same call with
+a reporter's token is `permission_denied` and returns no issue.
+**Test:** MT-15 in `core/test/dashboard-ledger.test.ts`, plus the narrowed
+LED-R7 assertion in `core/test/mcp-ledger.test.ts`.
+
+## B1-F9 — the return half of the loop has no session-reachable inlet
+
+**Found 2026-08-07 while fixing B1-F8, and *not* fixed.** Widening the
+read closed one half of S1b. The third per-item outcome —
+*undraftable → return it to the queue* — is a governed **write**:
+
+```
+POST /v1/dashboard/ledger/issues/<id>/return
+```
+
+and it is reachable by **nothing a session has**. There is no MCP tool for
+it, and the dashboard has no control either: `GapTriage.tsx` *renders* a
+return note (`issue.returned`) and offers no way to create one. So the
+`batched → approved` transition D-114.12 built exists in the schema, in
+the API, and in the §4 diagram — and can be performed only with a bearer
+token, by an operator on a command line.
+
+**Consequences, stated rather than smoothed over:**
+
+- S1b's honesty rule is now *"hand it back in words"*: name the item in
+  the PR body's returned section with what would unblock it, keep it out
+  of the trailers, and **tell the steward it needs returning**. The skill
+  is forbidden from saying it *returned* something it could not.
+- **AS-18's clause moved.** The returned item's ledger state is no longer
+  asserted of the skill; the harness performs that write. Recorded in the
+  scenario table with the reason, so the softening is visible.
+
+**Recommendation (one line each, needs authorization):** either a
+steward-gated MCP `return_request(issue_id, note)` — smallest surface,
+symmetric with `list_gaps`, and the loop closes entirely on one channel —
+**or** a *Return to queue* control on a `batched` card in Gap Triage,
+which is a new screen element and therefore a B-3 conversation. The MCP
+tool is the recommendation.
+
+## B1-F10 — build residue rode into the compiled bundle
+
+**Found 2026-08-07 while adding `enrich/ci_gate.py`.** `readSkill` walked
+every file beside `SKILL.md`, and the moment anything imports a
+skill-local Python tool — including this repo's own pytest suite — a
+`__pycache__` appears next to it. Observed directly: a steward bundle
+compiled on this machine listed
+`__pycache__/ci_gate.cpython-312.pyc` among the skill's files. The
+`report` skill has had one since the Power BI work.
+
+Two claims it falsified. The archive is documented as **deterministic**
+(*"two downloads of one profile state are byte-identical"*) — a
+machine-specific `.pyc` is not. And the **setup stamp** covers every skill
+file, so running the test suite on a bundle-serving machine moved the
+stamp and told every session its setup was stale, for a reason no operator
+could see.
+
+**Fixed:** `__pycache__`, `*.pyc` and dotfiles are excluded from the walk;
+`core/test/compile.test.ts` asserts a scratch skill's `helper.py` ships and
+its `__pycache__`, `.pyc` and `.DS_Store` do not. The scenario harness had
+the right instinct already (`_prepare_workdir` ignores `__pycache__`),
+which is how the bundle and the harness came to disagree.
+
+## B1-F11 — the AS-18 command on the runbook page could not run
+
+**Found 2026-08-07 running it.** The runbook's fixture command —
+`vite-node test/fixture-deployment.ts` — exits immediately with *"Vitest
+failed to access its internal state"*. The launcher's own comment in
+`core/test/helpers.ts` explains why: importing `vitest` at module scope
+crashes vite-node, so the import is gated on `CORE_TEST_DATABASE_URL`
+being set, *"which the standalone launcher always supplies"*. The command
+on the page does not supply it.
+
+Consistent with the page's own admission that **neither AS-18 route had
+been run by the session that wrote it**. It is a two-part fix and both
+parts are on the page now: a postgres to point at, and the variable.
+
+```bash
+docker run -d --rm --name cl-as18-pg -e POSTGRES_PASSWORD=pg \
+  -p 127.0.0.1:55432:5432 postgres:16
+CORE_TEST_DATABASE_URL="postgres://postgres:pg@127.0.0.1:55432/postgres" \
+  node_modules/.bin/vite-node test/fixture-deployment.ts -- --out /tmp/cl-fixture.json
+```
+
+**Result once it ran: AS-18 PASS, 9 of 9** — and the assertion that
+matters most is invisible in the pass line. The scenario's tool trail is
+`list_gaps → get_table → search_context → get_table …`: **no `curl`, no
+`CL_TOKEN` in the environment, and no shell tool in the allow-list at
+all.** The old version of this scenario handed the agent a bearer token
+the product does not give anyone, which is exactly how it could pass while
+B1-F8 sat in the shipped skill.
+
+## B1-F12 — the doc was better than the rule allowed (owner ruling D-117)
+
+**Found 2026-08-07 by the operator, reading act 9's pull request.** Not a
+defect in the machinery — every part of the loop worked — but a rule the
+product did not have and now does. Recorded here because the *shape* is
+worth keeping: **a skill doing its best work can still be doing the wrong
+work, and only the owner can say so.**
+
+The skill grounded the pricing request in the customer's application
+source: `plan-definitions.ts` for the catalogue, `pricing.test.ts` pinning
+it, `billing.service.ts` for the lifetime behaviour. By the S2 ladder that
+is excellent — app code beats a stated figure. The owner's ruling:
+
+> "there is information from the CV Builder code base which we don't want
+> because it is cheting for a test like this … the system should only add
+> the requested information to the KB and maybe ask questions to get more
+> detail about it but it shouldn't get information from other sources"
+
+Two reasons, both real: a KB claim sourced from a private codebase is
+**invisible to every drift mechanism this product has** — no snapshot
+covers it, no contamination scan reaches it, nothing notices it going
+stale — and a demonstration that reaches outside the estate is not a
+demonstration of the estate.
+
+And the second half, on the contaminated target:
+
+> "if we can't update the public table's context since it is contaminated
+> we can add this context later when it is drafted or verified"
+
+The skill had put the prices on `v_subscriptions_by_plan` because
+`public.subscriptions` was `contaminated` with `refuse-unless-override`,
+and said so in the PR body as a deliberate second choice. The ruling makes
+the right move **defer**, not redirect.
+
+**Applied:** skill spec §6 S1b + the shipped skill — request-driven items
+are grounded in the request and the estate's own facts, a question is a
+legitimate outcome of a batch, and a blocked target waits for its doc.
+**The cost is recorded once in D-117** and not argued: reading the app
+found a **nine-cent disagreement** on the annual price (`$99.90` in the
+app since 2026-06-28 against the `$99.99` in the request) that
+request-only drafting would have written down silently. It survives
+anyway, because `flag_gap` put it in the **ledger** —
+`4c4ecb3d-fb41-4489-8d12-a13c0dd99a5f` — where out-of-estate findings
+belong: **notice it, file it, do not document it.**

@@ -230,7 +230,7 @@ The body is therefore for what a one-line, newline-free front-matter value struc
 
 **`metrics/<metric>.md`:** Definition (business language) · Formula · Implementations (per system, exact SQL/API expression) · Grain & dimensions it may be sliced by · Owner & certification trail · Known discrepancies.
 
-**`conventions.md` skeleton (bootstrapped):** System classes & dialects · Query guardrails per system (execution policy, HLR §8 P2) · Trust-status behaviors (the §5 semantics, stated for agents) · Naming conventions · Quota notes for API sources · Machine-readable guardrail block (fenced YAML consumed by `validate_sql` per-system checks, MCP §6.6).
+**`conventions.md` skeleton (bootstrapped):** System classes & dialects · Query guardrails per system (execution policy, HLR §8 P2) · Trust-status behaviors (the §5 semantics, stated for agents) · Naming conventions · Quota notes for API sources · **How changes land here** (§9's merge conventions in the customer's own words, including solo-operator mode where it applies — D-116.3) · Machine-readable guardrail block (fenced YAML consumed by `validate_sql` per-system checks, MCP §6.6).
 
 ## 8. Naming and cross-reference conventions
 
@@ -244,6 +244,8 @@ The body is therefore for what a one-line, newline-free front-matter value struc
 - **Supersede rule:** on opening a new sync PR, sync auto-closes its own previous unmerged sync PRs with a comment linking the successor (the new run's snapshot subsumes the old diff).
 - Commit identity: sync commits as the bot identity `contextlayer-sync`; enrich/agent-proposed PRs commit under the **triggering user's** git identity (HLR §5 J2.3) — provenance is git blame, so identity discipline is a hard rule.
 - Merge policy is the customer's (branch protection on their server); the product's stance: additive-only PRs are safe to auto-merge if the customer enables it; breaking PRs never auto-merge.
+- **A merge needs a check that demonstrably ran** (D-116.4). KB CI's absence is not its approval: on this project's own KB, a pull request opened with no `pull_request` run at all, and the missing check looked exactly like a passing one until somebody went to look. Whoever delivers a branch is responsible for a *reported* check — by causing a run when the host's trigger does not fire, and by refusing to call the PR ready when none ever does. The shipped mechanism is `enrich/ci_gate.py`, whose exit code distinguishes "the check failed" from "no check reported"; both block a merge, and only the first is a defect in the diff.
+- **Solo-operator mode** (D-116.3, playbook §11.1): where one human holds write access, required code-owner review cannot be satisfied and that human's bypass merge is the certification act KB-7 always described. Protection and CI stay required; the mode is stated in the customer's `conventions.md`; a second human with write access restores required-review (register OB-6).
 - **Resolution trailers:** a PR body may carry `CL-Resolves: <issue-id>` trailers; on merge the core resolves the referenced fault-ledger issues (ledger spec §9). The enrich skill writes these automatically for ledger-originated work.
 
 ## 10. KB CI checks (shipped as a workflow the bootstrap installs)
