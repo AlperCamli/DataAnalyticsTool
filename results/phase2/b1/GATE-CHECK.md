@@ -106,6 +106,11 @@ recommendation. Two are open:
   inlet. Filed with a recommendation (a steward-gated MCP
   `return_request`), **not fixed**, because it is outside D-116's
   authorizations.
+  > **Superseded 2026-08-07 (D-118.3): fixed.** The recommended tool is
+  > built and tested (MCP §6.12, MT-16). It is **not granted on the
+  > pilot's steward profile** — that is a KB profile PR, deliberately
+  > left until after the closure demo so the operator's bundle does not
+  > go stale mid-run. See `FINDINGS.md` B1-F9.
 - **B1-F10** — fixed, but worth reading as a class: the bundle's
   determinism claim was false on any machine that had run the test suite.
 

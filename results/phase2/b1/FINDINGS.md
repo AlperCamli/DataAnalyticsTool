@@ -643,6 +643,30 @@ symmetric with `list_gaps`, and the loop closes entirely on one channel —
 which is a new screen element and therefore a B-3 conversation. The MCP
 tool is the recommendation.
 
+### FIXED 2026-08-07 (D-118.3) — the recommended option, built
+
+`return_request(issue_id, note)` ships: MCP spec §6.12, conformance
+**MT-16** (5 tests), the same `returnToQueue` the dashboard has called
+since D-114.12, behind the same steward gate. The skill's third per-item
+outcome is an act again, and CP-E5's ledger half comes back off the
+harness and onto the skill (skill spec S1b + AS-18, both amended).
+
+**Two things this fix does not include, stated so neither is discovered
+later:**
+
+1. **It is not granted on the pilot's steward profile.** Profiles live in
+   the customer KB (`.contextlayer/profiles/steward.yaml`), so a grant is
+   a KB PR — one that would also move the setup stamp and stale the
+   operator's bundle mid-demo. Verified against the live server today:
+   `tools/list` for `steward` returns ten tools and `return_request` is
+   not among them (M-3 hiding it correctly). **Follow-up: a one-line KB
+   profile PR, after the closure demo.**
+2. **The words-only fallback therefore stays live and stays tested.** The
+   skill says *"returned"* only where the tool is in its list, and
+   *"handed back"* where it is not. The say/do rule was never about the
+   tool existing — it is about matching the claim to the act — so closing
+   B1-F9 did not delete it.
+
 ## B1-F10 — build residue rode into the compiled bundle
 
 **Found 2026-08-07 while adding `enrich/ci_gate.py`.** `readSkill` walked
