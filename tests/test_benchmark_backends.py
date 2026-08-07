@@ -14,12 +14,12 @@ from benchmark.backends import (
 from benchmark.executors import ExecResult, ScriptedExecutor
 from benchmark.runner import load_prompt
 from benchmark.suite import load_suite
-from benchmark.validate import DEFAULT_SUITE
+from tests.conftest import BENCH_SUITE
 
 
 @pytest.fixture(scope="module")
 def suite():
-    return load_suite(DEFAULT_SUITE)
+    return load_suite(BENCH_SUITE)
 
 
 def test_parse_stream_extracts_result_and_reads():

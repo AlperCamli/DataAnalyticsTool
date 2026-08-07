@@ -1,4 +1,4 @@
-"""Typed model + loader for the benchmark suite (``benchmark-seed-v0.yaml``).
+"""Typed model + loader for the benchmark suite (KB `.contextlayer/benchmark/suite.yaml`).
 
 The YAML is a read-only, customer-verified input; this loader mirrors it
 into typed objects without mutating or reshaping it. Structural

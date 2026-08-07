@@ -22,7 +22,8 @@ from benchmark.runner import (
 )
 from benchmark.scoring import score_journey
 from benchmark.suite import load_suite
-from benchmark.validate import DEFAULT_SNAPSHOTS, DEFAULT_SUITE, load_snapshots
+from benchmark.validate import load_snapshots
+from tests.conftest import BENCH_SNAPSHOTS, BENCH_SUITE
 
 
 def _tu(name, **inp):
@@ -57,7 +58,7 @@ class FakeClient:
 
 @pytest.fixture(scope="module")
 def snapshots():
-    return load_snapshots(DEFAULT_SNAPSHOTS)
+    return load_snapshots(BENCH_SNAPSHOTS)
 
 
 @pytest.fixture(scope="module")
@@ -67,7 +68,7 @@ def inventory(snapshots):
 
 @pytest.fixture(scope="module")
 def suite():
-    return load_suite(DEFAULT_SUITE)
+    return load_suite(BENCH_SUITE)
 
 
 # -- prompt (R2) -----------------------------------------------------------

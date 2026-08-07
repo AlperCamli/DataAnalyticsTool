@@ -22,7 +22,13 @@ name = "contextlayer-snapshot"
 # 0.5.0 wheel would call the new machine docs stale — which is exactly
 # the stale-wheel failure D-46 exists to make visible, so the carry is
 # not optional here.
-version = "0.6.0"
+# 0.7.0: A-5 / D-119.2a — the golden suite's home moves to the customer's
+# KB (`.contextlayer/benchmark/suite.yaml`), so this wheel stops carrying
+# the pilot's suite and snapshots as package data and starts carrying the
+# *checker* that KB CI runs over the KB's own copy
+# (`python -m benchmark.integrity --kb .`). The carry is not optional:
+# without this wheel the new CI step has no module to run.
+version = "0.7.0"
 description = "Snapshot layer (task 1.1) + connector SDK (1.2-1.4) + generator (1.5) + lineage (1.9)"
 requires-python = ">=3.12"
 dependencies = [
@@ -68,7 +74,11 @@ snapshot = ["schema/*.json"]
 "connectors.ga4" = ["connector.yaml", "*.json"]
 "connectors.gsc" = ["connector.yaml", "*.json"]
 generator = ["templates/*.j2"]
-benchmark = ["schema/*.json", "suite/*.yaml", "suite/snapshots/*.json"]
+# The seed schema only: the suite it validates is the customer's and
+# lives in their KB (D-119.2a). A product wheel that carried one
+# customer's goldens into every other customer's CI was the leak that
+# move closes.
+benchmark = ["schema/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

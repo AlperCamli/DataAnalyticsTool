@@ -6,18 +6,18 @@ import pytest
 
 from benchmark.fqn import SnapshotInventory, object_fqn
 from benchmark.suite import load_suite
-from benchmark.validate import DEFAULT_SNAPSHOTS, DEFAULT_SUITE
+from tests.conftest import BENCH_SNAPSHOTS, BENCH_SUITE
 
 
 @pytest.fixture(scope="module")
 def inventory() -> SnapshotInventory:
-    snaps = [json.loads(p.read_text(encoding="utf-8")) for p in DEFAULT_SNAPSHOTS]
+    snaps = [json.loads(p.read_text(encoding="utf-8")) for p in BENCH_SNAPSHOTS]
     return SnapshotInventory(snaps)
 
 
 @pytest.fixture(scope="module")
 def suite():
-    return load_suite(DEFAULT_SUITE)
+    return load_suite(BENCH_SUITE)
 
 
 def test_expected_objects_resolve_across_systems(inventory):

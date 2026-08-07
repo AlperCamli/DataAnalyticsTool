@@ -57,12 +57,26 @@ kb/
     ├── sync-policy.yaml            # trigger modes per system (HLR §8 P1), thresholds
     ├── roles.yaml                  # OIDC role → doc-visibility map
     ├── profiles/*.yaml             # agent profiles (platform-architecture §5)
+    ├── benchmark/suite.yaml        # H (optional): the golden benchmark suite (§3.1)
     └── dashboard.yaml              # dashboard module config
 ```
 
 Legend: **M** = machine-owned (sync regenerates freely, humans warned off per K-6); **H** = human-owned (sync never writes, only flags).
 
 Path rules: directory and file names for objects use the source-native name lowercased with characters outside `[a-z0-9_-]` percent-free-mapped to `-`; the authoritative source-native name always lives in front-matter (`object:`), so filename mangling never loses identity. Entity and metric filenames are kebab-case English business terms.
+
+### 3.1 The golden benchmark suite (amendment, D-119.2a, additive)
+
+`.contextlayer/benchmark/suite.yaml` is the **golden benchmark suite's normative home**, and it is the customer's file: the requests their people wrote, the SQL/API goldens their analyst verified, the windows and expected objects they confirmed (playbook step 8, product spec §11). One suite per KB in v1; the schema is the harness's (`benchmark/schema/seed.schema.json`), not this document's, exactly as `.contextlayer/snapshots/` carries the snapshot spec's.
+
+**Why here and not in the product.** It lived in the platform repo through the seed-packet era and shipped inside the KB-CI wheel as package data, which meant every customer's CI carried the pilot's requests and a frozen copy of the pilot's snapshots. Golden knowledge is knowledge: it is the customer's, it changes when their business changes, and it belongs under the same review discipline as every other claim about their estate — a PR, a diff, a merge. The **deferred "normative home" decision closes here**.
+
+**Consequences worth stating, because each is load-bearing:**
+
+- **Goldens resolve against `.contextlayer/snapshots/`** — the KB's own accepted snapshots, not a pin travelling beside the suite. A golden referencing a column the estate no longer has therefore fails at the commit that lands the drop, rather than at whichever future date somebody refreshes a copy.
+- **The file is human-owned (H).** Sync never writes it; no generator emits it. It is edited by the people who own the definitions, and `verified_result` blocks are only filled by a human who watched the query run (harness R5).
+- **Absent is a legitimate state.** A KB before playbook step 8 has no suite, and §10.1's check says so and passes rather than failing a customer for not having reached that step yet.
+- **It is not served as knowledge.** `.contextlayer/` is outside the doc tree the MCP server projects; the suite is CI input and harness input, never a retrieval target. Nothing about a golden is a trust signal about a doc.
 
 **Render inputs (purpose-merge amendment, D-49):** a machine render is a deterministic function of exactly two inputs — the **latest accepted snapshot** per system and the **enrichment front-matter at repo HEAD** (§4.2/§4.7 `purpose`, `column_purposes`, `object_purposes`, plus the human-sibling existence/status reads the indexes already made). `.contextlayer/snapshots/<system>.json` is the latest accepted snapshot's committed identity: it is what pins "latest accepted" at a given HEAD, what the generator renders from, and what KB CI re-renders against (KB-8, §10) — without it the §10 consistency invariant would not be well-defined per commit. Sync updates it in the same PR as the renders it implies; its JSON schema is the snapshot spec's, not this document's.
 
@@ -260,8 +274,26 @@ The body is therefore for what a one-line, newline-free front-matter value struc
 | KB-6 | Entity `depends_on` ⊇ `maps[].object` | Block |
 | KB-7 | `verified` status without `last_verified` or with stale `written_against_schema_hash` | Block |
 | KB-8 | Render consistency (amended by D-49): machine files at HEAD byte-equal the render of (latest accepted snapshot, HEAD enrichment) — regeneration is a no-op. Runs on sync PRs and on every PR touching enrichment front-matter; PRs editing enrichment must include the implied machine re-renders | Block |
-| KB-9 | Golden benchmark regression suite (product spec §11) on KB-content PRs | Per customer policy: block or report |
+| KB-9 | Golden benchmark **suite integrity** (R7) — the deterministic half, §10.1. Zero model calls | Block on resolution/column errors; **warn** on contaminated context; no-suite passes |
 | KB-10 | `column_purposes` / `object_purposes` keys that do not resolve against the current snapshot, naming doc and key (D-49; repair pressure stays with the contamination flow) | **Warn** |
+
+### 10.1 KB-9 as shipped (amendment, D-119.2a, additive)
+
+KB-9 was written as "the golden benchmark regression suite on KB-content PRs, per customer policy: block or report." As shipped it is narrower, deliberately, and the narrowing is the honest part:
+
+```
+python -m benchmark.integrity --kb .
+```
+
+**Deterministic only. Zero model calls in CI, and that is a fixed property, not a default.** An accuracy run means driving an agent through journeys and scoring them; it costs money, needs live sources, and is not reproducible from a diff. R7 keeps CI to what a checkout can verify by reading files:
+
+1. **Schema + resolution** — the packet is well-formed; every `expected_object` resolves against the accepted snapshots; every object a golden *references* (SQL relations, API dimensions/metrics) resolves.
+2. **Column existence** — every column a SQL golden binds to a base relation exists in that relation's snapshot columns. Resolution is conservative: ambiguous or CTE-projected references are skipped rather than guessed, so the check does not false-fail — and a **dropped column a golden depends on** does fail it.
+3. **Contaminated context** — a case whose `expected_objects` map to a doc with `status: contaminated` is **flagged, not failed**. The case rests on knowledge under drift and the reviewer is told; the repair belongs in the triage flow (skill spec §6 S1c), not in a red check on somebody else's pull request.
+
+**Accuracy runs stay manual** (product spec §11, harness R7): the three-condition baseline and any regression scoring are operator-driven commands whose results land in ops Postgres, and BASELINE-1's trigger is unchanged by this amendment. Nothing in CI calls a model; nothing in CI reaches a data source.
+
+**A KB with no suite passes and says which it is.** `no golden suite at … — nothing to check` is a distinct output from a green run over a real suite, because "nothing was checked" and "everything checked out" must never read alike (the D-116.4 lesson, applied one layer down).
 
 ## 11. Retrieval-budget guidance (non-normative)
 

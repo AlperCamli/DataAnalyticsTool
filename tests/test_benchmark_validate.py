@@ -8,28 +8,27 @@ from benchmark import canonical
 from benchmark.fqn import SnapshotInventory
 from benchmark.suite import Case, load_suite, suite_from_mapping
 from benchmark.validate import (
-    DEFAULT_SNAPSHOTS,
-    DEFAULT_SUITE,
     ValidationReport,
     _reproduce_checksum,
     load_snapshots,
     validate_schema,
     validate_suite,
 )
+from tests.conftest import BENCH_SNAPSHOTS, BENCH_SUITE
 
 
 @pytest.fixture(scope="module")
 def inventory() -> SnapshotInventory:
-    return SnapshotInventory(load_snapshots(DEFAULT_SNAPSHOTS))
+    return SnapshotInventory(load_snapshots(BENCH_SNAPSHOTS))
 
 
 @pytest.fixture(scope="module")
 def raw():
-    return load_suite(DEFAULT_SUITE).raw
+    return load_suite(BENCH_SUITE).raw
 
 
 def test_real_suite_validates_clean(inventory):
-    suite = load_suite(DEFAULT_SUITE)
+    suite = load_suite(BENCH_SUITE)
     report = validate_suite(suite, inventory)
     assert report.ok, [f.message for f in report.errors]
     # Execution-deferred: every case reports checksum-deferred, no reproduction.

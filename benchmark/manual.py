@@ -68,6 +68,11 @@ from benchmark.scoring import score_journey
 from benchmark.suite import Suite, load_suite
 from benchmark.validate import DEFAULT_SNAPSHOTS, DEFAULT_SUITE, load_snapshots
 
+# The suite is the customer's and lives in their KB (D-119.2a); every
+# command that reads it takes the path, so a second KB (or the frozen
+# harness fixture) is a flag rather than an edit.
+_SUITE_HELP = "golden suite (default: the KB's .contextlayer/benchmark/suite.yaml)"
+
 _PKG = Path(__file__).resolve().parent
 REPO = _PKG.parent
 MANUAL_PROMPT_PATH = _PKG / "prompts" / "journey-prompt-v1-manual.md"
@@ -255,8 +260,9 @@ def cmd_conditions(args: argparse.Namespace) -> int:
             print(f"[INVARIANT] {p}")
         return 2
 
-    snaps = load_snapshots(DEFAULT_SNAPSHOTS)
-    snap_dir = Path(DEFAULT_SNAPSHOTS[0]).parent
+    snapshot_paths = args.snapshots or list(DEFAULT_SNAPSHOTS)
+    snaps = load_snapshots(snapshot_paths)
+    snap_dir = Path(snapshot_paths[0]).parent
     manifest = {
         "kit": "cp2-manual-baseline",
         "created_at": _now(),
@@ -310,7 +316,7 @@ def render_manual_prompt(suite: Suite, case_id: str, condition: str) -> str:
 
 
 def cmd_prompt(args: argparse.Namespace) -> int:
-    suite = load_suite(DEFAULT_SUITE)
+    suite = load_suite(args.suite)
     sys.stdout.write(render_manual_prompt(suite, args.case, args.condition))
     return 0
 
@@ -366,7 +372,7 @@ def _validate_log(log_path: Path) -> list[str]:
 def cmd_ingest(args: argparse.Namespace) -> int:
     root: Path = args.root
     manifest = _load_manifest(root)
-    suite = load_suite(DEFAULT_SUITE)
+    suite = load_suite(args.suite)
     model_id = manifest["model_id"]
     done = skipped = 0
     errors: list[str] = []
@@ -490,8 +496,8 @@ def _verify_unchanged(root: Path, manifest: Mapping[str, Any]) -> list[str]:
 def cmd_score(args: argparse.Namespace) -> int:
     root: Path = args.root
     manifest = _load_manifest(root)
-    suite = load_suite(DEFAULT_SUITE)
-    snaps = load_snapshots(DEFAULT_SNAPSHOTS)
+    suite = load_suite(args.suite)
+    snaps = load_snapshots(args.snapshots or list(DEFAULT_SNAPSHOTS))
     inventory = SnapshotInventory(snaps)
 
     drift = _verify_unchanged(root, manifest)
@@ -581,7 +587,7 @@ def cmd_score(args: argparse.Namespace) -> int:
 
 def cmd_status(args: argparse.Namespace) -> int:
     root: Path = args.root
-    suite = load_suite(DEFAULT_SUITE)
+    suite = load_suite(args.suite)
     have: dict[tuple[str, str], set[int]] = {}
     for cond in CONDITIONS:
         rec_dir = root / cond / "records"
@@ -628,6 +634,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     p = sub.add_parser("conditions", help="build the three condition working dirs")
     p.add_argument("--root", type=Path, default=DEFAULT_ROOT)
+    p.add_argument("--snapshot", type=Path, action="append", dest="snapshots",
+                   help="accepted snapshots to render machine-kb from (default: the KB's)")
     p.add_argument("--kb", type=Path, default=DEFAULT_ENRICHED_KB,
                    help="customer KB clone to export for enriched-kb")
     p.add_argument("--kb-ref", default="HEAD", help="ref to pin the enriched KB at")
@@ -637,17 +645,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.set_defaults(fn=cmd_conditions)
 
     p = sub.add_parser("prompt", help="print the paste-ready per-journey prompt")
+    p.add_argument("--suite", type=Path, default=DEFAULT_SUITE, help=_SUITE_HELP)
     p.add_argument("--case", required=True)
     p.add_argument("--condition", required=True, choices=CONDITIONS)
     p.set_defaults(fn=cmd_prompt)
 
     p = sub.add_parser("ingest", help="assemble R3 records from executor JSONL logs")
     p.add_argument("--root", type=Path, default=DEFAULT_ROOT)
+    p.add_argument("--suite", type=Path, default=DEFAULT_SUITE, help=_SUITE_HELP)
     p.add_argument("--force", action="store_true", help="re-ingest over existing .json")
     p.set_defaults(fn=cmd_ingest)
 
     p = sub.add_parser("score", help="validate + score records, write R8 artifact + report")
     p.add_argument("--root", type=Path, default=DEFAULT_ROOT)
+    p.add_argument("--suite", type=Path, default=DEFAULT_SUITE, help=_SUITE_HELP)
+    p.add_argument("--snapshot", type=Path, action="append", dest="snapshots",
+                   help="accepted snapshots to resolve goldens against (default: the KB's)")
     p.add_argument("--out", type=Path, default=REPO / "results")
     p.add_argument("--secrets", type=Path, default=REPO / ".secrets")
     p.add_argument("--no-golden", action="store_true",
@@ -656,6 +669,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     p = sub.add_parser("status", help="coverage of the cases × conditions × reps grid")
     p.add_argument("--root", type=Path, default=DEFAULT_ROOT)
+    p.add_argument("--suite", type=Path, default=DEFAULT_SUITE, help=_SUITE_HELP)
     p.add_argument("--reps", type=int, default=3)
     p.set_defaults(fn=cmd_status)
 

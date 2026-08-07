@@ -1,6 +1,6 @@
 """Deliverable 1 — suite ingestion + validation.
 
-Validates ``benchmark-seed-v0.yaml`` on three axes:
+Validates the customer's golden suite on three axes:
 
 1. **Schema** — the packet matches ``schema/seed.schema.json`` as authored
    (Draft 2020-12, the repo's validator stack).
@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,8 +38,32 @@ from benchmark.suite import Case, Suite, load_suite
 
 _PKG = Path(__file__).resolve().parent
 SCHEMA_PATH = _PKG / "schema" / "seed.schema.json"
-DEFAULT_SUITE = _PKG / "suite" / "benchmark-seed-v0.yaml"
-DEFAULT_SNAPSHOTS = tuple(sorted((_PKG / "suite" / "snapshots").glob("*.json")))
+
+# The golden suite is the customer's, and its home is the customer's KB
+# (D-119.2a): requests they wrote, SQL their analyst verified, results
+# they confirmed. It used to ship inside this package — which meant every
+# customer's KB-CI wheel carried the pilot's suite and a frozen copy of
+# the pilot's snapshots. The paths below are the KB-spec §3 locations,
+# and the snapshots the goldens resolve against are the KB's own accepted
+# ones, so a golden is checked against what the estate looks like *now*
+# rather than against a pin that quietly ages.
+SUITE_REL = Path(".contextlayer") / "benchmark" / "suite.yaml"
+SNAPSHOTS_REL = Path(".contextlayer") / "snapshots"
+DEFAULT_KB = Path(os.environ.get("CTXLAYER_KB") or Path.home() / "Desktop" / "kb")
+
+
+def kb_suite_path(kb_root: str | Path) -> Path:
+    """The KB-spec §3 home of the golden suite (may not exist — see §10.1)."""
+    return Path(kb_root) / SUITE_REL
+
+
+def kb_snapshot_paths(kb_root: str | Path) -> tuple[Path, ...]:
+    """The KB's accepted snapshots — the facts goldens resolve against."""
+    return tuple(sorted((Path(kb_root) / SNAPSHOTS_REL).glob("*.json")))
+
+
+DEFAULT_SUITE = kb_suite_path(DEFAULT_KB)
+DEFAULT_SNAPSHOTS = kb_snapshot_paths(DEFAULT_KB)
 
 ERROR, WARN, INFO = "error", "warn", "info"
 

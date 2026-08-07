@@ -1,6 +1,7 @@
 """CVBuilder golden-benchmark harness (CP-2).
 
-Ingests the customer-verified suite (``benchmark-seed-v0.yaml``), builds
+Ingests the customer-verified suite (the KB's
+``.contextlayer/benchmark/suite.yaml``, D-119.2a), builds
 the three context conditions (R1), runs journeys through a guardrailed
 Anthropic tool loop (R2/R3), and scores selection + correctness + first-try
 executable rate (R4-R6) into versioned results artifacts (R8).

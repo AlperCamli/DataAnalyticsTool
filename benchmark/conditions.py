@@ -41,11 +41,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
+from benchmark import validate
 from generator.render import RenderResult, render_tree
 
-_PKG = Path(__file__).resolve().parent
-DEFAULT_SNAPSHOTS = tuple(sorted((_PKG / "suite" / "snapshots").glob("*.json")))
-DEFAULT_ENRICHED_KB = Path.home() / "Desktop" / "kb"
+# One home for the snapshots, and it is the KB's own accepted set
+# (D-119.2a) — the machine-KB condition renders from exactly what the
+# enriched-KB condition serves, so the two conditions can never differ by
+# a stale pin instead of by enrichment.
+DEFAULT_ENRICHED_KB = validate.DEFAULT_KB
+DEFAULT_SNAPSHOTS = validate.kb_snapshot_paths(DEFAULT_ENRICHED_KB)
 
 NO_KB = "no-kb"
 MACHINE_KB = "machine-kb"

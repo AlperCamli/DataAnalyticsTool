@@ -5,7 +5,7 @@ invocation of the skill, and writes each journey record where the **existing**
 CP-2 harness ingests it — `benchmark.manual ingest` / `score`, unchanged.
 
     .venv/bin/python -m tools.benchmark_driver \
-        --suite benchmark/suite/benchmark-seed-v0.yaml \
+        --suite ~/Desktop/kb/.contextlayer/benchmark/suite.yaml \
         --condition enriched-kb=http://localhost:8100 \
         --condition machine-kb=http://localhost:8101 \
         --condition no-kb=http://localhost:8102 \

@@ -10,6 +10,16 @@ from snapshot.hashing import schema_hash
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 
+# The benchmark suite's home is the customer's KB (D-119.2a), so the
+# harness tests run against a *frozen copy* of the pilot packet and the
+# snapshots it was authored against — a test input, deliberately not the
+# live suite: these tests check the checker, and a checker test that
+# moved whenever the estate moved would report the estate's state as its
+# own failure. The live suite is checked by KB CI, on the KB's snapshots.
+BENCH_FIXTURES = FIXTURES_DIR / "benchmark"
+BENCH_SUITE = BENCH_FIXTURES / "suite.yaml"
+BENCH_SNAPSHOTS = tuple(sorted((BENCH_FIXTURES / "snapshots").glob("*.json")))
+
 FIXTURE_FILES = [
     "supabase-ddl.json",
     "supabase-live.json",

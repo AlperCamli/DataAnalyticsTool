@@ -1,6 +1,9 @@
 """Deliverable 5 — the deterministic suite-integrity check (R7, CI).
 
-The only benchmark check wired into CI. Zero model calls, no live access:
+The only benchmark check wired into CI — KB CI, since D-119.2a, where the
+golden suite lives (KB §3, `.contextlayer/benchmark/suite.yaml`) and the
+snapshots it resolves against are the KB's own accepted ones. Zero model
+calls, no live access:
 
 1. **Schema + resolution** (via ``benchmark.validate``) — the packet is
    well-formed, every ``expected_object`` resolves, and every object a
@@ -38,17 +41,19 @@ from generator import frontmatter
 from benchmark.fqn import SnapshotInventory
 from benchmark.suite import Suite, load_suite
 from benchmark.validate import (
+    DEFAULT_KB,
     DEFAULT_SNAPSHOTS,
     DEFAULT_SUITE,
     ERROR,
     WARN,
     Finding,
+    SUITE_REL,
     ValidationReport,
+    kb_snapshot_paths,
+    kb_suite_path,
     load_snapshots,
     validate_suite,
 )
-
-DEFAULT_KB = Path.home() / "Desktop" / "kb"
 
 
 def _walk_scopes(scope: Scope):
@@ -157,20 +162,43 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Deterministic benchmark suite-integrity check (R7, CI). Zero model calls."
     )
-    parser.add_argument("--suite", type=Path, default=DEFAULT_SUITE)
-    parser.add_argument("--snapshot", type=Path, action="append", dest="snapshots")
-    parser.add_argument("--kb", type=Path, default=None, help="KB root for the contamination scan")
+    parser.add_argument("--kb", type=Path, default=None,
+                        help="KB root: discovers the suite (KB §3), the accepted snapshots, "
+                             "and the docs the contamination flag scans")
+    parser.add_argument("--suite", type=Path, default=None, help="override the KB's suite path")
+    parser.add_argument("--snapshot", type=Path, action="append", dest="snapshots",
+                        help="override the KB's accepted snapshots")
     args = parser.parse_args(argv)
 
-    suite = load_suite(args.suite)
-    inventory = SnapshotInventory(load_snapshots(args.snapshots or list(DEFAULT_SNAPSHOTS)))
-    report = integrity_report(suite, inventory, args.kb)
+    kb = args.kb
+    suite_path = args.suite or (kb_suite_path(kb) if kb else DEFAULT_SUITE)
+    snapshot_paths = args.snapshots or (
+        list(kb_snapshot_paths(kb)) if kb else list(DEFAULT_SNAPSHOTS))
+
+    # A KB with no golden suite is a KB that has not reached playbook step
+    # 8 yet, which is a stage of onboarding and not a defect. The check
+    # says so and passes; what it must never do is pass *silently*, which
+    # would read the same as a suite that was checked.
+    if not suite_path.is_file():
+        print(f"integrity: no golden suite at {suite_path} — nothing to check (KB §10.1). "
+              f"Add one at {SUITE_REL.as_posix()} to arm this check.")
+        return 0
+    if not snapshot_paths:
+        print(f"[ERROR] no accepted snapshots to resolve goldens against "
+              f"(looked in {(kb or DEFAULT_KB)}/.contextlayer/snapshots)")
+        return 1
+
+    suite = load_suite(suite_path)
+    inventory = SnapshotInventory(load_snapshots(snapshot_paths))
+    report = integrity_report(suite, inventory, kb)
 
     for f in report.findings:
         if f.level in (ERROR, WARN):
             where = f" {f.case_id}" if f.case_id else ""
             print(f"[{f.level.upper()}]{where} {f.kind}: {f.message}")
-    print(f"integrity: {len(report.errors)} error(s), {len(report.warnings)} flag(s) — "
+    print(f"integrity: {suite.customer} suite v{suite.suite_version}, {len(suite.cases)} case(s) "
+          f"against {len(snapshot_paths)} snapshot(s) — "
+          f"{len(report.errors)} error(s), {len(report.warnings)} flag(s) — "
           f"{'GREEN' if report.ok else 'FAILED'}")
     return 0 if report.ok else 1
 

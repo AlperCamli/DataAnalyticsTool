@@ -11,17 +11,18 @@ from benchmark.journey import Draft, ExecutionOutcome, JourneyRecord
 from benchmark.report import build_report
 from benchmark.scoring import LegResult, score_journey
 from benchmark.suite import load_suite
-from benchmark.validate import DEFAULT_SNAPSHOTS, DEFAULT_SUITE, load_snapshots
+from benchmark.validate import load_snapshots
+from tests.conftest import BENCH_SNAPSHOTS, BENCH_SUITE
 
 
 @pytest.fixture(scope="module")
 def suite():
-    return load_suite(DEFAULT_SUITE)
+    return load_suite(BENCH_SUITE)
 
 
 @pytest.fixture(scope="module")
 def inventory():
-    return SnapshotInventory(load_snapshots(DEFAULT_SNAPSHOTS))
+    return SnapshotInventory(load_snapshots(BENCH_SNAPSHOTS))
 
 
 def _record(case_id, condition, statement, cols, rows):

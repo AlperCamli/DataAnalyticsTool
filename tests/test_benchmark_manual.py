@@ -18,12 +18,18 @@ from benchmark.manual import (
 )
 from benchmark.runner import load_prompt
 from benchmark.suite import load_suite
-from benchmark.validate import DEFAULT_SUITE
+from tests.conftest import BENCH_SNAPSHOTS, BENCH_SUITE
+
+# The kit reads the customer's suite out of their KB by default
+# (D-119.2a); these tests drive it against the frozen harness fixture, so
+# every command that takes a suite or snapshots is handed the fixture's.
+_SUITE = ["--suite", str(BENCH_SUITE)]
+_SNAPS = [a for path in BENCH_SNAPSHOTS for a in ("--snapshot", str(path))]
 
 
 @pytest.fixture(scope="module")
 def suite():
-    return load_suite(DEFAULT_SUITE)
+    return load_suite(BENCH_SUITE)
 
 
 @pytest.fixture()
@@ -53,7 +59,7 @@ def kb_repo(tmp_path):
 
 def _build(tmp_path, kb_repo, *extra):
     root = tmp_path / "runs"
-    rc = main(["conditions", "--root", str(root), "--kb", str(kb_repo), *extra])
+    rc = main(["conditions", "--root", str(root), "--kb", str(kb_repo), *_SNAPS, *extra])
     return root, rc
 
 
@@ -108,9 +114,9 @@ def test_no_kb_discovery_grounds_the_property_ids():
     """A no-kb agent must be able to ground run_ga4_report/run_gsc_query's
     `property` argument from discovery alone (the requests never name it)."""
     from benchmark.runner import snapshot_discovery
-    from benchmark.validate import DEFAULT_SNAPSHOTS, load_snapshots
+    from benchmark.validate import load_snapshots
 
-    snaps = load_snapshots(DEFAULT_SNAPSHOTS)
+    snaps = load_snapshots(BENCH_SNAPSHOTS)
     ga4 = json.loads(snapshot_discovery(snaps, "ga4"))
     assert ga4["source_properties"]["property_id"].startswith("properties/")
     gsc = json.loads(snapshot_discovery(snaps, "gsc"))
@@ -213,13 +219,13 @@ def test_ingest_then_score_offline(tmp_path, isolated_home, kb_repo, capsys):
     log = root / "no-kb" / "records" / "RB-01.no-kb.0.jsonl"
     log.write_text("\n".join(_journey_log_lines()) + "\n", encoding="utf-8")
 
-    assert main(["ingest", "--root", str(root)]) == 0
+    assert main(["ingest", "--root", str(root), *_SUITE]) == 0
     record_path = root / "no-kb" / "records" / "RB-01.no-kb.0.json"
     data = json.loads(record_path.read_text())
     assert data["case_id"] == "RB-01" and data["backend"] == BACKEND_ID
 
     out = tmp_path / "results"
-    assert main(["score", "--root", str(root), "--out", str(out), "--no-golden"]) == 0
+    assert main(["score", "--root", str(root), "--out", str(out), "--no-golden", *_SUITE, *_SNAPS]) == 0
     run_dir = next(out.iterdir())
     artifact = json.loads((run_dir / "results.json").read_text())
     assert artifact["run"]["backend"] == BACKEND_ID
@@ -240,11 +246,11 @@ def test_score_rejects_filename_content_mismatch(tmp_path, isolated_home, kb_rep
     assert rc == 0
     log = root / "no-kb" / "records" / "RB-01.no-kb.0.jsonl"
     log.write_text("\n".join(_journey_log_lines()) + "\n", encoding="utf-8")
-    assert main(["ingest", "--root", str(root)]) == 0
+    assert main(["ingest", "--root", str(root), *_SUITE]) == 0
     good = root / "no-kb" / "records" / "RB-01.no-kb.0.json"
     good.rename(root / "no-kb" / "records" / "RB-02.no-kb.1.json")
     assert main(["score", "--root", str(root), "--out", str(tmp_path / "r"),
-                 "--no-golden"]) == 1
+                 "--no-golden", *_SUITE, *_SNAPS]) == 1
 
 
 def test_finder_ds_store_is_not_drift(tmp_path, isolated_home, kb_repo):
@@ -256,10 +262,10 @@ def test_finder_ds_store_is_not_drift(tmp_path, isolated_home, kb_repo):
     (root / "no-kb" / ".DS_Store").write_bytes(b"\x00finder")
     log = root / "no-kb" / "records" / "RB-01.no-kb.0.jsonl"
     log.write_text("\n".join(_journey_log_lines()) + "\n", encoding="utf-8")
-    assert main(["ingest", "--root", str(root)]) == 0
+    assert main(["ingest", "--root", str(root), *_SUITE]) == 0
     assert main(["preflight", "--root", str(root)]) == 0
     assert main(["score", "--root", str(root), "--out", str(tmp_path / "r"),
-                 "--no-golden"]) == 0
+                 "--no-golden", *_SUITE, *_SNAPS]) == 0
 
 
 def test_score_refuses_condition_drift(tmp_path, isolated_home, kb_repo):
@@ -267,4 +273,4 @@ def test_score_refuses_condition_drift(tmp_path, isolated_home, kb_repo):
     assert rc == 0
     (root / "machine-kb" / "kb" / "index.md").write_text("tampered\n", encoding="utf-8")
     assert main(["score", "--root", str(root), "--out", str(tmp_path / "r"),
-                 "--no-golden"]) == 2
+                 "--no-golden", *_SUITE, *_SNAPS]) == 2
