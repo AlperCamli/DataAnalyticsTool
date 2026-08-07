@@ -155,7 +155,10 @@ test is **still red**, correctly: it asserts the pilot KB has no
 contaminated doc, and it has 33. Nothing was relaxed to make a suite look
 better than the estate.
 
-Suites: python **827 passed / 14 skipped / 1 failed**; core untouched.
+Suites: python **827 passed / 14 skipped / 1 failed** (that test). Core's
+sources are untouched; the two suites that read the skill bundle —
+`compile.test.ts` (13) and `conformance.test.ts` (24) — re-run green with
+`worklist.py` shipping inside it.
 
 **Fence:** exactly the two authorized amendments (KB §3.1 + §10.1; skill §6
 S1c + AS-19). No B-3/B-4 surface, no BASELINE-1 run, no new MCP tool, no KB

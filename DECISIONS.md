@@ -6953,7 +6953,9 @@ state is **33 — unchanged**, and the Python contamination test is
 contaminated docs. Nothing was deleted to make a suite green.
 
 Suites: python **827 passed / 14 skipped / 1 failed** (the contamination
-test, estate state); core untouched this session.
+test, estate state). Core's sources are untouched; the two suites that read
+the skill bundle — `compile.test.ts` (13) and `conformance.test.ts` (24) —
+re-run green with `worklist.py` shipping inside it.
 
 **Fence:** the two authorized amendments (KB §3.1 + §10.1, skill §6 S1c +
 AS-19) and nothing else. No B-3/B-4 surface, no BASELINE-1 run, no new MCP
