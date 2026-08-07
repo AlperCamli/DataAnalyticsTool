@@ -6962,3 +6962,97 @@ AS-19) and nothing else. No B-3/B-4 surface, no BASELINE-1 run, no new MCP
 tool, no KB content outside the skill-PR flows, nothing merged by the
 session. D-117's grounding bounds held: every claim in the metrics
 catalogue comes from the goldens, the views, or the estate's own docs.
+
+---
+
+## D-120 — A-5 operator-run authorization (owner ruling, 2026-08-08)
+
+Recorded verbatim.
+
+> 1. Session corrections ACCEPTED: contaminated set = 33;
+>    public.subscriptions repaired during B-1 (no batch waits on the
+>    Stripe verdict — the ledger question 4c4ecb3d stays open on its
+>    own merits, decoupled from A-5).
+> 2. The suite-in-wheel finding AFFIRMED as a shipped-defect catch:
+>    golden suites are customer KB content, never product package
+>    data. One line into DECISIONS' standing-lessons list.
+> 3. The three genuinely-wrong docs (flow_type 11-vs-13 ×2, the
+>    phantom-CHECK warning) are FIX items inside their triage
+>    batches, not confirms-prose — the batch prompts must say so.
+> 4. Stack repin AUTHORIZED as operator step 1 (CORE_PUBLIC_URL /
+>    CORE_OIDC_ISSUER → current host), via the toggle-discipline
+>    path, /healthz verified after.
+> 5. A-5 closes when: four triage batches merged, metrics merged +
+>    certified, KB PR #46 merged, task 3's floor-check journey run
+>    and extracted, items 3/4/6 re-graded green (item 6's baseline
+>    half stays on BASELINE-1's trigger, stated), contamination test
+>    green.
+
+## D-120 as applied — task 0
+
+### D-120.2 — the sixth standing rule
+
+The suite-in-wheel finding (D-119.2a: `benchmark-seed-v0.yaml` shipped the
+pilot's ten requests, its verified SQL and a frozen copy of its three
+snapshots as **package data inside the validation wheel**, so every
+customer's KB CI installed this estate's golden knowledge) enters the
+standing list as its sixth entry:
+
+| Rule | Bought by |
+|---|---|
+| **Fan-out**: a value that appears in two places will disagree in one of them | the D-84 class |
+| **Read-back**: a write is reported as it was read back from the store, never as it was submitted | A-3's claimed-registered-actually-absent shape |
+| **Removal** (D-113.2): a migration is complete when the old source is removed, not when the new one works | A4-F6 |
+| **Surface-machinery honesty** (D-114.2): every new user-facing surface gets an operator hour on real estate state before its gate closes | B1-F1..F4 |
+| **Demo environment fidelity** (D-118.1): a gate demonstration runs from the customer-shaped environment, never the dev workspace | PR #42's context bleed |
+| **Customer content, customer repository** (new, D-120.2): a customer's golden knowledge — verified SQL, expected answers, accepted snapshots — is KB content and never product package data. A product package ships checkers, not answers | the suite-in-wheel finding |
+
+It belongs beside the fifth rather than under it: D-118.1 says *run the
+demo from the customer's environment*, and this one says *and do not put
+the customer's environment inside the product*. Both are about a boundary
+that reads as tidy engineering right up to the moment it carries one
+estate's facts into another estate's CI.
+
+### The operator walkthrough — `results/phase2/a5/OPERATOR-STEPS.md`
+
+Written to D-120's order and house style. Two facts about the estate had
+moved since `GATE-CHECK.md` was graded, and both change what the operator
+is asked to do rather than what the ruling decided:
+
+**KB PR #48 is already merged** — `22263e37`, 2026-08-07T21:02:03Z, by the
+operator, and it is the `kb_ref` the core is serving. So the ruling's step
+3 is half done: the ten metric docs are on `main`, all ten still
+`status: draft` / `last_verified: null` / `owner: "alper (operator) —
+pending"`. What the step now asks for is the certification flip alone, and
+because the drafts are on `main` rather than in a branch, the flip is a
+direct commit on `main` — the same act, and the same mechanics, as the
+operator's own `c2baa54` ("Change subscription status to verified"). The
+`enforce_admins: false` on the KB's protection is what makes it land.
+
+**The running core image predates S1c.** `/app/skills/enrich/` in the
+container holds `SKILL.md` + `ci_gate.py` and no `worklist.py`; the
+image was built at ~17:11 on 2026-08-07, and the triage mode landed at
+23:24 (`904020c`). `~/cl-steward`'s bundle is the same vintage. Every
+batch prompt in `TRIAGE-PLAN.md` opens with *"use the enrich skill in
+contamination-triage mode"* and calls `worklist.py` — **against today's
+bundle all four batches fail at the first instruction.**
+
+This needed no fix beyond the repin the ruling already authorized:
+`make stack-pilot` builds with `--build`, so the restart that corrects
+the address also rebuilds the image from `main`, and the bundle
+re-download that A5-F1 already required is what carries S1c to the
+operator's session. It is written as step 1's second half, with
+`ls ~/cl-steward/.claude/skills/enrich/` showing `worklist.py` as the
+observable. A-2's stamp is the backstop: skills are inside the stamp, so
+an un-refreshed bundle is reported `SETUP OUT OF DATE` at connection
+rather than silently running the old mode.
+
+### D-120.3 as applied
+
+The three wrong docs are named as **fix items** inside the batch-1 and
+batch-3 paste prompts — the constraint quoted, the missing values named,
+the repair asked for — with the disagreement clause kept: *verify it
+against the snapshot first, and if the constraint does not say what I say
+it says, stop and tell me rather than writing either version.* An
+instruction to fix that cannot be refused on evidence is a dictation, and
+S1c's whole claim is that the reading is the work.
